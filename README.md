@@ -61,7 +61,7 @@
 # Machine Controller Manager
 
 
-From: https://gardener.cloud/blog/2021/01.25-machine-controller-manager/
+(🚧 WIP: Book at: [MCM Design Book](https://elankath.github.io/mcmdesign/))
 
 Machine Controller Manager is a group of cooperative controllers that manage the lifecycle of the worker machines. 
 
