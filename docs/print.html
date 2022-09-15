@@ -173,6 +173,10 @@
 </ol>
 </li>
 </ol>
+<p>The MCM leverages the <em>old-school</em> technique of writing controllers directly using <a href="https://github.com/kubernetes/sample-controller/blob/master/docs/controller-client-go.md">client-go</a>. Skeleton code for client types is generated using <a href="https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/generating-clientset.md">client-gen</a>. A barebones example is illustrated in the <a href="https://github.com/kubernetes/sample-controller">sample controller</a>. </p>
+<p>The Modern Way of writing controllers is by leveraging the <a href="https://github.com/kubernetes-sigs/controller-runtime">Controller Runtime</a> and generating skeletal code fur custom controllers using the <a href="https://book.kubebuilder.io/quick-start.html">Kubebuilder Tool</a>.</p>
+<p>The MCM has a planned backlog to port the project to the controller runtime. The details of this will be documented in a separate proposal. (TODO: link me). </p>
+<p>This book describes the current design of the MCM in order to aid code comprehension for development, enhancement and migratiion/port activities.</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="chapter-1"><a class="header" href="#chapter-1">Chapter 1</a></h1>
 
                     </main>
