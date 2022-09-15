@@ -1,7 +1,7 @@
 - [Machine Controller Manager](#machine-controller-manager)
 	- [K8s Facilities](#k8s-facilities)
 		- [k8s apimachinery](#k8s-apimachinery)
-			- [Finalizers](#finalizers)
+			- [Finalizers and Deletion](#finalizers-and-deletion)
 			- [wait.Until](#waituntil)
 		- [client-go k8s clients.](#client-go-k8s-clients)
 		- [client-go Shared Informers.](#client-go-shared-informers)
@@ -46,13 +46,17 @@
 			- [4. Reconciliation Functions Executed by Worker](#4-reconciliation-functions-executed-by-worker)
 				- [4.1  reconcileClusterSecretKey](#41--reconcileclustersecretkey)
 				- [4.2  reconcileClusterMachineClassKey](#42--reconcileclustermachineclasskey)
-				- [4.3  reconcileClusterNodeKey](#43--reconcileclusternodekey)
-				- [4.4  reconcileClusterMachineKey](#44--reconcileclustermachinekey)
-				- [4.5  reconcileClusterMachineSafetyOrphanVMs](#45--reconcileclustermachinesafetyorphanvms)
-				- [4.6  reconcileClusterMachineSafetyAPIServer](#46--reconcileclustermachinesafetyapiserver)
+				- [4.3  reconcileClusterMachineKey](#43--reconcileclustermachinekey)
+					- [4.3.1 controller.triggerCreationFlow](#431-controllertriggercreationflow)
+				- [4.4  reconcileClusterMachineSafetyOrphanVMs](#44--reconcileclustermachinesafetyorphanvms)
+				- [4.5  reconcileClusterMachineSafetyAPIServer](#45--reconcileclustermachinesafetyapiserver)
 	- [MCM Local Provider](#mcm-local-provider)
 	- [Doubts.](#doubts)
+		- [Dead Code](#dead-code)
+			- [Dead? reconcileClusterNodeKey](#dead-reconcileclusternodekey)
+			- [Dead? machine.go | triggerUpdationFlow](#dead-machinego--triggerupdationflow)
 		- [Duplicate Initialization of EventRecorder in MC](#duplicate-initialization-of-eventrecorder-in-mc)
+		- [Q? Internal to External Scheme Conversion](#q-internal-to-external-scheme-conversion)
 	- [TODO](#todo)
 # Machine Controller Manager
 
@@ -61,10 +65,9 @@ From: https://gardener.cloud/blog/2021/01.25-machine-controller-manager/
 
 Machine Controller Manager is a group of cooperative controllers that manage the lifecycle of the worker machines. 
 
-TODO: Fix this description. describe high level purpose of MCM and MC controllers, link to github repos of MCM and MCs.
+`MachineControllerManager` controller reconciles a set of Custom Resources namely `MachineDeployment`, `MachineSet`.
 
-
-Machine Controller Manager reconciles a set of Custom Resources namely MachineDeployment, MachineSet and Machines which are managed & monitored by their controllers MachineDeployment Controller, MachineSet Controller, Machine Controller respectively.
+The `MachineController` impelements the reconciliation loop for Machine objects but delegates creation/updation/deletion of Machines to the Driver facade. Driver implementations for providers (Local/Azure/AWS) are out of tree in `machine-controller-manager-provider-<providerName>` projects. Each provider starts its machine controller independently.
 
 ## K8s Facilities
 
@@ -75,11 +78,13 @@ This section describes the types, utils and functions provided by k8s [client-go
 
 Read [k8s API Conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md)
 
-#### Finalizers
+#### Finalizers and Deletion
 
-Every k8s object has a `Finalizers []string` field that can be assigned. This is part of the [k8s.io./apimachinery/pkg/apis/meta/v1.ObjectMeta](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta) struct type which is embedded in all k8s objects.
+Every k8s object has a `Finalizers []string` field that can be explicitly assigned by a controller. Every k8s object has a `DeletionTimestamp *Time` that is set by API Server when graceful deletion is requested.
 
-When you tell Kubernetes to delete an object that has finalizers specified for it, the Kubernetes API marks the object for deletion by populating `.metadata.deletionTimestamp`, and returns a `202` status code (HTTP `Accepted`). The target object remains in a terminating state while the control plane takes the actions defined by the finalizers. After these actions are complete, the controller should removes the relevant finalizers from the target object. When the `metadata.finalizers` field is empty, Kubernetes considers the deletion complete and deletes the object.
+These are part of the [k8s.io./apimachinery/pkg/apis/meta/v1.ObjectMeta](https://pkg.go.dev/k8s.io/apimachinery/pkg/apis/meta/v1#ObjectMeta) struct type which is embedded in all k8s objects. 
+
+When you tell Kubernetes to delete an object that has finalizers specified for it, the Kubernetes API marks the object for deletion by populating `.metadata.deletionTimestamp` aka `Deletiontimestamp`, and returns a `202` status code (HTTP `Accepted`). The target object remains in a terminating state while the control plane takes the actions defined by the finalizers. After these actions are complete, the controller should removes the relevant finalizers from the target object. When the `metadata.finalizers` field is empty, Kubernetes considers the deletion complete and deletes the object.
 
 #### wait.Until
 
@@ -1158,7 +1163,7 @@ func (c *controller) Run(workers int, stopCh <-chan struct{}) {
 		createWorker(c.secretQueue, "ClusterSecret", maxRetries, true, c.reconcileClusterSecretKey, stopCh, &waitGroup)
 		createWorker(c.machineClassQueue, "ClusterMachineClass", maxRetries, true, c.reconcileClusterMachineClassKey, stopCh, &waitGroup)
 		createWorker(c.nodeQueue, "ClusterNode", maxRetries, true, c.reconcileClusterNodeKey, stopCh, &waitGroup)
-		createWorker(c.machineQueue, "ClusterMachine", maxRetries, true, c.reconcileClusterMachineKey, stopCh, &waitGroup)
+		createWorker(c.machineQueue, "ClusterMachine", maxRetries, true, c.reconcileClusterMachineKey, stopCh, &waitGroup
 		createWorker(c.machineSafetyOrphanVMsQueue, "ClusterMachineSafetyOrphanVMs", maxRetries, true, c.reconcileClusterMachineSafetyOrphanVMs, stopCh, &waitGroup)
 		createWorker(c.machineSafetyAPIServerQueue, "ClusterMachineAPIServer", maxRetries, true, c.reconcileClusterMachineSafetyAPIServer, stopCh, &waitGroup)
 	}
@@ -1231,36 +1236,160 @@ The controller starts worker go-routines that pop out keys from the relevant wor
 
 ##### 4.1  reconcileClusterSecretKey
 
-`reconcileClusterSecretKey` basically does the following:
+`reconcileClusterSecretKey` basically adds the `MCFinalizer` (Value: `machine.sapcloud.io/machine-controller`) to the list of `secret.Finalizers` for all secrets that are referenced by machine classes within the same namespace.
 
 ```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}}}%%
+
 flowchart TD
 
 A[ns, name = cache.SplitMetaNamespaceKey]
 B["sec=secretLister.Secrets(ns).Get(name)"]
 C["machineClasses=findMachineClassForSecret(name)"]
 D{machineClasses empty?}
-Z[End]
+E["updateSecretFinalizers(sec)"] 
+F["secretQ.addAfter(key,10min)"]
+Z(("End"))
 A-->B
 B-->C
 C-->D
 D--Yes-->Z
+D--No-->E
+E--Err-->F
+E--Success-->Z
+F-->Z
 ```
 
-
 ##### 4.2  reconcileClusterMachineClassKey 
-##### 4.3  reconcileClusterNodeKey
-##### 4.4  reconcileClusterMachineKey 
-##### 4.5  reconcileClusterMachineSafetyOrphanVMs
-##### 4.6  reconcileClusterMachineSafetyAPIServer 
+
+`reconcileClusterMachineClassKey` re-queues after 10seconds on failure and 10mins on success. ie the machine class key is regularly re-queued.  BAD: We are not using the `machineutils.LongRetry|ShortRetry` constants here.
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}}}%%
+
+flowchart TD
+
+ROk["machineClassQueue.AddAfter(clzKey, 10m)"]
+RErr["machineClassQueue.AddAfter(clzKey, 10s)"]
+A["ns,name=cache.SplitMetaNamespaceKey(clzKey)"]
+GMC["clz=machineClassLister.MachineClasses(ns).Get(name)"]
+FM["machines=findMachinesForClass(clz)"]
+CheckNilDel{"clz.DeletionTimestamp==nil?"}
+CheckLen{"len(machines)>0"}
+HasFin{"clz.HasFinalizer"}
+AddFin["addMachineClassFinalizers(clz)"]
+DelFin["DeleteMachineClassFinalizers(clz)"]
+EQM1["machineQueue.add(machineKeys)"]
+EQM2["machineQueue.add(machineKeys)"]
+Z(("End"))
+
+ROk-->Z
+RErr-->Z
+A-->GMC
+GMC-->FM
+FM--Succ-->CheckLen
+FM--Err-->RErr
+CheckLen--Yes-->CheckNilDel
+CheckLen--No-->DelFin
+CheckNilDel--Yes-->HasFin
+CheckNilDel--No-->EQM2
+HasFin--No-->AddFin
+HasFin--Yes-->ROk
+AddFin-->EQM1
+EQM1-->ROk
+EQM2-->RErr
+DelFin-->ROk
+```
+##### 4.3  reconcileClusterMachineKey 
+
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}}}%%
+
+flowchart TD
+
+
+A["ns,name=cache.SplitMetaNamespaceKey(mKey)"]
+GetM["machine=machineLister.Machines(ns).Get(name)"]
+ValM["validation.ValidateMachine(machine)"]
+ValMC["machineClz,secretData,err=validation.ValidateMachineClass(machine)"]
+LongR["retryPeriod=machineUtils.LongRetry"]
+ShortR["retryPeriod=machineUtils.ShortRetry"]
+EnqM["machineQueue.AddAfter(mKey, retryPeriod)"]
+CheckMDel{"Is\nmachine.DeletionTimestamp\nSet?"}
+NewDelReq["req=&driver.DeleteMachineRequest{machine,machineClz,secretData}"]
+DelFlow["retryPeriod=controller.triggerDeletionFlow(req)"]
+CreateFlow["retryPeriod=controller.triggerCreationFlow(req)"]
+HasFin{"HasFinalizer(machine)"}
+AddFin["addMachineFinalizers(machine)"]
+CheckMachineNodeExists{"machine.Status.Node\nExists?"}
+ReconcileMachineHealth["controller.reconcileMachineHealth(machine)"]
+SyncNodeTemplates["controller.syncNodeTemplates(machine)"]
+NewCreateReq["req=&driver.CreateMachineRequest{machine,machineClz,secretData}"]
+Z(("End"))
+
+A-->GetM
+EnqM-->Z
+LongR-->EnqM
+ShortR-->EnqM
+GetM-->ValM
+ValM-->Ok-->ValMC
+ValM--Err-->LongR
+ValMC--Err-->LongR
+ValMC--Ok-->CheckMDel
+CheckMDel--Yes-->NewDelReq
+CheckMDel--No-->HasFin
+NewDelReq-->DelFlow
+HasFin--No-->AddFin
+HasFin--Yes-->ShortR
+AddFin-->CheckMachineNodeExists
+CheckMachineNodeExists--Yes-->ReconcileMachineHealth
+CheckMachineNodeExists--No-->NewCreateReq
+ReconcileMachineHealth--Ok-->SyncNodeTemplates
+SyncNodeTemplates--Ok-->LongR
+SyncNodeTemplates--Err-->ShortR
+DelFlow-->EnqM
+NewCreateReq-->CreateFlow
+CreateFlow-->EnqM
+
+```
+
+###### 4.3.1 controller.triggerCreationFlow
+
+The creation flow adds policy and delegates to the `driver.CreateMachine`.
+
+
+
+
+##### 4.4  reconcileClusterMachineSafetyOrphanVMs
+TBD
+
+##### 4.5  reconcileClusterMachineSafetyAPIServer 
+TBD
 
 ## MCM Local Provider 
 
 `cmd/machine-controller/main.go`
 Creates `pkg/util/provider/app/options.MCServer`
 
+TODO: Driver CM/DM Diagrams
 
 ## Doubts.
+
+### Dead Code
+
+#### Dead? reconcileClusterNodeKey 
+
+This just delegates to `reconcileClusterNode` which does nothing..
+```go
+func (c *controller) reconcileClusterNode(node *v1.Node) error {
+	return nil
+}
+
+```
+
+#### Dead? machine.go | triggerUpdationFlow
+Can't find usages
 
 ### Duplicate Initialization of EventRecorder in MC
 
@@ -1282,6 +1411,17 @@ We get the recorder from this eventBroadcaster and then pass it to the `pkg/util
 	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: typedcorev1.New(controlCoreClient.CoreV1().RESTClient()).Events(namespace)})
 ```
 The above is useless.
+
+### Q? Internal to External Scheme Conversion
+
+Why do we do this ?
+```go
+internalClass := &machine.MachineClass{}
+	err := c.internalExternalScheme.Convert(class, internalClass, nil)
+	if err != nil {
+		return err
+	}
+```
 
 
 ## TODO
