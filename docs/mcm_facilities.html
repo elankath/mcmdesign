@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Chapter 1 - Machine Controller Manager Design</title>
+        <title>MCM Facilities - Machine Controller Manager Design</title>
 
 
         <!-- Custom HTML head -->
@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="chapter_1.html" class="active"><strong aria-hidden="true">1.</strong> Chapter 1</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html" class="active"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -142,13 +142,126 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="chapter-1"><a class="header" href="#chapter-1">Chapter 1</a></h1>
+                        <ul>
+<li><a href="#mcm-facilities">MCM Facilities</a>
+<ul>
+<li><a href="#machine-controller-core-types">Machine Controller Core Types</a>
+<ul>
+<li><a href="#machine">Machine</a>
+<ul>
+<li><a href="#machinespec">MachineSpec</a></li>
+<li><a href="#machinestatus">MachineStatus</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h1 id="mcm-facilities"><a class="header" href="#mcm-facilities">MCM Facilities</a></h1>
+<p>This chapter describes the core types and utilities offerd by the MCM module.</p>
+<h2 id="machine-controller-core-types"><a class="header" href="#machine-controller-core-types">Machine Controller Core Types</a></h2>
+<p>The relevant machine types managed by the MCM controlled reside in <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1">github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1</a>. This follows the standard location for client gen types <code>&lt;module&gt;/pkg/apis/&lt;group&gt;/&lt;version&gt;</code></p>
+<h3 id="machine"><a class="header" href="#machine">Machine</a></h3>
+<p>Machine is the representation of a physical or virtual machine that corresponds to a front-end k8s node object. An example YAML looks like the below</p>
+<pre><code class="language-yaml">apiVersion: machine.sapcloud.io/v1alpha1
+kind: Machine
+metadata:
+  name: test-machine
+  namespace: default
+spec:
+  class:
+    kind: MachineClass
+    name: test-class
+</code></pre>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/apis/machine/v1alpha1/machine_types.go#L39">pkg/apis/machine/v1alpha1.Machine</a></p>
+<p>A <code>Machine</code> has a <code>Spec</code> field represented by <a href="#machinespec">MachineSpec</a></p>
+<pre><code class="language-go">type Machine struct {
+	// ObjectMeta for machine object
+	metav1.ObjectMeta 
+
+	// TypeMeta for machine object
+	metav1.TypeMeta 
+
+	// Spec contains the specification of the machine
+	Spec MachineSpec 
+
+	// Status contains fields depicting the status
+	Status MachineStatus 
+}
+</code></pre>
+<pre class="mermaid">graph TB
+    subgraph Machine
+    ObjectMeta
+    TypeMeta
+    MachineSpec
+    MachineStatus
+    end
+</pre>
+<h4 id="machinespec"><a class="header" href="#machinespec">MachineSpec</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/apis/machine/v1alpha1/machine_types.go#L54">MachineSpec</a> represents the specification of a Machine.</p>
+<pre><code class="language-go">type MachineSpec struct {
+
+	// Class holds the referrent to the MachineClass represented by the small type ClassSpec
+	Class ClassSpec 
+
+    // Unique identification of the VM at the cloud provider
+	ProviderID string 
+
+	// NodeTemplateSpec describes the data a node should have when created from a template
+	NodeTemplateSpec NodeTemplateSpec 
+
+	// Configuration for the machine-controller.  
+	*MachineConfiguration 
+}
+type NodeTemplateSpec struct {
+	metav1.ObjectMeta
+
+	// NodeSpec describes the attributes that a node is created with.
+	Spec corev1.NodeSpec
+}
+</code></pre>
+<ul>
+<li><code>ProviderID</code> is the unique identification of the VM at the cloud provider. <code>ProviderID</code> typically matches with the node.Spec.ProviderID on the node object.</li>
+<li><code>Class</code> field is of type <code>ClassSpec</code> which is just the (<code>Kind</code> and the <code>Name</code>) referring to the <code>MachineClass</code>. (Ideally the field, type should have been called <code>ClassReference</code>)</li>
+<li><code>NodeTemplateSpec</code> describes the data a node should have when created from a template, embeds <code>ObjectMeta</code> and holds a <a href="https://pkg.go.dev/k8s.io/api/core/v1#NodeSpec">corev1.NodeSpec</a> in its <code>Spec</code> field.
+<ul>
+<li>Doubt: The only thing being used is the</li>
+</ul>
+</li>
+</ul>
+<pre class="mermaid">graph TB
+    subgraph MachineSpec
+        Bingo
+
+    end
+</pre>
+<h4 id="machinestatus"><a class="header" href="#machinestatus">MachineStatus</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/apis/machine/v1alpha1/machine_types.go#L97">pkg/apis/machine/v1alpha1.MachineStatus</a> represents the most recently observed status of Machine.</p>
+<pre><code class="language-go">type MachineStatus struct {
+	// Node string
+	Node string
+
+	// Conditions of this machine, same as node
+	Conditions []corev1.NodeCondition 
+
+	// Last operation refers to the status of the last operation performed
+	LastOperation LastOperation 
+
+	// Current status of the machine object
+	CurrentStatus CurrentStatus
+
+	// LastKnownState can store details of the last known state of the VM by the plugins.
+	// It can be used by future operation calls to determine current infrastucture state
+	LastKnownState string 
+}
+</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="intro.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="k8s_facilities.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -159,7 +272,7 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="intro.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="k8s_facilities.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
