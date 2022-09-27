@@ -82,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -200,7 +200,21 @@
 <ul>
 <li><a href="k8s_facilities.html#node">Node</a>
 <ul>
-<li><a href="k8s_facilities.html#nodespec">NodeSpec</a></li>
+<li><a href="k8s_facilities.html#nodespec">NodeSpec</a>
+<ul>
+<li><a href="k8s_facilities.html#node-taints">Node Taints</a></li>
+</ul>
+</li>
+<li><a href="k8s_facilities.html#nodestatus">NodeStatus</a>
+<ul>
+<li><a href="k8s_facilities.html#capacity">Capacity</a></li>
+<li><a href="k8s_facilities.html#conditions">Conditions</a></li>
+<li><a href="k8s_facilities.html#addresses">Addresses</a></li>
+<li><a href="k8s_facilities.html#nodesysteminfo">NodeSystemInfo</a></li>
+<li><a href="k8s_facilities.html#images">Images</a></li>
+<li><a href="k8s_facilities.html#attached-volumes">Attached Volumes</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -317,6 +331,199 @@
 <pre><code class="language-go">type NodeSpec struct {
     // ID of the node assigned by the cloud provider in the format: &lt;ProviderName&gt;://&lt;ProviderSpecificNodeID&gt;
     ProviderID string 
+    // podCIDRs represents the IP ranges assigned to the node for usage by Pods on that node.
+    PodCIDRs []string 
+
+    // Unschedulable controls node schedulability of new pods. By default, node is schedulable.
+    Unschedulable bool
+
+    // Taints represents the Node's Taints. (taint is opposite of affinity. allow a Node to repel pods as opposed to attracting them)
+    Taints []Taint
+}
+</code></pre>
+<h5 id="node-taints"><a class="header" href="#node-taints">Node Taints</a></h5>
+<p>See <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/">Taints and Tolerations</a></p>
+<p><a href="https://pkg.go.dev/k8s.io/api/core/v1#Taint">k8s.io/api/core/v1.Taint</a> is a Kubernetes <code>Node</code> property that enable specific nodes to repel pods. <em>Tolerations</em> are a Kubernetes <code>Pod</code> property that overcome this and allow a pod to be scheduled on a node with a <em>matching</em> taint.</p>
+<p>Instead of applying the label to a node, we apply a taint that tells a scheduler to repel Pods from this node if it does not match the taint. Only those Pods that have a <em>toleration</em> for the taint can be let into the node with that taint.</p>
+<p><code>kubectl taint nodes &lt;node name&gt; &lt;taint key&gt;=&lt;taint value&gt;:&lt;taint effect&gt; </code></p>
+<p>Example:</p>
+<p><code>kubectl taint nodes node1 gpu=nvidia:NoSchedule</code></p>
+<p>Users can specify any arbitrary string for the taint key and value. The taint effect defines how a tainted node reacts to a pod without appropriate toleration. It must be one of the following effects;</p>
+<ul>
+<li>
+<p><code>NoSchedule</code>: The pod will not get scheduled to the node without a matching toleration.</p>
+</li>
+<li>
+<p><code>NoExecute</code>:This will immediately evict all the pods without the matching toleration from the node.</p>
+</li>
+<li>
+<p><code>PerferNoSchedule</code>:This is a softer version of NoSchedule where the controller will not try to schedule a pod with the tainted node. However, it is not a strict requirement.</p>
+</li>
+</ul>
+<pre><code class="language-go">type Taint struct {
+	// Key of taint to be applied to a node.
+	Key string
+	// Value of taint corresponding to the taint key.
+	Value string 
+	// Effect represents the effect of the taint on pods
+	// that do not tolerate the taint.
+	// Valid effects are NoSchedule, PreferNoSchedule and NoExecute.
+	Effect TaintEffect 
+	// TimeAdded represents the time at which the taint was added.
+	// It is only written for NoExecute taints.
+	// +optional
+	TimeAdded *metav1.Time 
+}
+</code></pre>
+<p>Example of a PodSpec with toleration below:</p>
+<pre><code class="language-yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-1
+  labels:
+    security: s1
+spec:
+  containers:
+  - name: bear
+    image: supergiantkir/animals:bear
+  tolerations:
+  - key: &quot;gpu&quot;
+    operator: &quot;Equal&quot;
+    value: &quot;nvidia&quot;
+    effect: &quot;NoSchedule&quot;
+</code></pre>
+<p>Example use case for a taint/tolerance: If you have nodes with special hardware (e.g GPUs) you want to repel Pods that do not need this hardware and attract Pods that do need it. This can be done by tainting the nodes that have the specialized hardware (e.g. kubectl taint nodes nodename gpu=nvidia:NoSchedule ) and adding corresponding toleration to Pods that must use this special hardware.</p>
+<h4 id="nodestatus"><a class="header" href="#nodestatus">NodeStatus</a></h4>
+<p>See <a href="https://kubernetes.io/docs/concepts/architecture/nodes/#node-status">Node status</a></p>
+<p><a href="https://pkg.go.dev/k8s.io/api/core/v1#NodeStatus">k8s.io/api/core/v1.NodeStatus</a> represents the current status of a node and is an encapsulation illustrated below:</p>
+<pre><code class="language-go">type NodeStatus struct {
+	// Capacity represents the total resources of a node.
+	Capacity ResourceList 
+	// Allocatable represents the resources of a node that are available for scheduling. Defaults to Capacity.
+	Allocatable ResourceList
+	// Conditions is an array of current observed node conditions.
+	Conditions []NodeCondition 
+	// List of addresses reachable to the node.Queried from cloud provider, if available.
+	Addresses []NodeAddress 
+	// Set of ids/uuids to uniquely identify the node.
+	NodeInfo NodeSystemInfo 
+	// List of container images on this node
+	Images []ContainerImage 
+	// List of attachable volumes that are in use (mounted) by the node.
+  //UniqueVolumeName is just typedef for string
+	VolumesInUse []UniqueVolumeName 
+	// List of volumes that are attached to the node.
+	VolumesAttached []AttachedVolume 
+}
+</code></pre>
+<h5 id="capacity"><a class="header" href="#capacity">Capacity</a></h5>
+<p><a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes#capacity">Capacity</a>. The fields in the capacity block indicate the total amount of resources that a Node has. </p>
+<ul>
+<li>Allocatable indicates the amount of resources on a Node that is available to be consumed by normal Pods. Defaults to Capacity.</li>
+</ul>
+<p>A Node <code>Capacity</code> is of type <a href="https://pkg.go.dev/k8s.io/api/core/v1#ResourceList">k8s.io/api/core/v1.ResourceList</a> which is effectively a set of set of (resource name, quantity) pairs. </p>
+<pre><code class="language-go">type ResourceList map[ResourceName]resource.Quantity
+</code></pre>
+<p><code>ResourceName</code>s can be cpu/memory/storage</p>
+<pre><code class="language-go">const (
+	// CPU, in cores. (500m = .5 cores)
+	ResourceCPU ResourceName = &quot;cpu&quot;
+	// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	ResourceMemory ResourceName = &quot;memory&quot;
+	// Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
+	ResourceStorage ResourceName = &quot;storage&quot;
+	// Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	// The resource name for ResourceEphemeralStorage is alpha and it can change across releases.
+	ResourceEphemeralStorage ResourceName = &quot;ephemeral-storage&quot;
+)
+</code></pre>
+<p>A <a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/resource#Quantity">k8s.io/apimachinery/pkg/api/resource.Quantity</a> is a serializable/de-serializable number with a SI unit</p>
+<h5 id="conditions"><a class="header" href="#conditions">Conditions</a></h5>
+<p><a href="https://kubernetes.io/docs/concepts/nodes/node/#condition">Conditions</a> are valid conditions of nodes.</p>
+<p><a href="https://pkg.go.dev/k8s.io/api/core/v1#NodeCondition">https://pkg.go.dev/k8s.io/api/core/v1.NodeCondition</a> contains condition information for a node.</p>
+<pre><code class="language-go">type NodeCondition struct {
+	// Type of node condition.
+	Type NodeConditionType 
+	// Status of the condition, one of True, False, Unknown.
+	Status ConditionStatus 
+	// Last time we got an update on a given condition.
+	LastHeartbeatTime metav1.Time 
+	// Last time the condition transitioned from one status to another.
+	LastTransitionTime metav1.Time 
+	// (brief) reason for the condition's last transition.
+	Reason string 
+	// Human readable message indicating details about last transition.
+	Message string 
+}
+</code></pre>
+<p><code>NodeConditionType</code> is one of the following:</p>
+<pre><code class="language-go">const (
+	// NodeReady means kubelet is healthy and ready to accept pods.
+	NodeReady NodeConditionType = &quot;Ready&quot;
+	// NodeMemoryPressure means the kubelet is under pressure due to insufficient available memory.
+	NodeMemoryPressure NodeConditionType = &quot;MemoryPressure&quot;
+	// NodeDiskPressure means the kubelet is under pressure due to insufficient available disk.
+	NodeDiskPressure NodeConditionType = &quot;DiskPressure&quot;
+	// NodePIDPressure means the kubelet is under pressure due to insufficient available PID.
+	NodePIDPressure NodeConditionType = &quot;PIDPressure&quot;
+	// NodeNetworkUnavailable means that network for the node is not correctly configured.
+	NodeNetworkUnavailable NodeConditionType = &quot;NetworkUnavailable&quot;
+)
+</code></pre>
+<h5 id="addresses"><a class="header" href="#addresses">Addresses</a></h5>
+<p>See <a href="https://kubernetes.io/docs/concepts/architecture/nodes/#addresses">Node Addresses</a></p>
+<p><a href="https://pkg.go.dev/k8s.io/api/core/v1#NodeAddress">k8s.io/api/core/v1.NodeAddress</a> contains information for the node's address.</p>
+<pre><code class="language-go">type NodeAddress struct {
+	// Node address type, one of Hostname, ExternalIP or InternalIP.
+	Type NodeAddressType 
+	// The node address string.
+	Address string 
+}
+</code></pre>
+<h5 id="nodesysteminfo"><a class="header" href="#nodesysteminfo">NodeSystemInfo</a></h5>
+<p>Describes general information about the node, such as machine id, kernel version, Kubernetes version (kubelet and kube-proxy version), container runtime details, and which operating system the node uses. The kubelet gathers this information from the node and publishes it into the Kubernetes API.</p>
+<pre><code class="language-go">type NodeSystemInfo struct {
+	// MachineID reported by the node. For unique machine identification
+	// in the cluster this field is preferred. 
+	MachineID string 
+	// Kernel Version reported by the node from 'uname -r' (e.g. 3.16.0-0.bpo.4-amd64).
+	KernelVersion string 
+	// OS Image reported by the node from /etc/os-release (e.g. Debian GNU/Linux 7 (wheezy)).
+	OSImage string 
+	// ContainerRuntime Version reported by the node through runtime remote API (e.g. docker://1.5.0).
+	ContainerRuntimeVersion string 
+	// Kubelet Version reported by the node.
+	KubeletVersion string 
+	// KubeProxy Version reported by the node.
+	KubeProxyVersion string 
+	// The Operating System reported by the node
+	OperatingSystem string 
+	// The Architecture reported by the node
+	Architecture string 
+}
+</code></pre>
+<ul>
+<li>The <a href="http://man7.org/linux/man-pages/man5/machine-id.5.html">MachineID</a> is a single newline-terminated, hexadecimal, 32-character, lowercase ID. from <code>/etc/machine-id</code></li>
+</ul>
+<h5 id="images"><a class="header" href="#images">Images</a></h5>
+<p>A slice of <a href="https://pkg.go.dev/k8s.io/api/core/v1#ContainerImage">k8s.io/api/core/v1.ContainerImage</a> which describes a contianer image.</p>
+<pre><code class="language-go">type ContainerImage struct {
+  // Names by which this image is known.
+	// e.g. [&quot;kubernetes.example/hyperkube:v1.0.7&quot;, 
+  // &quot;cloud-vendor.registry.example/cloud-vendor/hyperkube:v1.0.7&quot;]
+	Names []string 
+	// The size of the image in bytes.
+	SizeBytes int64 
+}
+</code></pre>
+<h5 id="attached-volumes"><a class="header" href="#attached-volumes">Attached Volumes</a></h5>
+<p><a href="https://pkg.go.dev/k8s.io/api/core/v1#AttachedVolume">k8s.io/api/core/v1.AttachedVolume</a> describes a volume attached to a node.</p>
+<pre><code class="language-go">type UniqueVolumeName string
+type AttachedVolume struct {
+	// Name of the attached volume
+	Name UniqueVolumeName 
+	// DevicePath represents the device path where the volume should be available
+	DevicePath string 
 }
 </code></pre>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
@@ -324,6 +531,10 @@
 <li><a href="https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md">K8s API Conventions</a></li>
 <li><a href="https://iximiuz.com/en/posts/kubernetes-api-go-types-and-common-machinery/">How To Call Kubernetes API using Go - Types and Common Machinery</a></li>
 <li><a href="https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/">Node Taints and Tolerances</a></li>
+<li><a href="https://kubernetes.io/docs/concepts/architecture/nodes/#node-status">Node status</a></li>
+<li><a href="https://medium.com/kubernetes-tutorials/making-sense-of-taints-and-tolerations-in-kubernetes-446e75010f4e">Making Sense of Taints and Tolerations</a></li>
+<li><a href="https://www.ionos.com/digitalguide/server/know-how/cidr-classless-inter-domain-routing/">CIDR</a></li>
+<li><a href="https://mxtoolbox.com/subnetcalculator.aspx">CIDR Calculator</a></li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="mcm_facilities.html#mcm-facilities">MCM Facilities</a>
@@ -397,7 +608,7 @@ spec:
 	// Configuration for the machine-controller.  
 	*MachineConfiguration 
 }
-type NodeTemplateSpec struct {
+type NodeTemplateSpec struct { // BADLY NAMED!
 	metav1.ObjectMeta
 
 	// NodeSpec describes the attributes that a node is created with.
@@ -405,20 +616,40 @@ type NodeTemplateSpec struct {
 }
 </code></pre>
 <ul>
-<li><code>ProviderID</code> is the unique identification of the VM at the cloud provider. <code>ProviderID</code> typically matches with the node.Spec.ProviderID on the node object.</li>
+<li><code>ProviderID</code> is the unique identification of the VM at the cloud provider. <code>ProviderID</code> typically matches with the <code>node.Spec.ProviderID</code> on the node object.</li>
 <li><code>Class</code> field is of type <code>ClassSpec</code> which is just the (<code>Kind</code> and the <code>Name</code>) referring to the <code>MachineClass</code>. (Ideally the field, type should have been called <code>ClassReference</code>)</li>
 <li><code>NodeTemplateSpec</code> describes the data a node should have when created from a template, embeds <code>ObjectMeta</code> and holds a <a href="https://pkg.go.dev/k8s.io/api/core/v1#NodeSpec">corev1.NodeSpec</a> in its <code>Spec</code> field.
 <ul>
-<li>Doubt: The only thing being used is the</li>
+<li>The <code>Machine.Spec.NodeTemplateSpec.Spec</code> mirrors k8s <code>Node.Spec</code></li>
 </ul>
 </li>
+<li><code>MachineSpec</code> embeds a <code>MachineConfiguration</code> which is just a configuration object that is a connection of timeouts, maxEvictRetries and NodeConditions</li>
 </ul>
 <pre class="mermaid">graph TB
     subgraph MachineSpec
-        Bingo
-
+	Class:ClassSpec
+	ProviderID:string
+	NodeTemplateSpec:NodeTemplateSpec
+	MachineConfiguration
     end
 </pre>
+<pre><code class="language-go">type MachineConfiguration struct {
+	// MachineDraintimeout is the timeout after which machine is forcefully deleted.
+	MachineDrainTimeout *metav1.Duration
+
+	// MachineHealthTimeout is the timeout after which machine is declared unhealhty/failed.
+	MachineHealthTimeout *metav1.Duration 
+
+	// MachineCreationTimeout is the timeout after which machinie creation is declared failed.
+	MachineCreationTimeout *metav1.Duration 
+
+	// MaxEvictRetries is the number of retries that will be attempted while draining the node.
+	MaxEvictRetries *int32 
+
+	// NodeConditions are the set of conditions if set to true for MachineHealthTimeOut, machine will be declared failed.
+	NodeConditions *string 
+}
+</code></pre>
 <h4 id="machinestatus"><a class="header" href="#machinestatus">MachineStatus</a></h4>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/apis/machine/v1alpha1/machine_types.go#L97">pkg/apis/machine/v1alpha1.MachineStatus</a> represents the most recently observed status of Machine.</p>
 <pre><code class="language-go">type MachineStatus struct {
@@ -439,6 +670,54 @@ type NodeTemplateSpec struct {
 	LastKnownState string 
 }
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="cluster-machine-reconciliation"><a class="header" href="#cluster-machine-reconciliation">Cluster Machine Reconciliation</a></h1>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}}}%%
+flowchart TD
+
+A[&quot;ns,name=cache.SplitMetaNamespaceKey(mKey)&quot;]
+GetM[&quot;machine=machineLister.Machines(ns).Get(name)&quot;]
+ValM[&quot;validation.ValidateMachine(machine)&quot;]
+ValMC[&quot;machineClz,secretData,err=validation.ValidateMachineClass(machine)&quot;]
+LongR[&quot;retryPeriod=machineUtils.LongRetry&quot;]
+ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+EnqM[&quot;machineQueue.AddAfter(mKey, retryPeriod)&quot;]
+CheckMDel{&quot;Is\nmachine.DeletionTimestamp\nSet?&quot;}
+NewDelReq[&quot;req=&amp;driver.DeleteMachineRequest{machine,machineClz,secretData}&quot;]
+DelFlow[&quot;retryPeriod=controller.triggerDeletionFlow(req)&quot;]
+CreateFlow[&quot;retryPeriod=controller.triggerCreationFlow(req)&quot;]
+HasFin{&quot;HasFinalizer(machine)&quot;}
+AddFin[&quot;addMachineFinalizers(machine)&quot;]
+CheckMachineNodeExists{&quot;machine.Status.Node\nExists?&quot;}
+ReconcileMachineHealth[&quot;controller.reconcileMachineHealth(machine)&quot;]
+SyncNodeTemplates[&quot;controller.syncNodeTemplates(machine)&quot;]
+NewCreateReq[&quot;req=&amp;driver.CreateMachineRequest{machine,machineClz,secretData}&quot;]
+Z((&quot;End&quot;))
+
+A--&gt;GetM
+EnqM--&gt;Z
+LongR--&gt;EnqM
+ShortR--&gt;EnqM
+GetM--&gt;ValM
+ValM--&gt;Ok--&gt;ValMC
+ValM--Err--&gt;LongR
+ValMC--Err--&gt;LongR
+ValMC--Ok--&gt;CheckMDel
+CheckMDel--Yes--&gt;NewDelReq
+CheckMDel--No--&gt;HasFin
+NewDelReq--&gt;DelFlow
+HasFin--No--&gt;AddFin
+HasFin--Yes--&gt;ShortR
+AddFin--&gt;CheckMachineNodeExists
+CheckMachineNodeExists--Yes--&gt;ReconcileMachineHealth
+CheckMachineNodeExists--No--&gt;NewCreateReq
+ReconcileMachineHealth--Ok--&gt;SyncNodeTemplates
+SyncNodeTemplates--Ok--&gt;LongR
+SyncNodeTemplates--Err--&gt;ShortR
+DelFlow--&gt;EnqM
+NewCreateReq--&gt;CreateFlow
+CreateFlow--&gt;EnqM
+
+</pre>
 
                     </main>
 

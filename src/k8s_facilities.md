@@ -9,6 +9,14 @@
   - [K8s API Core](#k8s-api-core)
     - [Node](#node)
       - [NodeSpec](#nodespec)
+        - [Node Taints](#node-taints)
+      - [NodeStatus](#nodestatus)
+        - [Capacity](#capacity)
+        - [Conditions](#conditions)
+        - [Addresses](#addresses)
+        - [NodeSystemInfo](#nodesysteminfo)
+        - [Images](#images)
+        - [Attached Volumes](#attached-volumes)
   - [References](#references)
 
 # Kubernetes Client Facilities
@@ -121,6 +129,7 @@ _Labels_ are used in conjunction with selectors to identify groups of related re
 
 _Annotations_ are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not 
 
+
 ## K8s API Core
 The MCM leverages several types from https://pkg.go.dev/k8s.io/api/core/v1 
 
@@ -144,12 +153,246 @@ type Node struct {
 type NodeSpec struct {
     // ID of the node assigned by the cloud provider in the format: <ProviderName>://<ProviderSpecificNodeID>
     ProviderID string 
+    // podCIDRs represents the IP ranges assigned to the node for usage by Pods on that node.
+    PodCIDRs []string 
+
+    // Unschedulable controls node schedulability of new pods. By default, node is schedulable.
+    Unschedulable bool
+
+    // Taints represents the Node's Taints. (taint is opposite of affinity. allow a Node to repel pods as opposed to attracting them)
+    Taints []Taint
 }
 ```
 
+##### Node Taints
+See [Taints and Tolerations](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+
+[k8s.io/api/core/v1.Taint](https://pkg.go.dev/k8s.io/api/core/v1#Taint) is a Kubernetes `Node` property that enable specific nodes to repel pods. _Tolerations_ are a Kubernetes `Pod` property that overcome this and allow a pod to be scheduled on a node with a _matching_ taint.
+
+Instead of applying the label to a node, we apply a taint that tells a scheduler to repel Pods from this node if it does not match the taint. Only those Pods that have a _toleration_ for the taint can be let into the node with that taint.
+
+
+`kubectl taint nodes <node name> <taint key>=<taint value>:<taint effect>
+`
+
+Example:
+
+`kubectl taint nodes node1 gpu=nvidia:NoSchedule`
+
+Users can specify any arbitrary string for the taint key and value. The taint effect defines how a tainted node reacts to a pod without appropriate toleration. It must be one of the following effects;
+
+- `NoSchedule`: The pod will not get scheduled to the node without a matching toleration.
+
+- `NoExecute`:This will immediately evict all the pods without the matching toleration from the node.
+
+- `PerferNoSchedule`:This is a softer version of NoSchedule where the controller will not try to schedule a pod with the tainted node. However, it is not a strict requirement.
+
+```go
+type Taint struct {
+	// Key of taint to be applied to a node.
+	Key string
+	// Value of taint corresponding to the taint key.
+	Value string 
+	// Effect represents the effect of the taint on pods
+	// that do not tolerate the taint.
+	// Valid effects are NoSchedule, PreferNoSchedule and NoExecute.
+	Effect TaintEffect 
+	// TimeAdded represents the time at which the taint was added.
+	// It is only written for NoExecute taints.
+	// +optional
+	TimeAdded *metav1.Time 
+}
+```
+
+Example of a PodSpec with toleration below:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-1
+  labels:
+    security: s1
+spec:
+  containers:
+  - name: bear
+    image: supergiantkir/animals:bear
+  tolerations:
+  - key: "gpu"
+    operator: "Equal"
+    value: "nvidia"
+    effect: "NoSchedule"
+ ```
+
+Example use case for a taint/tolerance: If you have nodes with special hardware (e.g GPUs) you want to repel Pods that do not need this hardware and attract Pods that do need it. This can be done by tainting the nodes that have the specialized hardware (e.g. kubectl taint nodes nodename gpu=nvidia:NoSchedule ) and adding corresponding toleration to Pods that must use this special hardware.
+
+#### NodeStatus
+
+See [Node status](https://kubernetes.io/docs/concepts/architecture/nodes/#node-status)
+
+[k8s.io/api/core/v1.NodeStatus](https://pkg.go.dev/k8s.io/api/core/v1#NodeStatus) represents the current status of a node and is an encapsulation illustrated below:
+
+```go
+type NodeStatus struct {
+	// Capacity represents the total resources of a node.
+	Capacity ResourceList 
+	// Allocatable represents the resources of a node that are available for scheduling. Defaults to Capacity.
+	Allocatable ResourceList
+	// Conditions is an array of current observed node conditions.
+	Conditions []NodeCondition 
+	// List of addresses reachable to the node.Queried from cloud provider, if available.
+	Addresses []NodeAddress 
+	// Set of ids/uuids to uniquely identify the node.
+	NodeInfo NodeSystemInfo 
+	// List of container images on this node
+	Images []ContainerImage 
+	// List of attachable volumes that are in use (mounted) by the node.
+  //UniqueVolumeName is just typedef for string
+	VolumesInUse []UniqueVolumeName 
+	// List of volumes that are attached to the node.
+	VolumesAttached []AttachedVolume 
+}
+```
+
+##### Capacity 
+ [Capacity](https://kubernetes.io/docs/concepts/storage/persistent-volumes#capacity). The fields in the capacity block indicate the total amount of resources that a Node has. 
+  - Allocatable indicates the amount of resources on a Node that is available to be consumed by normal Pods. Defaults to Capacity.
+
+A Node `Capacity` is of type [k8s.io/api/core/v1.ResourceList](https://pkg.go.dev/k8s.io/api/core/v1#ResourceList) which is effectively a set of set of (resource name, quantity) pairs. 
+
+```go
+type ResourceList map[ResourceName]resource.Quantity
+```
+
+`ResourceName`s can be cpu/memory/storage
+
+```go
+const (
+	// CPU, in cores. (500m = .5 cores)
+	ResourceCPU ResourceName = "cpu"
+	// Memory, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	ResourceMemory ResourceName = "memory"
+	// Volume size, in bytes (e,g. 5Gi = 5GiB = 5 * 1024 * 1024 * 1024)
+	ResourceStorage ResourceName = "storage"
+	// Local ephemeral storage, in bytes. (500Gi = 500GiB = 500 * 1024 * 1024 * 1024)
+	// The resource name for ResourceEphemeralStorage is alpha and it can change across releases.
+	ResourceEphemeralStorage ResourceName = "ephemeral-storage"
+)
+```
+A [k8s.io/apimachinery/pkg/api/resource.Quantity](https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/resource#Quantity) is a serializable/de-serializable number with a SI unit
+
+##### Conditions
+[Conditions](https://kubernetes.io/docs/concepts/nodes/node/#condition) are valid conditions of nodes.
+
+[https://pkg.go.dev/k8s.io/api/core/v1.NodeCondition](https://pkg.go.dev/k8s.io/api/core/v1#NodeCondition) contains condition information for a node.
+
+```go
+type NodeCondition struct {
+	// Type of node condition.
+	Type NodeConditionType 
+	// Status of the condition, one of True, False, Unknown.
+	Status ConditionStatus 
+	// Last time we got an update on a given condition.
+	LastHeartbeatTime metav1.Time 
+	// Last time the condition transitioned from one status to another.
+	LastTransitionTime metav1.Time 
+	// (brief) reason for the condition's last transition.
+	Reason string 
+	// Human readable message indicating details about last transition.
+	Message string 
+}
+```
+
+`NodeConditionType` is one of the following:
+```go
+const (
+	// NodeReady means kubelet is healthy and ready to accept pods.
+	NodeReady NodeConditionType = "Ready"
+	// NodeMemoryPressure means the kubelet is under pressure due to insufficient available memory.
+	NodeMemoryPressure NodeConditionType = "MemoryPressure"
+	// NodeDiskPressure means the kubelet is under pressure due to insufficient available disk.
+	NodeDiskPressure NodeConditionType = "DiskPressure"
+	// NodePIDPressure means the kubelet is under pressure due to insufficient available PID.
+	NodePIDPressure NodeConditionType = "PIDPressure"
+	// NodeNetworkUnavailable means that network for the node is not correctly configured.
+	NodeNetworkUnavailable NodeConditionType = "NetworkUnavailable"
+)
+```
+
+##### Addresses
+See [Node Addresses](https://kubernetes.io/docs/concepts/architecture/nodes/#addresses)
+	
+[k8s.io/api/core/v1.NodeAddress](https://pkg.go.dev/k8s.io/api/core/v1#NodeAddress) contains information for the node's address.
+```go
+type NodeAddress struct {
+	// Node address type, one of Hostname, ExternalIP or InternalIP.
+	Type NodeAddressType 
+	// The node address string.
+	Address string 
+}
+```
+
+##### NodeSystemInfo
+
+Describes general information about the node, such as machine id, kernel version, Kubernetes version (kubelet and kube-proxy version), container runtime details, and which operating system the node uses. The kubelet gathers this information from the node and publishes it into the Kubernetes API.
+
+```go
+type NodeSystemInfo struct {
+	// MachineID reported by the node. For unique machine identification
+	// in the cluster this field is preferred. 
+	MachineID string 
+	// Kernel Version reported by the node from 'uname -r' (e.g. 3.16.0-0.bpo.4-amd64).
+	KernelVersion string 
+	// OS Image reported by the node from /etc/os-release (e.g. Debian GNU/Linux 7 (wheezy)).
+	OSImage string 
+	// ContainerRuntime Version reported by the node through runtime remote API (e.g. docker://1.5.0).
+	ContainerRuntimeVersion string 
+	// Kubelet Version reported by the node.
+	KubeletVersion string 
+	// KubeProxy Version reported by the node.
+	KubeProxyVersion string 
+	// The Operating System reported by the node
+	OperatingSystem string 
+	// The Architecture reported by the node
+	Architecture string 
+}
+```
+- The [MachineID](http://man7.org/linux/man-pages/man5/machine-id.5.html) is a single newline-terminated, hexadecimal, 32-character, lowercase ID. from `/etc/machine-id`
+
+
+##### Images
+A slice of [k8s.io/api/core/v1.ContainerImage](https://pkg.go.dev/k8s.io/api/core/v1#ContainerImage) which describes a contianer image.
+
+```go
+type ContainerImage struct {
+  // Names by which this image is known.
+	// e.g. ["kubernetes.example/hyperkube:v1.0.7", 
+  // "cloud-vendor.registry.example/cloud-vendor/hyperkube:v1.0.7"]
+	Names []string 
+	// The size of the image in bytes.
+	SizeBytes int64 
+}
+```
+
+##### Attached Volumes
+
+[k8s.io/api/core/v1.AttachedVolume](https://pkg.go.dev/k8s.io/api/core/v1#AttachedVolume) describes a volume attached to a node.
+
+```go
+type UniqueVolumeName string
+type AttachedVolume struct {
+	// Name of the attached volume
+	Name UniqueVolumeName 
+	// DevicePath represents the device path where the volume should be available
+	DevicePath string 
+}
+```
 
 ## References
 
 - [K8s API Conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md)
 - [How To Call Kubernetes API using Go - Types and Common Machinery](https://iximiuz.com/en/posts/kubernetes-api-go-types-and-common-machinery/)
 - [Node Taints and Tolerances](https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/)
+- [Node status](https://kubernetes.io/docs/concepts/architecture/nodes/#node-status)
+- [Making Sense of Taints and Tolerations](https://medium.com/kubernetes-tutorials/making-sense-of-taints-and-tolerations-in-kubernetes-446e75010f4e)
+- [CIDR](https://www.ionos.com/digitalguide/server/know-how/cidr-classless-inter-domain-routing/)
+- [CIDR Calculator](https://mxtoolbox.com/subnetcalculator.aspx)

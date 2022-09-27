@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html" class="active"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html" class="active"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -214,7 +214,7 @@ spec:
 	// Configuration for the machine-controller.  
 	*MachineConfiguration 
 }
-type NodeTemplateSpec struct {
+type NodeTemplateSpec struct { // BADLY NAMED!
 	metav1.ObjectMeta
 
 	// NodeSpec describes the attributes that a node is created with.
@@ -222,20 +222,40 @@ type NodeTemplateSpec struct {
 }
 </code></pre>
 <ul>
-<li><code>ProviderID</code> is the unique identification of the VM at the cloud provider. <code>ProviderID</code> typically matches with the node.Spec.ProviderID on the node object.</li>
+<li><code>ProviderID</code> is the unique identification of the VM at the cloud provider. <code>ProviderID</code> typically matches with the <code>node.Spec.ProviderID</code> on the node object.</li>
 <li><code>Class</code> field is of type <code>ClassSpec</code> which is just the (<code>Kind</code> and the <code>Name</code>) referring to the <code>MachineClass</code>. (Ideally the field, type should have been called <code>ClassReference</code>)</li>
 <li><code>NodeTemplateSpec</code> describes the data a node should have when created from a template, embeds <code>ObjectMeta</code> and holds a <a href="https://pkg.go.dev/k8s.io/api/core/v1#NodeSpec">corev1.NodeSpec</a> in its <code>Spec</code> field.
 <ul>
-<li>Doubt: The only thing being used is the</li>
+<li>The <code>Machine.Spec.NodeTemplateSpec.Spec</code> mirrors k8s <code>Node.Spec</code></li>
 </ul>
 </li>
+<li><code>MachineSpec</code> embeds a <code>MachineConfiguration</code> which is just a configuration object that is a connection of timeouts, maxEvictRetries and NodeConditions</li>
 </ul>
 <pre class="mermaid">graph TB
     subgraph MachineSpec
-        Bingo
-
+	Class:ClassSpec
+	ProviderID:string
+	NodeTemplateSpec:NodeTemplateSpec
+	MachineConfiguration
     end
 </pre>
+<pre><code class="language-go">type MachineConfiguration struct {
+	// MachineDraintimeout is the timeout after which machine is forcefully deleted.
+	MachineDrainTimeout *metav1.Duration
+
+	// MachineHealthTimeout is the timeout after which machine is declared unhealhty/failed.
+	MachineHealthTimeout *metav1.Duration 
+
+	// MachineCreationTimeout is the timeout after which machinie creation is declared failed.
+	MachineCreationTimeout *metav1.Duration 
+
+	// MaxEvictRetries is the number of retries that will be attempted while draining the node.
+	MaxEvictRetries *int32 
+
+	// NodeConditions are the set of conditions if set to true for MachineHealthTimeOut, machine will be declared failed.
+	NodeConditions *string 
+}
+</code></pre>
 <h4 id="machinestatus"><a class="header" href="#machinestatus">MachineStatus</a></h4>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/apis/machine/v1alpha1/machine_types.go#L97">pkg/apis/machine/v1alpha1.MachineStatus</a> represents the most recently observed status of Machine.</p>
 <pre><code class="language-go">type MachineStatus struct {
@@ -265,6 +285,9 @@ type NodeTemplateSpec struct {
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
+                            <a rel="next" href="cluster_machine_reconcile.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -276,6 +299,9 @@ type NodeTemplateSpec struct {
                         <i class="fa fa-angle-left"></i>
                     </a>
 
+                    <a rel="next" href="cluster_machine_reconcile.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
             </nav>
 
         </div>

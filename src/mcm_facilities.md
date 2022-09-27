@@ -1,9 +1,9 @@
 
 - [MCM Facilities](#mcm-facilities)
-  - [Machine Controller Core Types](#machine-controller-core-types)
-    - [Machine](#machine)
-      - [MachineSpec](#machinespec)
-      - [MachineStatus](#machinestatus)
+	- [Machine Controller Core Types](#machine-controller-core-types)
+		- [Machine](#machine)
+			- [MachineSpec](#machinespec)
+			- [MachineStatus](#machinestatus)
 
 # MCM Facilities
 
@@ -75,27 +75,49 @@ type MachineSpec struct {
 	// Configuration for the machine-controller.  
 	*MachineConfiguration 
 }
-type NodeTemplateSpec struct {
+type NodeTemplateSpec struct { // BADLY NAMED!
 	metav1.ObjectMeta
 
 	// NodeSpec describes the attributes that a node is created with.
 	Spec corev1.NodeSpec
 }
 ```
-- `ProviderID` is the unique identification of the VM at the cloud provider. `ProviderID` typically matches with the node.Spec.ProviderID on the node object.
+
+- `ProviderID` is the unique identification of the VM at the cloud provider. `ProviderID` typically matches with the `node.Spec.ProviderID` on the node object.
 - `Class` field is of type `ClassSpec` which is just the (`Kind` and the `Name`) referring to the `MachineClass`. (Ideally the field, type should have been called `ClassReference`)
 - `NodeTemplateSpec` describes the data a node should have when created from a template, embeds `ObjectMeta` and holds a [corev1.NodeSpec](https://pkg.go.dev/k8s.io/api/core/v1#NodeSpec) in its `Spec` field.  
-  - Doubt: The only thing being used is the     
-
-
+  - The `Machine.Spec.NodeTemplateSpec.Spec` mirrors k8s `Node.Spec`
+- `MachineSpec` embeds a `MachineConfiguration` which is just a configuration object that is a connection of timeouts, maxEvictRetries and NodeConditions
 
 ```mermaid
 graph TB
     subgraph MachineSpec
-        Bingo
-
+	Class:ClassSpec
+	ProviderID:string
+	NodeTemplateSpec:NodeTemplateSpec
+	MachineConfiguration
     end
 ```
+
+```go
+type MachineConfiguration struct {
+	// MachineDraintimeout is the timeout after which machine is forcefully deleted.
+	MachineDrainTimeout *metav1.Duration
+
+	// MachineHealthTimeout is the timeout after which machine is declared unhealhty/failed.
+	MachineHealthTimeout *metav1.Duration 
+
+	// MachineCreationTimeout is the timeout after which machinie creation is declared failed.
+	MachineCreationTimeout *metav1.Duration 
+
+	// MaxEvictRetries is the number of retries that will be attempted while draining the node.
+	MaxEvictRetries *int32 
+
+	// NodeConditions are the set of conditions if set to true for MachineHealthTimeOut, machine will be declared failed.
+	NodeConditions *string 
+}
+```
+
 
 #### MachineStatus
 
