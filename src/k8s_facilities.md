@@ -387,6 +387,8 @@ type AttachedVolume struct {
 }
 ```
 
+TODO: add another section with Node class diagram
+
 ## References
 
 - [K8s API Conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md)
