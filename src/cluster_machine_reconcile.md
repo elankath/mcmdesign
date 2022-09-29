@@ -125,11 +125,21 @@ ShortR-->Z
 ```
 
 ### controller.getVMStatus
+(BAD NAME FOR METHOD: should be called `checkMachineExistenceAndEnqueNextOperation`)
 
 ```go
 func (c *controller) getVMStatus(ctx context.Context, 
     statusReq *driver.GetMachineStatusRequest) (machineutils.RetryPeriod, error)
 ```
+
+This method is only called for the delete flow. 
+1. It attempts to get the machine status
+1. If the machine exists, it updates the machine status operation to `InitiateDrain` and returns a `ShortRetry` for the machine work queue. 
+1. If attempt to get machine status failed, it will check the error code.
+   1. For `Unknown|DeadlineExceeded|Aborted|Unavailable` it updates the machine status operation to `machineutils.GetVMStatus` status and returns a `ShortRetry` for the machine work queue.  (So that reconcile will run this method again in future)
+   2. For `NotFound` code (ie machine is not found), it will enqueue node deletion by updating the machine stauts operation to `machineutils.InitiateNodeDeletion` and returning a `ShortRetry` for the machine work queue.
+   3. If decoding the error code failed, it will update the  machine status operation to `machineutils.InitiateNodeDeletion`
+
 
 ```mermaid
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
@@ -152,8 +162,8 @@ State: v1alpha1.MachineStateProcessing,
 Type: v1alpha1.MachineOperationDelete,
 Time: time.Now()}"]
 
-CreateDecodeFailedOp["op:=LastOperation{Description: 'FailedDecode'
-State: v1alpha1.MachineStateProcessing,
+CreateDecodeFailedOp["op:=LastOperation{Description: machineutils.GetVMStatus,
+State: v1alpha1.MachineStateFailed,
 Type: v1alpha1.MachineOperationDelete,
 Time: time.Now()}"]
 

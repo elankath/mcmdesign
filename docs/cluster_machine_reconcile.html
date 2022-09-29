@@ -265,9 +265,22 @@ ShortR--&gt;Z
 
 </pre>
 <h3 id="controllergetvmstatus"><a class="header" href="#controllergetvmstatus">controller.getVMStatus</a></h3>
+<p>(BAD NAME FOR METHOD: should be called <code>checkMachineExistenceAndEnqueNextOperation</code>)</p>
 <pre><code class="language-go">func (c *controller) getVMStatus(ctx context.Context, 
     statusReq *driver.GetMachineStatusRequest) (machineutils.RetryPeriod, error)
 </code></pre>
+<p>This method is only called for the delete flow. </p>
+<ol>
+<li>It attempts to get the machine status</li>
+<li>If the machine exists, it updates the machine status operation to <code>InitiateDrain</code> and returns a <code>ShortRetry</code> for the machine work queue. </li>
+<li>If attempt to get machine status failed, it will check the error code.
+<ol>
+<li>For <code>Unknown|DeadlineExceeded|Aborted|Unavailable</code> it updates the machine status operation to <code>machineutils.GetVMStatus</code> status and returns a <code>ShortRetry</code> for the machine work queue.  (So that reconcile will run this method again in future)</li>
+<li>For <code>NotFound</code> code (ie machine is not found), it will enqueue node deletion by updating the machine stauts operation to <code>machineutils.InitiateNodeDeletion</code> and returning a <code>ShortRetry</code> for the machine work queue.</li>
+<li>If decoding the error code failed, it will update the  machine status operation to <code>machineutils.InitiateNodeDeletion</code></li>
+</ol>
+</li>
+</ol>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
@@ -288,8 +301,8 @@ State: v1alpha1.MachineStateProcessing,
 Type: v1alpha1.MachineOperationDelete,
 Time: time.Now()}&quot;]
 
-CreateDecodeFailedOp[&quot;op:=LastOperation{Description: 'FailedDecode'
-State: v1alpha1.MachineStateProcessing,
+CreateDecodeFailedOp[&quot;op:=LastOperation{Description: machineutils.GetVMStatus,
+State: v1alpha1.MachineStateFailed,
 Type: v1alpha1.MachineOperationDelete,
 Time: time.Now()}&quot;]
 
