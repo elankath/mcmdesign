@@ -80,7 +80,6 @@ machineClass=dmr.MachineClass\n
 secret=dmr.Secret"]
 HasFin{"HasFinalizer(machine)"}
 LongR["retryPeriod=machineUtils.LongRetry"]
-LongR1["retryPeriod=machineUtils.LongRetry"]
 ShortR["retryPeriod=machineUtils.ShortRetry"]
 ChkMachineTerm{"machine.Status.CurrentStatus.Phase\n==MachineTerminating ?"}
 CheckMachineOperation{"Check\nmachine.Status.LastOperation.Description"}
@@ -94,9 +93,6 @@ CreateMachineStatusRequest["statusReq=&driver.GetMachineStatusRequest{machine, m
 GetVMStatus["retryPeriod=c.getVMStatus(statusReq)"]
 
 
-
-ShortR1["retryPeriod=machineutils.ShortRetry"]
-MachineStatusUpdate["c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)"]
 
 Z(("End"))
 
@@ -135,10 +131,11 @@ func (c *controller) getVMStatus(ctx context.Context,
 This method is only called for the delete flow. 
 1. It attempts to get the machine status
 1. If the machine exists, it updates the machine status operation to `InitiateDrain` and returns a `ShortRetry` for the machine work queue. 
-1. If attempt to get machine status failed, it will check the error code.
-   1. For `Unknown|DeadlineExceeded|Aborted|Unavailable` it updates the machine status operation to `machineutils.GetVMStatus` status and returns a `ShortRetry` for the machine work queue.  (So that reconcile will run this method again in future)
-   2. For `NotFound` code (ie machine is not found), it will enqueue node deletion by updating the machine stauts operation to `machineutils.InitiateNodeDeletion` and returning a `ShortRetry` for the machine work queue.
-   3. If decoding the error code failed, it will update the  machine status operation to `machineutils.InitiateNodeDeletion`
+1. If attempt to get machine status failed, it will obtain the error code from the error.
+   1. If decoding the error code failed, it will update the  machine status operation to `machineutils.GetVMStatus`returns a `LongRetry` for the machine work queue. 
+      1. Unsure how we get out of this Loop. TODO: Discuss this. Is this dead code?
+   2. For `Unknown|DeadlineExceeded|Aborted|Unavailable` it updates the machine status operation to `machineutils.GetVMStatus` status and returns a `ShortRetry` for the machine work queue.  (So that reconcile will run this method again in future)
+   3. For `NotFound` code (ie machine is not found), it will enqueue node deletion by updating the machine stauts operation to `machineutils.InitiateNodeDeletion` and returning a `ShortRetry` for the machine work queue.
 
 
 ```mermaid

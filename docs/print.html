@@ -970,7 +970,6 @@ machineClass=dmr.MachineClass\n
 secret=dmr.Secret&quot;]
 HasFin{&quot;HasFinalizer(machine)&quot;}
 LongR[&quot;retryPeriod=machineUtils.LongRetry&quot;]
-LongR1[&quot;retryPeriod=machineUtils.LongRetry&quot;]
 ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
 ChkMachineTerm{&quot;machine.Status.CurrentStatus.Phase\n==MachineTerminating ?&quot;}
 CheckMachineOperation{&quot;Check\nmachine.Status.LastOperation.Description&quot;}
@@ -984,9 +983,6 @@ CreateMachineStatusRequest[&quot;statusReq=&amp;driver.GetMachineStatusRequest{m
 GetVMStatus[&quot;retryPeriod=c.getVMStatus(statusReq)&quot;]
 
 
-
-ShortR1[&quot;retryPeriod=machineutils.ShortRetry&quot;]
-MachineStatusUpdate[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
 
 Z((&quot;End&quot;))
 
@@ -1022,11 +1018,15 @@ ShortR--&gt;Z
 <ol>
 <li>It attempts to get the machine status</li>
 <li>If the machine exists, it updates the machine status operation to <code>InitiateDrain</code> and returns a <code>ShortRetry</code> for the machine work queue. </li>
-<li>If attempt to get machine status failed, it will check the error code.
+<li>If attempt to get machine status failed, it will obtain the error code from the error.
 <ol>
+<li>If decoding the error code failed, it will update the  machine status operation to <code>machineutils.GetVMStatus</code>returns a <code>LongRetry</code> for the machine work queue. 
+<ol>
+<li>Unsure how we get out of this Loop. TODO: Discuss this. Is this dead code?</li>
+</ol>
+</li>
 <li>For <code>Unknown|DeadlineExceeded|Aborted|Unavailable</code> it updates the machine status operation to <code>machineutils.GetVMStatus</code> status and returns a <code>ShortRetry</code> for the machine work queue.  (So that reconcile will run this method again in future)</li>
 <li>For <code>NotFound</code> code (ie machine is not found), it will enqueue node deletion by updating the machine stauts operation to <code>machineutils.InitiateNodeDeletion</code> and returning a <code>ShortRetry</code> for the machine work queue.</li>
-<li>If decoding the error code failed, it will update the  machine status operation to <code>machineutils.InitiateNodeDeletion</code></li>
 </ol>
 </li>
 </ol>
