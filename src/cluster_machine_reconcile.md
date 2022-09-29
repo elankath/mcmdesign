@@ -79,19 +79,42 @@ machineClass=dmr.MachineClass\n
 secret=dmr.Secret"]
 HasFin{"HasFinalizer(machine)"}
 LongR["retryPeriod=machineUtils.LongRetry"]
+LongR1["retryPeriod=machineUtils.LongRetry"]
 ShortR["retryPeriod=machineUtils.ShortRetry"]
 ChkMachineTerm{"machine.Status.CurrentStatus.Phase\n==MachineTerminating ?"}
-ChkGetVMStatus{"machine.Status.LastOperation.Description\n==GetVMStatus ?"}
+CheckMachineOperation{"Check\nmachine.Status.LastOperation.Description"}
+DrainNode["retryPeriod=c.drainNode(dmr)"]
+DeleteVM["retryPeriod=c.deleteVM(dmr)"]
+DeleteNode["retryPeriod=c.deleteNodeObject(dmr)"]
+DeleteMachineFin["retryPeriod=c.deleteMachineFinalizers(machine)\n(dead code?)"]
 SetMachineTermStatus["c.setMachineTerminationStatus(dmr)"]
 
 CreateMachineStatusRequest["statusReq=&driver.GetMachineStatusRequest{machine, machineClass,secret}"]
 GetMachineStatus["_,err=driver.GetMachineStatus(statusReq)"]
 ChkMachineExists{"err==nil ?\n (ie machine exists)"}
+DecodeErrorStatus["errStatus,decodeOk= status.FromError(err)"]
+CheckDecodeOk{"decodeOk ?"}
 
+CheckErrStatusCode{"Check errStatus.Code"}
 
 CreateDrainOp["op:=LastOperation{Description: machineutils.InitiateDrain
 State: v1alpha1.MachineStateProcessing,
-Type:           v1alpha1.MachineOperationDelete,
+Type: v1alpha1.MachineOperationDelete,
+Time: time.Now()}"]
+
+CreateNodeDelOp["op:=LastOperation{Description: machineutils.InitiateNodeDeletion
+State: v1alpha1.MachineStateProcessing,
+Type: v1alpha1.MachineOperationDelete,
+Time: time.Now()}"]
+
+CreateDecodeFailedOp["op:=LastOperation{Description: 'FailedDecode'
+State: v1alpha1.MachineStateProcessing,
+Type: v1alpha1.MachineOperationDelete,
+Time: time.Now()}"]
+
+CreaterRetryVMStatusOp["op:=LastOperation{Description: machineutils.GetVMStatus,
+State: v1alpha1.MachineStateFailed,
+Type:  v1alpha1.MachineOperationDelete,
 Time: time.Now()}"]
 
 ShortR1["retryPeriod=machineUtils.ShortRetry"]
@@ -104,51 +127,36 @@ HasFin--No-->LongR
 LongR-->Z
 GM-->ChkMachineTerm
 ChkMachineTerm--No-->SetMachineTermStatus
-ChkMachineTerm--Yes-->ChkGetVMStatus
+ChkMachineTerm--Yes-->CheckMachineOperation
 SetMachineTermStatus-->ShortR
-ChkGetVMStatus--Yes-->CreateMachineStatusRequest
+CheckMachineOperation--GetVMStatus-->CreateMachineStatusRequest
+CheckMachineOperation--InitiateDrain-->DrainNode
+DrainNode-->Z
 CreateMachineStatusRequest-->GetMachineStatus
 GetMachineStatus-->ChkMachineExists
-ChkMachineExists--Yes-->ShortR1
-ShortR1-->CreateDrainOp
-CreateDrainOp-->MachineStatusUpdate
+
+ChkMachineExists--Yes-->CreateDrainOp
+ChkMachineExists--No-->DecodeErrorStatus
+DecodeErrorStatus-->CheckDecodeOk
+CheckDecodeOk--Yes-->CheckErrStatusCode
+CheckDecodeOk--No-->CreateDecodeFailedOp
+CreateDecodeFailedOp-->LongR1
+CheckErrStatusCode--"Unimplemented"-->CreateDrainOp
+CheckErrStatusCode--"Unknown|DeadlineExceeded|Aborted|Unavailable"-->CreaterRetryVMStatusOp
+CheckErrStatusCode--"NotFound"-->CreateNodeDelOp
+CreaterRetryVMStatusOp-->ShortR1
+
+CreateDrainOp-->ShortR1
+CreateNodeDelOp-->ShortR1
+ShortR1-->MachineStatusUpdate
+LongR1-->MachineStatusUpdate
 MachineStatusUpdate-->Z
+
+
 ShortR-->Z
 
 ```
 
-```go
-	description = machineutils.InitiateDrain
-		state = v1alpha1.MachineStateProcessing
-		retry = machineutils.ShortRetry
-
-
-v1alpha1.LastOperation{
-			Description:    description,
-			State:          state,
-			Type:           v1alpha1.MachineOperationDelete,
-			LastUpdateTime: metav1.Now(),
-		},
-
-
-        c.machineStatusUpdate(
-		ctx,
-		getMachineStatusRequest.Machine,
-		v1alpha1.LastOperation{
-			Description:    description,
-			State:          state,
-			Type:           v1alpha1.MachineOperationDelete,
-			LastUpdateTime: metav1.Now(),
-		},
-		// Let the clone.Status.CurrentStatus (LastUpdateTime) be as it was before.
-		// This helps while computing when the drain timeout to determine if force deletion is to be triggered.
-		// Ref - https://github.com/gardener/machine-controller-manager/blob/rel-v0.34.0/pkg/util/provider/machinecontroller/machine_util.go#L872
-		getMachineStatusRequest.Machine.Status.CurrentStatus,
-		getMachineStatusRequest.Machine.Status.LastKnownState,
-	)
-    return retry, err
-
-```
 ## controller.reconcileMachineHealth
 
 ```go
