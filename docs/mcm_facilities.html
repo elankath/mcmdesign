@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html" class="active"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html" class="active"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">4.</strong> Machine Controller Helper Functions</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -164,6 +164,12 @@
 </li>
 </ul>
 </li>
+</ul>
+</li>
+<li><a href="#machineutils">MachineUtils</a>
+<ul>
+<li><a href="#operation-descriptions">Operation Descriptions</a></li>
+<li><a href="#retry-periods">Retry Periods</a></li>
 </ul>
 </li>
 </ul>
@@ -276,7 +282,7 @@ type NodeTemplateSpec struct { // BADLY NAMED!
 	// Conditions of this machine, same as NodeStatus.Conditions
 	Conditions []NodeCondition 
 
-	// Last operation refers to the status of the last operation performed
+	// Last operation refers to the status of the last operation performed. NOTE: this is usually the NextOperation for reconcile!! Discuss!
 	LastOperation LastOperation 
 
 	// Current status of the machine object
@@ -308,9 +314,10 @@ type NodeTemplateSpec struct { // BADLY NAMED!
 <p>NOTE: BADLY NAMED: Should be called <code>MachineOperationState</code></p>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#MachineState">machine-controller-manager/pkg/apis/machine/v1alpha1.MachineState</a> represents the  current state of a machine operation and is one of <code>Processing</code>, <code>Failed</code> or <code>Successful</code>.</p>
 <pre><code class="language-go">// MachineState is  current state of the machine.
+// BAD Name: Should be MachineOperationState
 type MachineState string
 
-// These are the valid states of machines.
+// These are the valid (operation) states of machines.
 const (
 	// MachineStatePending means there are operations pending on this machine state
 	MachineStateProcessing MachineState = &quot;Processing&quot;
@@ -325,18 +332,17 @@ const (
 <h5 id="machineoperationtype"><a class="header" href="#machineoperationtype">MachineOperationType</a></h5>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#MachineOperationType">github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.MachineOperationType</a> is a label for the operation performed on a machine object: <code>Create</code>/<code>Update</code>/<code>HealthCheck</code>/<code>Delete</code>.</p>
 <pre><code class="language-go">type MachineOperationType string
-// These are the valid statuses of machines.
 const (
-	// MachineOperationCreate indicates that the operation was a create
+	// MachineOperationCreate indicates that the operation is a create
 	MachineOperationCreate MachineOperationType = &quot;Create&quot;
 
-	// MachineOperationUpdate indicates that the operation was an update
+	// MachineOperationUpdate indicates that the operation is an update
 	MachineOperationUpdate MachineOperationType = &quot;Update&quot;
 
-	// MachineOperationHealthCheck indicates that the operation was a create
+	// MachineOperationHealthCheck indicates that the operation is a create
 	MachineOperationHealthCheck MachineOperationType = &quot;HealthCheck&quot;
 
-	// MachineOperationDelete indicates that the operation was a create
+	// MachineOperationDelete indicates that the operation is a delete
 	MachineOperationDelete MachineOperationType = &quot;Delete&quot;
 )
 
@@ -378,6 +384,74 @@ const (
 	// MachineCrashLoopBackOff means creation or deletion of the machine is failing.
 	MachineCrashLoopBackOff MachinePhase = &quot;CrashLoopBackOff&quot;
 )
+</code></pre>
+<h2 id="machineutils"><a class="header" href="#machineutils">MachineUtils</a></h2>
+<h3 id="operation-descriptions"><a class="header" href="#operation-descriptions">Operation Descriptions</a></h3>
+<p><code>machineutils</code> has a bunch of constants that are descriptions of machine operations that are set into <code>machine.Status.LastOperation.Description</code> by the machine controller while performing reconciliation.</p>
+<pre><code class="language-go">const (
+	// GetVMStatus sets machine status to terminating and specifies next step as getting VMs
+	GetVMStatus = &quot;Set machine status to termination. Now, getting VM Status&quot;
+
+	// InitiateDrain specifies next step as initiate node drain
+	InitiateDrain = &quot;Initiate node drain&quot;
+
+	// InitiateVMDeletion specifies next step as initiate VM deletion
+	InitiateVMDeletion = &quot;Initiate VM deletion&quot;
+
+	// InitiateNodeDeletion specifies next step as node object deletion
+	InitiateNodeDeletion = &quot;Initiate node object deletion&quot;
+
+	// InitiateFinalizerRemoval specifies next step as machine finalizer removal
+	InitiateFinalizerRemoval = &quot;Initiate machine object finalizer removal&quot;
+
+	// LastAppliedALTAnnotation contains the last configuration of annotations, 
+	// labels &amp; taints applied on the node object
+	LastAppliedALTAnnotation = &quot;node.machine.sapcloud.io/last-applied-anno-labels-taints&quot;
+
+	// MachinePriority is the annotation used to specify priority
+	// associated with a machine while deleting it. The less its
+	// priority the more likely it is to be deleted first
+	// Default priority for a machine is set to 3
+	MachinePriority = &quot;machinepriority.machine.sapcloud.io&quot;
+
+	// MachineClassKind is used to identify the machineClassKind for generic machineClasses
+	MachineClassKind = &quot;MachineClass&quot;
+
+	// MigratedMachineClass annotation helps in identifying machineClasses who have been migrated by migration controller
+	MigratedMachineClass = &quot;machine.sapcloud.io/migrated&quot;
+
+	// NotManagedByMCM annotation helps in identifying the nodes which are not handled by MCM
+	NotManagedByMCM = &quot;node.machine.sapcloud.io/not-managed-by-mcm&quot;
+
+	// TriggerDeletionByMCM annotation on the node would trigger the deletion of the corresponding machine object in the control cluster
+	TriggerDeletionByMCM = &quot;node.machine.sapcloud.io/trigger-deletion-by-mcm&quot;
+
+	// NodeUnhealthy is a node termination reason for failed machines
+	NodeUnhealthy = &quot;Unhealthy&quot;
+
+	// NodeScaledDown is a node termination reason for healthy deleted machines
+	NodeScaledDown = &quot;ScaleDown&quot;
+
+	// NodeTerminationCondition describes nodes that are terminating
+	NodeTerminationCondition v1.NodeConditionType = &quot;Terminating&quot;
+)
+
+</code></pre>
+<h3 id="retry-periods"><a class="header" href="#retry-periods">Retry Periods</a></h3>
+<p>These are standard retry periods that are internally used by the machine controllers to enqueue keys into the work queue after the specified duration so that reconciliation can be retried afer elapsed duration.</p>
+<pre><code class="language-go">// RetryPeriod is an alias for specifying the retry period
+type RetryPeriod time.Duration
+
+// These are the valid values for RetryPeriod
+const (
+	// ShortRetry tells the controller to retry after a short duration - 15 seconds
+	ShortRetry RetryPeriod = RetryPeriod(15 * time.Second)
+	// MediumRetry tells the controller to retry after a medium duration - 2 minutes
+	MediumRetry RetryPeriod = RetryPeriod(3 * time.Minute)
+	// LongRetry tells the controller to retry after a long duration - 10 minutes
+	LongRetry RetryPeriod = RetryPeriod(10 * time.Minute)
+)
+
 </code></pre>
 
                     </main>

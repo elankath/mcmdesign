@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html" class="active"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html" class="active"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">4.</strong> Machine Controller Helper Functions</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -142,8 +142,25 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="cluster-machine-reconciliation"><a class="header" href="#cluster-machine-reconciliation">Cluster Machine Reconciliation</a></h1>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}}}%%
+                        <ul>
+<li><a href="#cluster-machine-reconciliation">Cluster Machine Reconciliation</a>
+<ul>
+<li><a href="#controllerreconcileclustermachinekey">controller.reconcileClusterMachineKey</a>
+<ul>
+<li><a href="#triggerdeletionflow">triggerDeletionFlow</a></li>
+</ul>
+</li>
+<li><a href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
+<li><a href="#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="cluster-machine-reconciliation"><a class="header" href="#cluster-machine-reconciliation">Cluster Machine Reconciliation</a></h1>
+<h2 id="controllerreconcileclustermachinekey"><a class="header" href="#controllerreconcileclustermachinekey">controller.reconcileClusterMachineKey</a></h2>
+<p>The primary reconcile function for the machine that analyzes machine status and triggers lifecalls calls to the driver. TODO: Provide descriptive summary</p>
+<pre><code class="language-go">func (c *controller) reconcileClusterMachineKey(key string) error
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
 A[&quot;ns,name=cache.SplitMetaNamespaceKey(mKey)&quot;]
@@ -190,6 +207,95 @@ NewCreateReq--&gt;CreateFlow
 CreateFlow--&gt;EnqM
 
 </pre>
+<h3 id="triggerdeletionflow"><a class="header" href="#triggerdeletionflow">triggerDeletionFlow</a></h3>
+<pre><code class="language-go">func (c *controller) triggerDeletionFlow(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error) 
+
+</code></pre>
+<p>Please note that there is sad use of <code>machine.Status.LastOperation</code>  as semantically the <em>next</em> requested operation. This is confusing. TODO: DIscuss This.</p>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+GM[&quot;machine=dmr.Machine\n
+machineClass=dmr.MachineClass\n
+secret=dmr.Secret&quot;]
+HasFin{&quot;HasFinalizer(machine)&quot;}
+LongR[&quot;retryPeriod=machineUtils.LongRetry&quot;]
+ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+ChkMachineTerm{&quot;machine.Status.CurrentStatus.Phase\n==MachineTerminating ?&quot;}
+ChkGetVMStatus{&quot;machine.Status.LastOperation.Description\n==GetVMStatus ?&quot;}
+SetMachineTermStatus[&quot;c.setMachineTerminationStatus(dmr)&quot;]
+
+CreateMachineStatusRequest[&quot;statusReq=&amp;driver.GetMachineStatusRequest{machine, machineClass,secret}&quot;]
+GetMachineStatus[&quot;_,err=driver.GetMachineStatus(statusReq)&quot;]
+ChkMachineExists{&quot;err==nil ?\n (ie machine exists)&quot;}
+
+
+CreateDrainOp[&quot;op:=LastOperation{Description: machineutils.InitiateDrain
+State: v1alpha1.MachineStateProcessing,
+Type:           v1alpha1.MachineOperationDelete,
+Time: time.Now()}&quot;]
+
+ShortR1[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+MachineStatusUpdate[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
+
+Z((&quot;End&quot;))
+
+HasFin--Yes--&gt;GM
+HasFin--No--&gt;LongR
+LongR--&gt;Z
+GM--&gt;ChkMachineTerm
+ChkMachineTerm--No--&gt;SetMachineTermStatus
+ChkMachineTerm--Yes--&gt;ChkGetVMStatus
+SetMachineTermStatus--&gt;ShortR
+ChkGetVMStatus--Yes--&gt;CreateMachineStatusRequest
+CreateMachineStatusRequest--&gt;GetMachineStatus
+GetMachineStatus--&gt;ChkMachineExists
+ChkMachineExists--Yes--&gt;ShortR1
+ShortR1--&gt;CreateDrainOp
+CreateDrainOp--&gt;MachineStatusUpdate
+MachineStatusUpdate--&gt;Z
+ShortR--&gt;Z
+
+</pre>
+<pre><code class="language-go">	description = machineutils.InitiateDrain
+		state = v1alpha1.MachineStateProcessing
+		retry = machineutils.ShortRetry
+
+
+v1alpha1.LastOperation{
+			Description:    description,
+			State:          state,
+			Type:           v1alpha1.MachineOperationDelete,
+			LastUpdateTime: metav1.Now(),
+		},
+
+
+        c.machineStatusUpdate(
+		ctx,
+		getMachineStatusRequest.Machine,
+		v1alpha1.LastOperation{
+			Description:    description,
+			State:          state,
+			Type:           v1alpha1.MachineOperationDelete,
+			LastUpdateTime: metav1.Now(),
+		},
+		// Let the clone.Status.CurrentStatus (LastUpdateTime) be as it was before.
+		// This helps while computing when the drain timeout to determine if force deletion is to be triggered.
+		// Ref - https://github.com/gardener/machine-controller-manager/blob/rel-v0.34.0/pkg/util/provider/machinecontroller/machine_util.go#L872
+		getMachineStatusRequest.Machine.Status.CurrentStatus,
+		getMachineStatusRequest.Machine.Status.LastKnownState,
+	)
+    return retry, err
+
+</code></pre>
+<h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
+<pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
+</code></pre>
+<p>TODO: illustrate me</p>
+<h2 id="controllersyncmachinenodetemplates"><a class="header" href="#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></h2>
+<pre><code class="language-go">func (c *controller) syncMachineNodeTemplates(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error) 
+</code></pre>
+<p>TODO: illustrate me</p>
 
                     </main>
 
@@ -199,6 +305,9 @@ CreateFlow--&gt;EnqM
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
+                            <a rel="next" href="mc_helper_funcs.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -210,6 +319,9 @@ CreateFlow--&gt;EnqM
                         <i class="fa fa-angle-left"></i>
                     </a>
 
+                    <a rel="next" href="mc_helper_funcs.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
             </nav>
 
         </div>

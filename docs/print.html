@@ -82,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">4.</strong> Machine Controller Helper Functions</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -561,6 +561,12 @@ type AttachedVolume struct {
 </li>
 </ul>
 </li>
+<li><a href="mcm_facilities.html#machineutils">MachineUtils</a>
+<ul>
+<li><a href="mcm_facilities.html#operation-descriptions">Operation Descriptions</a></li>
+<li><a href="mcm_facilities.html#retry-periods">Retry Periods</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -671,7 +677,7 @@ type NodeTemplateSpec struct { // BADLY NAMED!
 	// Conditions of this machine, same as NodeStatus.Conditions
 	Conditions []NodeCondition 
 
-	// Last operation refers to the status of the last operation performed
+	// Last operation refers to the status of the last operation performed. NOTE: this is usually the NextOperation for reconcile!! Discuss!
 	LastOperation LastOperation 
 
 	// Current status of the machine object
@@ -703,9 +709,10 @@ type NodeTemplateSpec struct { // BADLY NAMED!
 <p>NOTE: BADLY NAMED: Should be called <code>MachineOperationState</code></p>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#MachineState">machine-controller-manager/pkg/apis/machine/v1alpha1.MachineState</a> represents the  current state of a machine operation and is one of <code>Processing</code>, <code>Failed</code> or <code>Successful</code>.</p>
 <pre><code class="language-go">// MachineState is  current state of the machine.
+// BAD Name: Should be MachineOperationState
 type MachineState string
 
-// These are the valid states of machines.
+// These are the valid (operation) states of machines.
 const (
 	// MachineStatePending means there are operations pending on this machine state
 	MachineStateProcessing MachineState = &quot;Processing&quot;
@@ -720,18 +727,17 @@ const (
 <h5 id="machineoperationtype"><a class="header" href="#machineoperationtype">MachineOperationType</a></h5>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#MachineOperationType">github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.MachineOperationType</a> is a label for the operation performed on a machine object: <code>Create</code>/<code>Update</code>/<code>HealthCheck</code>/<code>Delete</code>.</p>
 <pre><code class="language-go">type MachineOperationType string
-// These are the valid statuses of machines.
 const (
-	// MachineOperationCreate indicates that the operation was a create
+	// MachineOperationCreate indicates that the operation is a create
 	MachineOperationCreate MachineOperationType = &quot;Create&quot;
 
-	// MachineOperationUpdate indicates that the operation was an update
+	// MachineOperationUpdate indicates that the operation is an update
 	MachineOperationUpdate MachineOperationType = &quot;Update&quot;
 
-	// MachineOperationHealthCheck indicates that the operation was a create
+	// MachineOperationHealthCheck indicates that the operation is a create
 	MachineOperationHealthCheck MachineOperationType = &quot;HealthCheck&quot;
 
-	// MachineOperationDelete indicates that the operation was a create
+	// MachineOperationDelete indicates that the operation is a delete
 	MachineOperationDelete MachineOperationType = &quot;Delete&quot;
 )
 
@@ -774,8 +780,93 @@ const (
 	MachineCrashLoopBackOff MachinePhase = &quot;CrashLoopBackOff&quot;
 )
 </code></pre>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="cluster-machine-reconciliation"><a class="header" href="#cluster-machine-reconciliation">Cluster Machine Reconciliation</a></h1>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}}}%%
+<h2 id="machineutils"><a class="header" href="#machineutils">MachineUtils</a></h2>
+<h3 id="operation-descriptions"><a class="header" href="#operation-descriptions">Operation Descriptions</a></h3>
+<p><code>machineutils</code> has a bunch of constants that are descriptions of machine operations that are set into <code>machine.Status.LastOperation.Description</code> by the machine controller while performing reconciliation.</p>
+<pre><code class="language-go">const (
+	// GetVMStatus sets machine status to terminating and specifies next step as getting VMs
+	GetVMStatus = &quot;Set machine status to termination. Now, getting VM Status&quot;
+
+	// InitiateDrain specifies next step as initiate node drain
+	InitiateDrain = &quot;Initiate node drain&quot;
+
+	// InitiateVMDeletion specifies next step as initiate VM deletion
+	InitiateVMDeletion = &quot;Initiate VM deletion&quot;
+
+	// InitiateNodeDeletion specifies next step as node object deletion
+	InitiateNodeDeletion = &quot;Initiate node object deletion&quot;
+
+	// InitiateFinalizerRemoval specifies next step as machine finalizer removal
+	InitiateFinalizerRemoval = &quot;Initiate machine object finalizer removal&quot;
+
+	// LastAppliedALTAnnotation contains the last configuration of annotations, 
+	// labels &amp; taints applied on the node object
+	LastAppliedALTAnnotation = &quot;node.machine.sapcloud.io/last-applied-anno-labels-taints&quot;
+
+	// MachinePriority is the annotation used to specify priority
+	// associated with a machine while deleting it. The less its
+	// priority the more likely it is to be deleted first
+	// Default priority for a machine is set to 3
+	MachinePriority = &quot;machinepriority.machine.sapcloud.io&quot;
+
+	// MachineClassKind is used to identify the machineClassKind for generic machineClasses
+	MachineClassKind = &quot;MachineClass&quot;
+
+	// MigratedMachineClass annotation helps in identifying machineClasses who have been migrated by migration controller
+	MigratedMachineClass = &quot;machine.sapcloud.io/migrated&quot;
+
+	// NotManagedByMCM annotation helps in identifying the nodes which are not handled by MCM
+	NotManagedByMCM = &quot;node.machine.sapcloud.io/not-managed-by-mcm&quot;
+
+	// TriggerDeletionByMCM annotation on the node would trigger the deletion of the corresponding machine object in the control cluster
+	TriggerDeletionByMCM = &quot;node.machine.sapcloud.io/trigger-deletion-by-mcm&quot;
+
+	// NodeUnhealthy is a node termination reason for failed machines
+	NodeUnhealthy = &quot;Unhealthy&quot;
+
+	// NodeScaledDown is a node termination reason for healthy deleted machines
+	NodeScaledDown = &quot;ScaleDown&quot;
+
+	// NodeTerminationCondition describes nodes that are terminating
+	NodeTerminationCondition v1.NodeConditionType = &quot;Terminating&quot;
+)
+
+</code></pre>
+<h3 id="retry-periods"><a class="header" href="#retry-periods">Retry Periods</a></h3>
+<p>These are standard retry periods that are internally used by the machine controllers to enqueue keys into the work queue after the specified duration so that reconciliation can be retried afer elapsed duration.</p>
+<pre><code class="language-go">// RetryPeriod is an alias for specifying the retry period
+type RetryPeriod time.Duration
+
+// These are the valid values for RetryPeriod
+const (
+	// ShortRetry tells the controller to retry after a short duration - 15 seconds
+	ShortRetry RetryPeriod = RetryPeriod(15 * time.Second)
+	// MediumRetry tells the controller to retry after a medium duration - 2 minutes
+	MediumRetry RetryPeriod = RetryPeriod(3 * time.Minute)
+	// LongRetry tells the controller to retry after a long duration - 10 minutes
+	LongRetry RetryPeriod = RetryPeriod(10 * time.Minute)
+)
+
+</code></pre>
+<div style="break-before: page; page-break-before: always;"></div><ul>
+<li><a href="cluster_machine_reconcile.html#cluster-machine-reconciliation">Cluster Machine Reconciliation</a>
+<ul>
+<li><a href="cluster_machine_reconcile.html#controllerreconcileclustermachinekey">controller.reconcileClusterMachineKey</a>
+<ul>
+<li><a href="cluster_machine_reconcile.html#triggerdeletionflow">triggerDeletionFlow</a></li>
+</ul>
+</li>
+<li><a href="cluster_machine_reconcile.html#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
+<li><a href="cluster_machine_reconcile.html#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="cluster-machine-reconciliation"><a class="header" href="#cluster-machine-reconciliation">Cluster Machine Reconciliation</a></h1>
+<h2 id="controllerreconcileclustermachinekey"><a class="header" href="#controllerreconcileclustermachinekey">controller.reconcileClusterMachineKey</a></h2>
+<p>The primary reconcile function for the machine that analyzes machine status and triggers lifecalls calls to the driver. TODO: Provide descriptive summary</p>
+<pre><code class="language-go">func (c *controller) reconcileClusterMachineKey(key string) error
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
 A[&quot;ns,name=cache.SplitMetaNamespaceKey(mKey)&quot;]
@@ -822,6 +913,149 @@ NewCreateReq--&gt;CreateFlow
 CreateFlow--&gt;EnqM
 
 </pre>
+<h3 id="triggerdeletionflow"><a class="header" href="#triggerdeletionflow">triggerDeletionFlow</a></h3>
+<pre><code class="language-go">func (c *controller) triggerDeletionFlow(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error) 
+
+</code></pre>
+<p>Please note that there is sad use of <code>machine.Status.LastOperation</code>  as semantically the <em>next</em> requested operation. This is confusing. TODO: DIscuss This.</p>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+GM[&quot;machine=dmr.Machine\n
+machineClass=dmr.MachineClass\n
+secret=dmr.Secret&quot;]
+HasFin{&quot;HasFinalizer(machine)&quot;}
+LongR[&quot;retryPeriod=machineUtils.LongRetry&quot;]
+ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+ChkMachineTerm{&quot;machine.Status.CurrentStatus.Phase\n==MachineTerminating ?&quot;}
+ChkGetVMStatus{&quot;machine.Status.LastOperation.Description\n==GetVMStatus ?&quot;}
+SetMachineTermStatus[&quot;c.setMachineTerminationStatus(dmr)&quot;]
+
+CreateMachineStatusRequest[&quot;statusReq=&amp;driver.GetMachineStatusRequest{machine, machineClass,secret}&quot;]
+GetMachineStatus[&quot;_,err=driver.GetMachineStatus(statusReq)&quot;]
+ChkMachineExists{&quot;err==nil ?\n (ie machine exists)&quot;}
+
+
+CreateDrainOp[&quot;op:=LastOperation{Description: machineutils.InitiateDrain
+State: v1alpha1.MachineStateProcessing,
+Type:           v1alpha1.MachineOperationDelete,
+Time: time.Now()}&quot;]
+
+ShortR1[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+MachineStatusUpdate[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
+
+Z((&quot;End&quot;))
+
+HasFin--Yes--&gt;GM
+HasFin--No--&gt;LongR
+LongR--&gt;Z
+GM--&gt;ChkMachineTerm
+ChkMachineTerm--No--&gt;SetMachineTermStatus
+ChkMachineTerm--Yes--&gt;ChkGetVMStatus
+SetMachineTermStatus--&gt;ShortR
+ChkGetVMStatus--Yes--&gt;CreateMachineStatusRequest
+CreateMachineStatusRequest--&gt;GetMachineStatus
+GetMachineStatus--&gt;ChkMachineExists
+ChkMachineExists--Yes--&gt;ShortR1
+ShortR1--&gt;CreateDrainOp
+CreateDrainOp--&gt;MachineStatusUpdate
+MachineStatusUpdate--&gt;Z
+ShortR--&gt;Z
+
+</pre>
+<pre><code class="language-go">	description = machineutils.InitiateDrain
+		state = v1alpha1.MachineStateProcessing
+		retry = machineutils.ShortRetry
+
+
+v1alpha1.LastOperation{
+			Description:    description,
+			State:          state,
+			Type:           v1alpha1.MachineOperationDelete,
+			LastUpdateTime: metav1.Now(),
+		},
+
+
+        c.machineStatusUpdate(
+		ctx,
+		getMachineStatusRequest.Machine,
+		v1alpha1.LastOperation{
+			Description:    description,
+			State:          state,
+			Type:           v1alpha1.MachineOperationDelete,
+			LastUpdateTime: metav1.Now(),
+		},
+		// Let the clone.Status.CurrentStatus (LastUpdateTime) be as it was before.
+		// This helps while computing when the drain timeout to determine if force deletion is to be triggered.
+		// Ref - https://github.com/gardener/machine-controller-manager/blob/rel-v0.34.0/pkg/util/provider/machinecontroller/machine_util.go#L872
+		getMachineStatusRequest.Machine.Status.CurrentStatus,
+		getMachineStatusRequest.Machine.Status.LastKnownState,
+	)
+    return retry, err
+
+</code></pre>
+<h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
+<pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
+</code></pre>
+<p>TODO: illustrate me</p>
+<h2 id="controllersyncmachinenodetemplates"><a class="header" href="#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></h2>
+<pre><code class="language-go">func (c *controller) syncMachineNodeTemplates(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error) 
+</code></pre>
+<p>TODO: illustrate me</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="machine-controller-helper-methods"><a class="header" href="#machine-controller-helper-methods">Machine Controller Helper Methods</a></h1>
+<h2 id="controllervalidatemachineclass"><a class="header" href="#controllervalidatemachineclass">controller.ValidateMachineClass</a></h2>
+<pre><code class="language-go">func (c *controller) ValidateMachineClass(ctx context.Context, classSpec *v1alpha1.ClassSpec) (*v1alpha1.MachineClass, map[string][]byte, machineutils.RetryPeriod, error) 
+</code></pre>
+<p>TODO: Validation Flow Diagram and Retrieval of secrets.</p>
+<h2 id="controlleraddmachinefinalizers"><a class="header" href="#controlleraddmachinefinalizers">controller.addMachineFinalizers</a></h2>
+<p>This method checks for the <code>MCMFinalizer</code> Value: <code>machine.sapcloud.io/machine-controller-manager</code> and adds it if it is not present. It leverages <code>k8s.io/apimachinery/pkg/util/sets</code> package for its work.</p>
+<p>This method is regularly called during machine reconciliation, if a machine does not have a deletion timestamp so that all non-deleted machines possess this finalizer.</p>
+<pre><code class="language-go">func (c *controller) addMachineFinalizers(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
+	if finalizers := sets.NewString(machine.Finalizers...); !finalizers.Has(MCMFinalizerName) {
+		finalizers.Insert(MCMFinalizerName)
+		clone := machine.DeepCopy()
+		clone.Finalizers = finalizers.List()
+		_, err := c.controlMachineClient.Machines(clone.Namespace).Update(ctx, clone, metav1.UpdateOptions{})
+		if err != nil {
+			// Keep retrying until update goes through
+			klog.Errorf(&quot;Failed to add finalizers for machine %q: %s&quot;, machine.Name, err)
+		} else {
+			// Return error even when machine object is updated
+			klog.V(2).Infof(&quot;Added finalizer to machine %q with providerID %q and backing node %q&quot;, machine.Name, getProviderID(machine), getNodeName(machine))
+			err = fmt.Errorf(&quot;Machine creation in process. Machine finalizers are UPDATED&quot;)
+		}
+	}
+	return machineutils.ShortRetry, err
+
+</code></pre>
+<h2 id="controllersetmachineterminationstatus"><a class="header" href="#controllersetmachineterminationstatus">controller.setMachineTerminationStatus</a></h2>
+<p><code>setMachineTerminationStatus</code> set's the machine status to terminating. This is illustrated below. Please note that <code>Machine.Status.LastOperation</code> is set an instance of the <code>LastOperation</code> struct. This is VERY misleading as this generally the Next Operation carried in the next pickup by the reconciler func.</p>
+<pre><code class="language-go">func (c *controller) setMachineTerminationStatus(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)  
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+CreateClone[&quot;clone := dmr.Machine.DeepCopy()&quot;]
+NewCurrStatus[&quot;currStatus := &amp;v1alpha1.CurrentStatus{Phase:\n MachineTerminating, LastUpdateTime: time.Now()}&quot;]
+SetCurrentStatus[&quot;clone.Status.CurrentStatus = currStatus&quot;]
+UpdateStatus[&quot;c.controlMachineClient.Machines(ns).UpdateStatus(clone)&quot;]
+ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+Z((&quot;Return&quot;))
+
+CreateClone--&gt;NewCurrStatus
+NewCurrStatus--&gt;SetCurrentStatus
+SetCurrentStatus--&gt;UpdateStatus
+UpdateStatus--&gt;ShortR
+ShortR--&gt;Z
+</pre>
+<h2 id="controllermachinestatusupdate"><a class="header" href="#controllermachinestatusupdate">controller.machineStatusUpdate</a></h2>
+<pre><code class="language-go">func (c *controller) machineStatusUpdate(
+	ctx context.Context,
+	machine *v1alpha1.Machine,
+	lastOperation v1alpha1.LastOperation,
+	currentStatus v1alpha1.CurrentStatus,
+	lastKnownState string) error
+</code></pre>
 
                     </main>
 

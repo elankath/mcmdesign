@@ -9,6 +9,9 @@
 				- [MachineOperationType](#machineoperationtype)
 			- [CurrentStatus](#currentstatus)
 				- [MachinePhase](#machinephase)
+	- [MachineUtils](#machineutils)
+		- [Operation Descriptions](#operation-descriptions)
+		- [Retry Periods](#retry-periods)
 
 # MCM Facilities
 
@@ -137,7 +140,7 @@ type MachineStatus struct {
 	// Conditions of this machine, same as NodeStatus.Conditions
 	Conditions []NodeCondition 
 
-	// Last operation refers to the status of the last operation performed
+	// Last operation refers to the status of the last operation performed. NOTE: this is usually the NextOperation for reconcile!! Discuss!
 	LastOperation LastOperation 
 
 	// Current status of the machine object
@@ -176,9 +179,10 @@ NOTE: BADLY NAMED: Should be called `MachineOperationState`
 
 ```go
 // MachineState is  current state of the machine.
+// BAD Name: Should be MachineOperationState
 type MachineState string
 
-// These are the valid states of machines.
+// These are the valid (operation) states of machines.
 const (
 	// MachineStatePending means there are operations pending on this machine state
 	MachineStateProcessing MachineState = "Processing"
@@ -196,18 +200,17 @@ const (
 
 ```go
 type MachineOperationType string
-// These are the valid statuses of machines.
 const (
-	// MachineOperationCreate indicates that the operation was a create
+	// MachineOperationCreate indicates that the operation is a create
 	MachineOperationCreate MachineOperationType = "Create"
 
-	// MachineOperationUpdate indicates that the operation was an update
+	// MachineOperationUpdate indicates that the operation is an update
 	MachineOperationUpdate MachineOperationType = "Update"
 
-	// MachineOperationHealthCheck indicates that the operation was a create
+	// MachineOperationHealthCheck indicates that the operation is a create
 	MachineOperationHealthCheck MachineOperationType = "HealthCheck"
 
-	// MachineOperationDelete indicates that the operation was a create
+	// MachineOperationDelete indicates that the operation is a delete
 	MachineOperationDelete MachineOperationType = "Delete"
 )
 
@@ -256,7 +259,82 @@ const (
 	MachineCrashLoopBackOff MachinePhase = "CrashLoopBackOff"
 )
 ```
+## MachineUtils
 
+
+### Operation Descriptions
+`machineutils` has a bunch of constants that are descriptions of machine operations that are set into `machine.Status.LastOperation.Description` by the machine controller while performing reconciliation.
+
+```go
+const (
+	// GetVMStatus sets machine status to terminating and specifies next step as getting VMs
+	GetVMStatus = "Set machine status to termination. Now, getting VM Status"
+
+	// InitiateDrain specifies next step as initiate node drain
+	InitiateDrain = "Initiate node drain"
+
+	// InitiateVMDeletion specifies next step as initiate VM deletion
+	InitiateVMDeletion = "Initiate VM deletion"
+
+	// InitiateNodeDeletion specifies next step as node object deletion
+	InitiateNodeDeletion = "Initiate node object deletion"
+
+	// InitiateFinalizerRemoval specifies next step as machine finalizer removal
+	InitiateFinalizerRemoval = "Initiate machine object finalizer removal"
+
+	// LastAppliedALTAnnotation contains the last configuration of annotations, 
+	// labels & taints applied on the node object
+	LastAppliedALTAnnotation = "node.machine.sapcloud.io/last-applied-anno-labels-taints"
+
+	// MachinePriority is the annotation used to specify priority
+	// associated with a machine while deleting it. The less its
+	// priority the more likely it is to be deleted first
+	// Default priority for a machine is set to 3
+	MachinePriority = "machinepriority.machine.sapcloud.io"
+
+	// MachineClassKind is used to identify the machineClassKind for generic machineClasses
+	MachineClassKind = "MachineClass"
+
+	// MigratedMachineClass annotation helps in identifying machineClasses who have been migrated by migration controller
+	MigratedMachineClass = "machine.sapcloud.io/migrated"
+
+	// NotManagedByMCM annotation helps in identifying the nodes which are not handled by MCM
+	NotManagedByMCM = "node.machine.sapcloud.io/not-managed-by-mcm"
+
+	// TriggerDeletionByMCM annotation on the node would trigger the deletion of the corresponding machine object in the control cluster
+	TriggerDeletionByMCM = "node.machine.sapcloud.io/trigger-deletion-by-mcm"
+
+	// NodeUnhealthy is a node termination reason for failed machines
+	NodeUnhealthy = "Unhealthy"
+
+	// NodeScaledDown is a node termination reason for healthy deleted machines
+	NodeScaledDown = "ScaleDown"
+
+	// NodeTerminationCondition describes nodes that are terminating
+	NodeTerminationCondition v1.NodeConditionType = "Terminating"
+)
+
+```
+
+### Retry Periods
+
+These are standard retry periods that are internally used by the machine controllers to enqueue keys into the work queue after the specified duration so that reconciliation can be retried afer elapsed duration.
+
+```go
+// RetryPeriod is an alias for specifying the retry period
+type RetryPeriod time.Duration
+
+// These are the valid values for RetryPeriod
+const (
+	// ShortRetry tells the controller to retry after a short duration - 15 seconds
+	ShortRetry RetryPeriod = RetryPeriod(15 * time.Second)
+	// MediumRetry tells the controller to retry after a medium duration - 2 minutes
+	MediumRetry RetryPeriod = RetryPeriod(3 * time.Minute)
+	// LongRetry tells the controller to retry after a long duration - 10 minutes
+	LongRetry RetryPeriod = RetryPeriod(10 * time.Minute)
+)
+
+```
 
 
 
