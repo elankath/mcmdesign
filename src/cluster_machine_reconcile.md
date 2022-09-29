@@ -23,8 +23,8 @@ A["ns,name=cache.SplitMetaNamespaceKey(mKey)"]
 GetM["machine=machineLister.Machines(ns).Get(name)"]
 ValM["validation.ValidateMachine(machine)"]
 ValMC["machineClz,secretData,err=validation.ValidateMachineClass(machine)"]
-LongR["retryPeriod=machineUtils.LongRetry"]
-ShortR["retryPeriod=machineUtils.ShortRetry"]
+LongR["retryPeriod=machineutils.LongRetry"]
+ShortR["retryPeriod=machineutils.ShortRetry"]
 EnqM["machineQueue.AddAfter(mKey, retryPeriod)"]
 CheckMDel{"Is\nmachine.DeletionTimestamp\nSet?"}
 NewDelReq["req=&driver.DeleteMachineRequest{machine,machineClz,secretData}"]
@@ -95,7 +95,7 @@ GetVMStatus["retryPeriod=c.getVMStatus(statusReq)"]
 
 
 
-ShortR1["retryPeriod=machineUtils.ShortRetry"]
+ShortR1["retryPeriod=machineutils.ShortRetry"]
 MachineStatusUpdate["c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)"]
 
 Z(("End"))
