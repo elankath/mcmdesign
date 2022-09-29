@@ -12,6 +12,9 @@
 	- [MachineUtils](#machineutils)
 		- [Operation Descriptions](#operation-descriptions)
 		- [Retry Periods](#retry-periods)
+	- [Codes and Status](#codes-and-status)
+		- [Code](#code)
+		- [Status](#status)
 
 # MCM Facilities
 
@@ -335,6 +338,52 @@ const (
 )
 
 ```
+
+## Codes and Status
+
+### Code
+[github.com/gardener/machine-controller-manager/pkg/util/provider/machinecodes/codes.Code](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code) is a `uint32` with following error codes. These error codes are contained in errors returned from Driver methods.
+
+Note: Un-happy with current design. It is clear that some error codes overlap each other in the sense that they are supersets of other codes. The right thing to do would have been to make an ErrorCategory.
+
+| Value | Code                | Description              |
+| ------| --------------------| ------------------------- 
+| 0     | Ok                  | Success     
+| 1     | Canceled            | the operation was canceled (by caller)
+| 2     | Unknown             | Unknown error (unrecognized code)
+| 3     | InvalidArgument     | InvalidArgument indicates client specified an invalid argument.
+| 4     | DeadlineExceeded    | DeadlineExceeded means operation expired before completion.  For operations that change the state of the system, this error may be  returned even if the operation has completed successfully. For example, a successful response from a server could have been delayed long enough for the deadline to expire.
+| 5     | NotFound            | requested entity not found.
+| 6     | AlreadyExists       | an attempt to create an entity failed because one already exists.
+| 7     | PermissionDenied    | caller does not have permission to execute the specified operation.
+| 8     | ResourceExhausted   | indicates some resource has been exhausted, perhaps a per-user quota, or perhaps the entire file system is out of space.
+| 9     | FailedPrecondition  | operation was rejected because the	 system is not in a state required for the operation's execution.
+| 10    | Aborted             | operation was aborted and client should retry the full process
+| 11    | OutOfRange          | operation was attempted past the valid range. Unlike InvalidArgument, this error indicates a problem that may be fixed if the system state changes.
+| 12    | UnImplemented       | operation is not implemented or not supported
+| 13    | Internal            | BAD. Some internal invariant broken. 
+| 14    | Unavailable         | Service is currently unavailable (transient and op may be tried with backoff)
+| 15    | DataLoss            | unrecoverable data loss or corruption.
+| 16    | Unauthenticated     | request does not have valid creds for operation. Note: It would have been nice if 7 was called Unauthorized.
+
+### Status
+
+[status](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status) implements errors returned by MachineAPIs. MachineAPIs service handlers should return an error created by this package, and machineAPIs clients should expect a corresponding error to be returned from the RPC call.
+
+[status.Status](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status#Status) implements `error` and encapsulates a `code` which should be onf the codes in [codes.Code](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code) and a develoer-facing error message in English
+```go
+type Status struct {
+	code int32
+	message string
+}
+// New returns a Status encapsulating code and msg.
+func New(code codes.Code, msg string) *Status {
+	return &Status{code: int32(code), message: msg}
+}
+```
+
+NOTE: No ideally why we are doing such hard work as shown in [status.FromError](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecodes/status/status.go#L84) which involves time-consuming regex parsing of an error string into a status. This is actually being used to parse error strings of errors returned by Driver methods. Not good - should be better designed.
+
 
 
 

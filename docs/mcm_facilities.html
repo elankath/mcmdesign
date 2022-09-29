@@ -172,6 +172,12 @@
 <li><a href="#retry-periods">Retry Periods</a></li>
 </ul>
 </li>
+<li><a href="#codes-and-status">Codes and Status</a>
+<ul>
+<li><a href="#code">Code</a></li>
+<li><a href="#status">Status</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -453,6 +459,43 @@ const (
 )
 
 </code></pre>
+<h2 id="codes-and-status"><a class="header" href="#codes-and-status">Codes and Status</a></h2>
+<h3 id="code"><a class="header" href="#code">Code</a></h3>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code">github.com/gardener/machine-controller-manager/pkg/util/provider/machinecodes/codes.Code</a> is a <code>uint32</code> with following error codes. These error codes are contained in errors returned from Driver methods.</p>
+<p>Note: Un-happy with current design. It is clear that some error codes overlap each other in the sense that they are supersets of other codes. The right thing to do would have been to make an ErrorCategory.</p>
+<div class="table-wrapper"><table><thead><tr><th>Value</th><th>Code</th><th>Description</th></tr></thead><tbody>
+<tr><td>0</td><td>Ok</td><td>Success</td></tr>
+<tr><td>1</td><td>Canceled</td><td>the operation was canceled (by caller)</td></tr>
+<tr><td>2</td><td>Unknown</td><td>Unknown error (unrecognized code)</td></tr>
+<tr><td>3</td><td>InvalidArgument</td><td>InvalidArgument indicates client specified an invalid argument.</td></tr>
+<tr><td>4</td><td>DeadlineExceeded</td><td>DeadlineExceeded means operation expired before completion.  For operations that change the state of the system, this error may be  returned even if the operation has completed successfully. For example, a successful response from a server could have been delayed long enough for the deadline to expire.</td></tr>
+<tr><td>5</td><td>NotFound</td><td>requested entity not found.</td></tr>
+<tr><td>6</td><td>AlreadyExists</td><td>an attempt to create an entity failed because one already exists.</td></tr>
+<tr><td>7</td><td>PermissionDenied</td><td>caller does not have permission to execute the specified operation.</td></tr>
+<tr><td>8</td><td>ResourceExhausted</td><td>indicates some resource has been exhausted, perhaps a per-user quota, or perhaps the entire file system is out of space.</td></tr>
+<tr><td>9</td><td>FailedPrecondition</td><td>operation was rejected because the	 system is not in a state required for the operation's execution.</td></tr>
+<tr><td>10</td><td>Aborted</td><td>operation was aborted and client should retry the full process</td></tr>
+<tr><td>11</td><td>OutOfRange</td><td>operation was attempted past the valid range. Unlike InvalidArgument, this error indicates a problem that may be fixed if the system state changes.</td></tr>
+<tr><td>12</td><td>UnImplemented</td><td>operation is not implemented or not supported</td></tr>
+<tr><td>13</td><td>Internal</td><td>BAD. Some internal invariant broken.</td></tr>
+<tr><td>14</td><td>Unavailable</td><td>Service is currently unavailable (transient and op may be tried with backoff)</td></tr>
+<tr><td>15</td><td>DataLoss</td><td>unrecoverable data loss or corruption.</td></tr>
+<tr><td>16</td><td>Unauthenticated</td><td>request does not have valid creds for operation. Note: It would have been nice if 7 was called Unauthorized.</td></tr>
+</tbody></table>
+</div>
+<h3 id="status"><a class="header" href="#status">Status</a></h3>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status">status</a> implements errors returned by MachineAPIs. MachineAPIs service handlers should return an error created by this package, and machineAPIs clients should expect a corresponding error to be returned from the RPC call.</p>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status#Status">status.Status</a> implements <code>error</code> and encapsulates a <code>code</code> which should be onf the codes in <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code">codes.Code</a> and a develoer-facing error message in English</p>
+<pre><code class="language-go">type Status struct {
+	code int32
+	message string
+}
+// New returns a Status encapsulating code and msg.
+func New(code codes.Code, msg string) *Status {
+	return &amp;Status{code: int32(code), message: msg}
+}
+</code></pre>
+<p>NOTE: No ideally why we are doing such hard work as shown in <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecodes/status/status.go#L84">status.FromError</a> which involves time-consuming regex parsing of an error string into a status. This is actually being used to parse error strings of errors returned by Driver methods. Not good - should be better designed.</p>
 
                     </main>
 
