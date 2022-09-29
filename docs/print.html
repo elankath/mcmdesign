@@ -897,6 +897,7 @@ func New(code codes.Code, msg string) *Status {
 <li><a href="cluster_machine_reconcile.html#controllerreconcileclustermachinekey">controller.reconcileClusterMachineKey</a>
 <ul>
 <li><a href="cluster_machine_reconcile.html#triggerdeletionflow">triggerDeletionFlow</a></li>
+<li><a href="cluster_machine_reconcile.html#controllergetvmstatus">controller.getVMStatus</a></li>
 </ul>
 </li>
 <li><a href="cluster_machine_reconcile.html#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
@@ -980,6 +981,45 @@ DeleteMachineFin[&quot;retryPeriod=c.deleteMachineFinalizers(machine)\n(dead cod
 SetMachineTermStatus[&quot;c.setMachineTerminationStatus(dmr)&quot;]
 
 CreateMachineStatusRequest[&quot;statusReq=&amp;driver.GetMachineStatusRequest{machine, machineClass,secret}&quot;]
+GetVMStatus[&quot;retryPeriod=c.getVMStatus(statusReq)&quot;]
+
+
+
+ShortR1[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+MachineStatusUpdate[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
+
+Z((&quot;End&quot;))
+
+HasFin--Yes--&gt;GM
+HasFin--No--&gt;LongR
+LongR--&gt;Z
+GM--&gt;ChkMachineTerm
+ChkMachineTerm--No--&gt;SetMachineTermStatus
+ChkMachineTerm--Yes--&gt;CheckMachineOperation
+SetMachineTermStatus--&gt;ShortR
+CheckMachineOperation--GetVMStatus--&gt;CreateMachineStatusRequest
+CheckMachineOperation--InitiateDrain--&gt;DrainNode
+CheckMachineOperation--InitiateVMDeletion--&gt;DeleteVM
+CheckMachineOperation--InitiateNodeDeletion--&gt;DeleteNode
+CheckMachineOperation--InitiateFinalizerRemoval--&gt;DeleteMachineFin
+CreateMachineStatusRequest--&gt;GetVMStatus
+GetVMStatus--&gt;Z
+
+
+DrainNode--&gt;Z
+DeleteVM--&gt;Z
+DeleteNode--&gt;Z
+DeleteMachineFin--&gt;Z
+ShortR--&gt;Z
+
+</pre>
+<h3 id="controllergetvmstatus"><a class="header" href="#controllergetvmstatus">controller.getVMStatus</a></h3>
+<pre><code class="language-go">func (c *controller) getVMStatus(ctx context.Context, 
+    statusReq *driver.GetMachineStatusRequest) (machineutils.RetryPeriod, error)
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
 GetMachineStatus[&quot;_,err=driver.GetMachineStatus(statusReq)&quot;]
 ChkMachineExists{&quot;err==nil ?\n (ie machine exists)&quot;}
 DecodeErrorStatus[&quot;errStatus,decodeOk= status.FromError(err)&quot;]
@@ -1007,22 +1047,12 @@ State: v1alpha1.MachineStateFailed,
 Type:  v1alpha1.MachineOperationDelete,
 Time: time.Now()}&quot;]
 
-ShortR1[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+LongR[&quot;retryPeriod=machineUtils.LongRetry&quot;]
 MachineStatusUpdate[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
 
 Z((&quot;End&quot;))
 
-HasFin--Yes--&gt;GM
-HasFin--No--&gt;LongR
-LongR--&gt;Z
-GM--&gt;ChkMachineTerm
-ChkMachineTerm--No--&gt;SetMachineTermStatus
-ChkMachineTerm--Yes--&gt;CheckMachineOperation
-SetMachineTermStatus--&gt;ShortR
-CheckMachineOperation--GetVMStatus--&gt;CreateMachineStatusRequest
-CheckMachineOperation--InitiateDrain--&gt;DrainNode
-DrainNode--&gt;Z
-CreateMachineStatusRequest--&gt;GetMachineStatus
 GetMachineStatus--&gt;ChkMachineExists
 
 ChkMachineExists--Yes--&gt;CreateDrainOp
@@ -1030,20 +1060,18 @@ ChkMachineExists--No--&gt;DecodeErrorStatus
 DecodeErrorStatus--&gt;CheckDecodeOk
 CheckDecodeOk--Yes--&gt;CheckErrStatusCode
 CheckDecodeOk--No--&gt;CreateDecodeFailedOp
-CreateDecodeFailedOp--&gt;LongR1
+CreateDecodeFailedOp--&gt;LongR
 CheckErrStatusCode--&quot;Unimplemented&quot;--&gt;CreateDrainOp
 CheckErrStatusCode--&quot;Unknown|DeadlineExceeded|Aborted|Unavailable&quot;--&gt;CreaterRetryVMStatusOp
 CheckErrStatusCode--&quot;NotFound&quot;--&gt;CreateNodeDelOp
-CreaterRetryVMStatusOp--&gt;ShortR1
+CreaterRetryVMStatusOp--&gt;ShortR
 
-CreateDrainOp--&gt;ShortR1
-CreateNodeDelOp--&gt;ShortR1
-ShortR1--&gt;MachineStatusUpdate
-LongR1--&gt;MachineStatusUpdate
+CreateDrainOp--&gt;ShortR
+CreateNodeDelOp--&gt;ShortR
+ShortR--&gt;MachineStatusUpdate
+LongR--&gt;MachineStatusUpdate
 MachineStatusUpdate--&gt;Z
 
-
-ShortR--&gt;Z
 
 </pre>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>

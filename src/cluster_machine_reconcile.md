@@ -1,6 +1,7 @@
 - [Cluster Machine Reconciliation](#cluster-machine-reconciliation)
   - [controller.reconcileClusterMachineKey](#controllerreconcileclustermachinekey)
     - [triggerDeletionFlow](#triggerdeletionflow)
+    - [controller.getVMStatus](#controllergetvmstatus)
   - [controller.reconcileMachineHealth](#controllerreconcilemachinehealth)
   - [controller.syncMachineNodeTemplates](#controllersyncmachinenodetemplates)
 
@@ -90,6 +91,50 @@ DeleteMachineFin["retryPeriod=c.deleteMachineFinalizers(machine)\n(dead code?)"]
 SetMachineTermStatus["c.setMachineTerminationStatus(dmr)"]
 
 CreateMachineStatusRequest["statusReq=&driver.GetMachineStatusRequest{machine, machineClass,secret}"]
+GetVMStatus["retryPeriod=c.getVMStatus(statusReq)"]
+
+
+
+ShortR1["retryPeriod=machineUtils.ShortRetry"]
+MachineStatusUpdate["c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)"]
+
+Z(("End"))
+
+HasFin--Yes-->GM
+HasFin--No-->LongR
+LongR-->Z
+GM-->ChkMachineTerm
+ChkMachineTerm--No-->SetMachineTermStatus
+ChkMachineTerm--Yes-->CheckMachineOperation
+SetMachineTermStatus-->ShortR
+CheckMachineOperation--GetVMStatus-->CreateMachineStatusRequest
+CheckMachineOperation--InitiateDrain-->DrainNode
+CheckMachineOperation--InitiateVMDeletion-->DeleteVM
+CheckMachineOperation--InitiateNodeDeletion-->DeleteNode
+CheckMachineOperation--InitiateFinalizerRemoval-->DeleteMachineFin
+CreateMachineStatusRequest-->GetVMStatus
+GetVMStatus-->Z
+
+
+DrainNode-->Z
+DeleteVM-->Z
+DeleteNode-->Z
+DeleteMachineFin-->Z
+ShortR-->Z
+
+```
+
+### controller.getVMStatus
+
+```go
+func (c *controller) getVMStatus(ctx context.Context, 
+    statusReq *driver.GetMachineStatusRequest) (machineutils.RetryPeriod, error)
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
 GetMachineStatus["_,err=driver.GetMachineStatus(statusReq)"]
 ChkMachineExists{"err==nil ?\n (ie machine exists)"}
 DecodeErrorStatus["errStatus,decodeOk= status.FromError(err)"]
@@ -117,22 +162,12 @@ State: v1alpha1.MachineStateFailed,
 Type:  v1alpha1.MachineOperationDelete,
 Time: time.Now()}"]
 
-ShortR1["retryPeriod=machineUtils.ShortRetry"]
+ShortR["retryPeriod=machineUtils.ShortRetry"]
+LongR["retryPeriod=machineUtils.LongRetry"]
 MachineStatusUpdate["c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)"]
 
 Z(("End"))
 
-HasFin--Yes-->GM
-HasFin--No-->LongR
-LongR-->Z
-GM-->ChkMachineTerm
-ChkMachineTerm--No-->SetMachineTermStatus
-ChkMachineTerm--Yes-->CheckMachineOperation
-SetMachineTermStatus-->ShortR
-CheckMachineOperation--GetVMStatus-->CreateMachineStatusRequest
-CheckMachineOperation--InitiateDrain-->DrainNode
-DrainNode-->Z
-CreateMachineStatusRequest-->GetMachineStatus
 GetMachineStatus-->ChkMachineExists
 
 ChkMachineExists--Yes-->CreateDrainOp
@@ -140,20 +175,18 @@ ChkMachineExists--No-->DecodeErrorStatus
 DecodeErrorStatus-->CheckDecodeOk
 CheckDecodeOk--Yes-->CheckErrStatusCode
 CheckDecodeOk--No-->CreateDecodeFailedOp
-CreateDecodeFailedOp-->LongR1
+CreateDecodeFailedOp-->LongR
 CheckErrStatusCode--"Unimplemented"-->CreateDrainOp
 CheckErrStatusCode--"Unknown|DeadlineExceeded|Aborted|Unavailable"-->CreaterRetryVMStatusOp
 CheckErrStatusCode--"NotFound"-->CreateNodeDelOp
-CreaterRetryVMStatusOp-->ShortR1
+CreaterRetryVMStatusOp-->ShortR
 
-CreateDrainOp-->ShortR1
-CreateNodeDelOp-->ShortR1
-ShortR1-->MachineStatusUpdate
-LongR1-->MachineStatusUpdate
+CreateDrainOp-->ShortR
+CreateNodeDelOp-->ShortR
+ShortR-->MachineStatusUpdate
+LongR-->MachineStatusUpdate
 MachineStatusUpdate-->Z
 
-
-ShortR-->Z
 
 ```
 
