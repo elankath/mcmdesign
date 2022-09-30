@@ -193,6 +193,7 @@
 <ul>
 <li><a href="#client-go-shared-informers">client-go Shared Informers.</a></li>
 <li><a href="#client-go-workqueues">client-go workqueues</a></li>
+<li><a href="#client-go-controller-steps">client-go controller steps</a></li>
 </ul>
 </li>
 <li><a href="#references">References</a></li>
@@ -536,7 +537,18 @@ type EventsGetter interface {
 	Events(namespace string) EventInterface
 }
 </code></pre>
-<p>One can generate k8s clients for custom k8s objects also. The details are not covered here. However, one can refer to <a href="https://itnext.io/how-to-generate-client-codes-for-kubernetes-custom-resource-definitions-crd-b4b9907769ba">How to generate client codes for Kubernetes Custom Resource Definitions</a></p>
+<p>The <code>ClientSet</code> struct implements the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes#Interface">kubernetes.Interface</a> facade which is a high-level facade containing all the methods to access the individual <em>GroupVersionInterface</em> facade clients.</p>
+<pre><code class="language-go">type Interface interface {
+	Discovery() discovery.DiscoveryInterface
+  AppsV1() appsv1.AppsV1Interface
+  CoreV1() corev1.CoreV1Interface
+  EventsV1() eventsv1.EventsV1Interface
+  NodeV1() nodev1.NodeV1Interface
+ // ... other facade accessor
+}
+</code></pre>
+<p>One can <em>generate</em> k8s clients for custom k8s objects that follow the same pattern for core k8s objects. The details are not covered here. Please refer to <a href="https://itnext.io/how-to-generate-client-codes-for-kubernetes-custom-resource-definitions-crd-b4b9907769ba">How to generate client codes for Kubernetes Custom Resource Definitions</a>
+, <a href="https://github.com/kubernetes/gengo">gengo</a>, <a href="https://github.com/kubernetes/code-generator">k8s.io codegenrator</a> and the slightly-old article:  <a href="https://cloud.redhat.com/blog/kubernetes-deep-dive-code-generation-customresources">Kubernetes Deep Dive: Code Generation for CustomResources</a></p>
 <h3 id="client-go-shared-informers"><a class="header" href="#client-go-shared-informers">client-go Shared Informers.</a></h3>
 <p>The vital role of a Kubernetes controller is to watch objects for the desired state and the actual state, then send instructions to make the actual state be more like the desired state. The controller thus first needs to retrieve the object's information. Instead of making direct API calls using k8s listers/watchers, client-go controllers should use <code>SharedInformer</code>s.</p>
 <p><a href="https://pkg.go.dev/k8s.io/client-go/tools/cache#SharedInformer">cache.SharedInformer</a> is a primitive exposed by <code>client-go</code> lib that maintains a local cache of k8s objects of a particular API group and kind/resource. (restricable by namespace/label/field selectors) which is linked to the authoritative state of the corresponding objects in the API server. </p>
@@ -557,6 +569,7 @@ type EventsGetter interface {
 	//..
 }
 </code></pre>
+<p>Note: resync period tells the informer to rebuild its cache every every time the period expires.</p>
 <p><a href="https://pkg.go.dev/k8s.io/client-go/tools/cache#ResourceEventHandler">cache.ResourceEventHandler</a> handle notifications for events that happen to a resource.</p>
 <pre><code class="language-go">type ResourceEventHandler interface {
 	OnAdd(obj interface{})
@@ -571,6 +584,9 @@ type EventsGetter interface {
 	DeleteFunc func(obj interface{})
 }
 </code></pre>
+<p>Shared informers for standard k8s objects can be obtained using the <a href="https://pkg.go.dev/k8s.io/client-go/informers#NewSharedInformerFactory">k8s.io/client-go/informers.NewSharedInformerFactory</a> or one of the variant factory methods in the same package.</p>
+<p>Informers and their factory functions for custom k8s objects are usually found in the generated factory code usually in a <code>factory.go</code> file. </p>
+<p>See <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/client/informers/externalversions/factory.go#L79">github.com/machine-controller-manager/pkg/client/informers/externalversions/externalversions.NewSharedInformerFactory</a></p>
 <h3 id="client-go-workqueues"><a class="header" href="#client-go-workqueues">client-go workqueues</a></h3>
 <p>The basic <a href="https://pkg.go.dev/k8s.io/client-go/util/workqueue#Interface">workqueue.Interface</a> has the following methods:</p>
 <pre><code class="language-go">type Interface interface {
@@ -603,9 +619,42 @@ type EventsGetter interface {
 }
 
 </code></pre>
-<p>TODO: Move me below</p>
-<p>The basic contract for a k8s-client controller is to specifiy callback functions that enqueue items on a rate-limited work queue and register these callback functions using a <code>SharedInformer</code>. Then the controller <code>Run</code> loop then picks up objects from the work queue using <code>Get</code> and reconciles them.</p>
-<p>The controller implementation functions for <code>Add|UpdateFunc</code> usually enqueue the object on a rate limited work queue created using <a href="https://pkg.go.dev/k8s.io/client-go/util/workqueue#NewNamedRateLimitingQueue">workqueue.NewNamedRateLimitingQueue</a></p>
+<h3 id="client-go-controller-steps"><a class="header" href="#client-go-controller-steps">client-go controller steps</a></h3>
+<p>The basic high-level contract for a k8s-client controller leveraging work-queues goes like the below:</p>
+<ol>
+<li>Create rate-limited work queue(s) created using <a href="https://pkg.go.dev/k8s.io/client-go/util/workqueue#NewNamedRateLimitingQueue">workqueue.NewNamedRateLimitingQueue</a></li>
+<li>Define lifecycle callback functions (Add/Update/Delete) which accept k8s objects and enqueue k8s object keys (namespace/name) on these rate-limited work queue(s).</li>
+<li>Create informers using the shared informer factory functions.</li>
+<li>Add event handlers to the informers specifying these callback functions.
+<ol>
+<li>When informers are started, they will invoke the appropriate registered callbacks when k8s objects are added/updated/deleted.</li>
+</ol>
+</li>
+<li>The controller <code>Run</code> loop then picks up objects from the work queue using <code>Get</code> and reconciles them by invoking the appropriate reconcile function, ensuring that <code>Done</code> is called after reconcile to mark it as done processing.</li>
+</ol>
+<p>Example:</p>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+CreateWorkQueue[&quot;machineQueue:=workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), 'machine')&quot;]
+--&gt;
+CreateInformer[&quot;machineInformerFactory := externalversions.NewSharedInformerFactory(...)
+machineInformer := machineInformerFactory.Machine().V1alpha1().Machines()&quot;]
+--&gt;
+AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    controller.machineToMachineClassAdd,
+		UpdateFunc: controller.machineToMachineClassUpdate,
+		DeleteFunc: controller.machineToMachineClassDelete,
+	})&quot;]
+--&gt;Run[&quot;while (!shutdown) {
+  key, shutdown := queue.Get()
+  defer queue.Done(key)
+  reconcile(key.(string))
+}
+&quot;]
+Z((&quot;End&quot;))
+</pre>
+<p>A more elaborate example of basic client-go controller flow is demonstrated in the <a href="https://github.com/kubernetes/client-go/blob/master/examples/workqueue/main.go">clien-go workqueue example</a></p>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
 <li><a href="https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md">K8s API Conventions</a></li>
@@ -615,7 +664,9 @@ type EventsGetter interface {
 <li><a href="https://medium.com/kubernetes-tutorials/making-sense-of-taints-and-tolerations-in-kubernetes-446e75010f4e">Making Sense of Taints and Tolerations</a></li>
 <li><a href="https://www.ionos.com/digitalguide/server/know-how/cidr-classless-inter-domain-routing/">CIDR</a></li>
 <li><a href="https://mxtoolbox.com/subnetcalculator.aspx">CIDR Calculator</a></li>
+<li><a href="https://github.com/kubernetes/code-generator">k8s.io codegenrator</a></li>
 <li><a href="https://itnext.io/how-to-generate-client-codes-for-kubernetes-custom-resource-definitions-crd-b4b9907769ba">How to generate client codes for Kubernetes Custom Resource Definitions</a></li>
+<li><a href="https://cloud.redhat.com/blog/kubernetes-deep-dive-code-generation-customresources">Kubernetes Deep Dive: Code Generation for CustomResources</a></li>
 </ul>
 
                     </main>

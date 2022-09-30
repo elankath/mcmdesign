@@ -1108,6 +1108,11 @@ func (c *controller) Run(workers int, stopCh <-chan struct{}) {
 ```
 #### 1. Wait for Informer Caches to Sync
 
+When an informer starts, it will build a cache of all resources it currently watches which is lost when the application
+restarts. This means that on startup, each of your handler functions will be invoked as the initial state is built. If this
+is not desirable for your use case, you can wait until the caches are synced before performing any updates using the
+`cache.WaitForCacheSync` function:
+
 ```go
 if !cache.WaitForCacheSync(stopCh, c.secretSynced, c.pvcSynced, c.pvSynced, c.pdbSynced, c.volumeAttachementSynced, c.nodeSynced, c.machineClassSynced, c.machineSynced) {
 		runtimeutil.HandleError(fmt.Errorf("Timed out waiting for caches to sync"))
