@@ -6,6 +6,8 @@
         - [OwnerReferences](#ownerreferences)
         - [Finalizers and Deletion](#finalizers-and-deletion)
         - [Diff between Labels and Annotations](#diff-between-labels-and-annotations)
+    - [Utility Functions](#utility-functions)
+      - [wait.Until](#waituntil)
   - [K8s API Core](#k8s-api-core)
     - [Node](#node)
       - [NodeSpec](#nodespec)
@@ -17,11 +19,15 @@
         - [NodeSystemInfo](#nodesysteminfo)
         - [Images](#images)
         - [Attached Volumes](#attached-volumes)
+  - [client-go](#client-go)
+    - [client-go Shared Informers.](#client-go-shared-informers)
+    - [client-go workqueues](#client-go-workqueues)
   - [References](#references)
 
 # Kubernetes Client Facilities
 
 This chapter describes the types and functions provided by k8s core and client modules that are leveraged by the MCM - it only covers what is required to understand MCM code and is simply meant to be a helpful review. References are provided for further reading.
+
 ## K8s apimachinery
 
 
@@ -129,6 +135,13 @@ _Labels_ are used in conjunction with selectors to identify groups of related re
 
 _Annotations_ are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not 
 
+### Utility Functions
+
+#### wait.Until
+
+[k8s.io/apimachinery/pkg/wait.Until](https://github.com/kubernetes/apimachinery/blob/v0.25.0/pkg/util/wait/wait.go#L91) loops until `stop` channel is closed, running `f` every given `period.` 
+
+`func Until(f func(), period time.Duration, stopCh <-chan struct{})`
 
 ## K8s API Core
 The MCM leverages several types from https://pkg.go.dev/k8s.io/api/core/v1 
@@ -389,6 +402,137 @@ type AttachedVolume struct {
 
 TODO: add another section with Node class diagram
 
+## client-go
+
+k8s clients have the type  [k8s.io/client-go/kubernetes.ClientSet](https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset) which is actually a high-level client set facade encapsulating clients for the  `core`, `appsv1`, `discoveryv1`, `eventsv1`, `networkingv1`, `nodev1`, `policyv1`, `storagev1` api groups. These individual clients are available via accessor methods. ie use [clientset.AppsV1()](https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset.AppsV1) to get the the [AppsV1](https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/apps/v1#AppsV1Interface) client.
+
+```go
+// Clientset contains the clients for groups. Each group has exactly one
+// version included in a Clientset.
+type Clientset struct {
+    appsV1                       *appsv1.AppsV1Client
+    coreV1                       *corev1.CoreV1Client
+    discoveryV1                  *discoveryv1.DiscoveryV1Client
+    eventsV1                     *eventsv1.EventsV1Client
+    // ...
+
+  // AppsV1 retrieves the AppsV1Client
+  func (c *Clientset) AppsV1() appsv1.AppsV1Interface {
+    return c.appsV1
+  }
+    // ...
+}
+```
+
+As can be noticed from the above snippet, each of these clients associated with api groups expose an interface named _GroupVersionInterface_ that in-turn provides further access to a _generic_ REST Interface as well as access to a _typed_ interface containing getter/setter methods for objects within that API group.
+
+For example [EventsV1Client](https://pkg.go.dev/k8s.io/client-go@v0.25.0/kubernetes/typed/events/v1#EventsV1Client) which is used to interact with features provided by the `events.k8s.io` group implements [EventsV1Interface](https://pkg.go.dev/k8s.io/client-go@v0.25.0/kubernetes/typed/events/v1#EventsV1Interface)
+
+```go
+type EventsV1Interface interface {
+	RESTClient() rest.Interface // generic REST API access
+	EventsGetter // typed interface access
+}
+// EventsGetter has a method to return a EventInterface.
+type EventsGetter interface {
+	Events(namespace string) EventInterface
+}
+```
+One can generate k8s clients for custom k8s objects also. The details are not covered here. However, one can refer to [How to generate client codes for Kubernetes Custom Resource Definitions](https://itnext.io/how-to-generate-client-codes-for-kubernetes-custom-resource-definitions-crd-b4b9907769ba)
+
+### client-go Shared Informers.
+
+The vital role of a Kubernetes controller is to watch objects for the desired state and the actual state, then send instructions to make the actual state be more like the desired state. The controller thus first needs to retrieve the object's information. Instead of making direct API calls using k8s listers/watchers, client-go controllers should use `SharedInformer`s.
+
+[cache.SharedInformer](https://pkg.go.dev/k8s.io/client-go/tools/cache#SharedInformer) is a primitive exposed by `client-go` lib that maintains a local cache of k8s objects of a particular API group and kind/resource. (restricable by namespace/label/field selectors) which is linked to the authoritative state of the corresponding objects in the API server. 
+
+Informers are used to reduced the load-pressure on the API Server and etcd.
+
+All that is needed to be known at this point is that Informers internally watch for k8s object changes, update an internal indexed store and invoke registered event handlers. Client code must construct event handlers to inject the logic that one would like to execute when an object is Added/Updated/Deleted. 
+
+
+```go
+type SharedInformer interface {
+	// AddEventHandler adds an event handler to the shared informer using the shared informer's resync period.  Events to a single handler are delivered sequentially, but there is no coordination between different handlers.
+	AddEventHandler(handler cache.ResourceEventHandler)
+
+	// HasSynced returns true if the shared informer's store has been
+	// informed by at least one full LIST of the authoritative state
+	// of the informer's object collection.  This is unrelated to "resync".
+	HasSynced() bool
+
+	// Run starts and runs the shared informer, returning after it stops.
+	// The informer will be stopped when stopCh is closed.
+	Run(stopCh <-chan struct{})
+	//..
+}
+```
+
+[cache.ResourceEventHandler](https://pkg.go.dev/k8s.io/client-go/tools/cache#ResourceEventHandler) handle notifications for events that happen to a resource.
+```go
+type ResourceEventHandler interface {
+	OnAdd(obj interface{})
+	OnUpdate(oldObj, newObj interface{})
+	OnDelete(obj interface{})
+}
+```
+
+[cache.ResourceEventHandlerFuncs](https://pkg.go.dev/k8s.io/client-go/tools/cache#ResourceEventHandlerFuncs) is an adapter to let you easily specify as many or as few of the notification functions as you want while still implementing `ResourceEventHandler`. Nearly all controllers code use instance of this adapter struct to create event handlers to register on shared informers.
+
+```go
+type ResourceEventHandlerFuncs struct {
+	AddFunc    func(obj interface{})
+	UpdateFunc func(oldObj, newObj interface{})
+	DeleteFunc func(obj interface{})
+}
+```
+
+### client-go workqueues
+
+The basic [workqueue.Interface](https://pkg.go.dev/k8s.io/client-go/util/workqueue#Interface) has the following methods:
+```go
+type Interface interface {
+	Add(item interface{})
+	Len() int
+	Get() (item interface{}, shutdown bool)
+	Done(item interface{})
+	ShutDown()
+	ShutDownWithDrain()
+	ShuttingDown() bool
+}
+```
+This is extended with ability to Add Item as a later time using the [workqueue.DelayingInterface](https://pkg.go.dev/k8s.io/client-go/util/workqueue#DelayingInterface). 
+```go
+type DelayingInterface interface {
+	Interface
+	// AddAfter adds an item to the workqueue after the indicated duration has passed
+	// Used to requeue items after failueres to avoid ending in hot-loop
+	AddAfter(item interface{}, duration time.Duration)
+}
+```
+This is further extended with rate limiting using [workqueue.RateLimiter](https://pkg.go.dev/k8s.io/client-go/util/workqueue#RateLimiter)
+
+```go
+type RateLimiter interface {
+ 	// When gets an item and gets to decide how long that item should wait
+	When(item interface{}) time.Duration
+	// Forget indicates that an item is finished being retried.  Doesn't matter whether its for perm failing
+	// or for success, we'll stop tracking it
+	Forget(item interface{})
+	// NumRequeues returns back how many failures the item has had
+	NumRequeues(item interface{}) int
+}
+
+```
+
+
+TODO: Move me below
+
+The basic contract for a k8s-client controller is to specifiy callback functions that enqueue items on a rate-limited work queue and register these callback functions using a `SharedInformer`. Then the controller `Run` loop then picks up objects from the work queue using `Get` and reconciles them.
+
+The controller implementation functions for `Add|UpdateFunc` usually enqueue the object on a rate limited work queue created using [workqueue.NewNamedRateLimitingQueue](https://pkg.go.dev/k8s.io/client-go/util/workqueue#NewNamedRateLimitingQueue)
+
+
 ## References
 
 - [K8s API Conventions](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md)
@@ -398,3 +542,4 @@ TODO: add another section with Node class diagram
 - [Making Sense of Taints and Tolerations](https://medium.com/kubernetes-tutorials/making-sense-of-taints-and-tolerations-in-kubernetes-446e75010f4e)
 - [CIDR](https://www.ionos.com/digitalguide/server/know-how/cidr-classless-inter-domain-routing/)
 - [CIDR Calculator](https://mxtoolbox.com/subnetcalculator.aspx)
+- [How to generate client codes for Kubernetes Custom Resource Definitions](https://itnext.io/how-to-generate-client-codes-for-kubernetes-custom-resource-definitions-crd-b4b9907769ba)

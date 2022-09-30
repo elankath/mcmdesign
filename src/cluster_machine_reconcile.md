@@ -1,19 +1,17 @@
-- [Cluster Machine Reconciliation](#cluster-machine-reconciliation)
-  - [controller.reconcileClusterMachineKey](#controllerreconcileclustermachinekey)
-    - [triggerDeletionFlow](#triggerdeletionflow)
+- [Cluster Machine Reconcile](#cluster-machine-reconcile)
+  - [triggerDeletionFlow](#triggerdeletionflow)
     - [controller.getVMStatus](#controllergetvmstatus)
+    - [controller.drainNode](#controllerdrainnode)
   - [controller.reconcileMachineHealth](#controllerreconcilemachinehealth)
   - [controller.syncMachineNodeTemplates](#controllersyncmachinenodetemplates)
 
-# Cluster Machine Reconciliation
-
-##  controller.reconcileClusterMachineKey
-
-The primary reconcile function for the machine that analyzes machine status and triggers lifecalls calls to the driver. TODO: Provide descriptive summary
+# Cluster Machine Reconcile 
 
 ```go
 func (c *controller) reconcileClusterMachineKey(key string) error
 ```
+The top-level reconcile function for the machine that analyzes machine status and delegates to the reconcile functions for creation and deletion flows. TODO: Provide descriptive summary
+
 
 ```mermaid
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
@@ -63,7 +61,7 @@ NewCreateReq-->CreateFlow
 CreateFlow-->EnqM
 
 ```
-### triggerDeletionFlow
+## triggerDeletionFlow
 
 ```go
 func (c *controller) triggerDeletionFlow(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error) 
@@ -193,9 +191,21 @@ CreateNodeDelOp-->ShortR
 ShortR-->MachineStatusUpdate
 LongR-->MachineStatusUpdate
 MachineStatusUpdate-->Z
-
-
 ```
+
+### controller.drainNode
+
+Inside `pkg/util/provider/machinecontroller/machine_util.go`
+```go
+func (c *controller) drainNode(ctx context.Context, deleteMachineRequest *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+Z(("End"))
+```
+
 
 ## controller.reconcileMachineHealth
 

@@ -12,13 +12,20 @@
 	- [MachineUtils](#machineutils)
 		- [Operation Descriptions](#operation-descriptions)
 		- [Retry Periods](#retry-periods)
-	- [Codes and Status](#codes-and-status)
+	- [Main Server Structs](#main-server-structs)
+		- [MCServer](#mcserver)
+			- [MCServer Usage](#mcserver-usage)
+			- [MachineControllerConfiguration struct](#machinecontrollerconfiguration-struct)
+				- [SafetyOptions](#safetyoptions)
+	- [Controller Structs](#controller-structs)
+		- [Machine Controller Core Struct](#machine-controller-core-struct)
+	- [Codes and (error) Status](#codes-and-error-status)
 		- [Code](#code)
 		- [Status](#status)
 
 # MCM Facilities
 
-This chapter describes the core types and utilities offerd by the MCM module.
+This chapter describes the core types and utilities present in the MCM module and used by the controllers and drivers.
 
 ## Machine Controller Core Types
 
@@ -339,7 +346,198 @@ const (
 
 ```
 
-## Codes and Status
+## Main Server Structs
+
+### MCServer
+
+[machine-controller-manager/pkg/util/provider/app/options.MCServer](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40)
+is the main server context object for the machine controller. It embeds [options.MachineControllerConfiguration](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/options/types.go#L45) and has a `ControlKubeConfig` and `TargetKubeConfig` string fields.
+
+
+```go
+type MCServer struct {
+	options.MachineControllerConfiguration
+
+	ControlKubeconfig string
+	TargetKubeconfig  string
+
+```
+
+The `MCServer` is constructed and initialized using the  [pkg/util/provider/app/options.NewMCServer](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L48) function which sets most of the default values for fields for the embedded struct.
+
+#### MCServer Usage
+
+Individual providers leverage the MCServer as follows:
+```go
+  s := options.NewMCServer()
+  driver := <providerSpecificDriverInitialization>
+  if err := app.Run(s, driver); err != nil {
+      fmt.Fprintf(os.Stderr, "%v\n", err)
+      os.Exit(1)
+  }
+```
+The MCServer is thus re-used across different providers.
+
+#### MachineControllerConfiguration struct
+An imnportant struct that represents machine configuration that supports deep-coopying and is embedded within the `MCServer`
+
+`machine-controller-manager/pkg/util/provider/options.MachineControllerConfiguration`
+```go
+type MachineControllerConfiguration struct {
+	metav1.TypeMeta
+
+	// namespace in seed cluster in which controller would look for the resources.
+	Namespace string
+
+	// port is the port that the controller-manager's http service runs on.
+	Port int32
+	// address is the IP address to serve on (set to 0.0.0.0 for all interfaces).
+	Address string
+	// CloudProvider is the provider for cloud services.
+	CloudProvider string
+	// ConcurrentNodeSyncs is the number of node objects that are
+	// allowed to sync concurrently. Larger number = more responsive nodes,
+	// but more CPU (and network) load.
+	ConcurrentNodeSyncs int32
+
+	// enableProfiling enables profiling via web interface host:port/debug/pprof/
+	EnableProfiling bool
+	// enableContentionProfiling enables lock contention profiling, if enableProfiling is true.
+	EnableContentionProfiling bool
+	// contentType is contentType of requests sent to apiserver.
+	ContentType string
+	// kubeAPIQPS is the QPS to use while talking with kubernetes apiserver.
+	KubeAPIQPS float32
+	// kubeAPIBurst is the burst to use while talking with kubernetes apiserver.
+	KubeAPIBurst int32
+	// leaderElection defines the configuration of leader election client.
+	LeaderElection mcmoptions.LeaderElectionConfiguration
+	// How long to wait between starting controller managers
+	ControllerStartInterval metav1.Duration
+	// minResyncPeriod is the resync period in reflectors; will be random between
+	// minResyncPeriod and 2*minResyncPeriod.
+	MinResyncPeriod metav1.Duration
+
+	// SafetyOptions is the set of options to set to ensure safety of controller
+	SafetyOptions SafetyOptions
+
+	//NodeCondition is the string of known NodeConditions. If any of these NodeCondition is set for a timeout period, the machine  will be declared failed and will replaced. Default is "KernelDeadlock,ReadonlyFilesystem,DiskPressure,NetworkUnavailable"
+	NodeConditions string
+
+	//BootstrapTokenAuthExtraGroups is a comma-separated string of groups to set bootstrap token's "auth-extra-groups" field to.
+	BootstrapTokenAuthExtraGroups string
+}
+
+```
+##### SafetyOptions
+
+An important struct availablea as the `SafetyOptions` field in `MachineControllerConfiguration` containing several timeouts, retry-limits, etc. Most of these fields are set via [pkg/util/provider/app/options.NewMCServer](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/options/options.go#L48) function
+
+`pkg/util/provider/option.SafetyOptions`
+```go
+// SafetyOptions are used to configure the upper-limit and lower-limit
+// while configuring freezing of machineSet objects
+type SafetyOptions struct {
+	// Timeout (in durartion) used while creation of
+	// a machine before it is declared as failed
+	MachineCreationTimeout metav1.Duration
+	// Timeout (in durartion) used while health-check of
+	// a machine before it is declared as failed
+	MachineHealthTimeout metav1.Duration
+	// Deprecated. No effect. Timeout (in durartion) used while draining of machine before deletion,
+	// beyond which it forcefully deletes machine
+	MachineDrainTimeout metav1.Duration
+	// Maximum number of times evicts would be attempted on a pod for it is forcibly deleted
+	// during draining of a machine.
+	MaxEvictRetries int32
+	// Timeout (in duration) used while waiting for PV to detach
+	PvDetachTimeout metav1.Duration
+	// Timeout (in duration) used while waiting for PV to reattach on new node
+	PvReattachTimeout metav1.Duration
+
+	// Timeout (in duration) for which the APIServer can be down before
+	// declare the machine controller frozen by safety controller
+	MachineSafetyAPIServerStatusCheckTimeout metav1.Duration
+	// Period (in durartion) used to poll for orphan VMs
+	// by safety controller
+	MachineSafetyOrphanVMsPeriod metav1.Duration
+	// Period (in duration) used to poll for APIServer's health
+	// by safety controller
+	MachineSafetyAPIServerStatusCheckPeriod metav1.Duration
+
+	// APIserverInactiveStartTime to keep track of the
+	// start time of when the APIServers were not reachable
+	APIserverInactiveStartTime time.Time
+	// MachineControllerFrozen indicates if the machine controller
+	// is frozen due to Unreachable APIServers
+	MachineControllerFrozen bool
+}
+```
+
+## Controller Structs
+
+### Machine Controller Core Struct
+
+`controller` struct in package `controller` inside go file: `machine-controller-manager/pkg/util/provider/machinecontroller.go` (Bad convention) is the concrete Machine Controller struct that holds state data for the MC and implements the classifical controller `Run(workers int, stopCh <-chan struct{})` method.
+
+The top level `MCServer.Run` method initializes this controller struct and calls its `Run` method
+
+```go
+package controller
+type controller struct {
+	namespace                     string // control clustern namespace
+	nodeConditions                string // Default: "KernelDeadlock,ReadonlyFilesystem,DiskPressure,NetworkUnavailable"
+
+	controlMachineClient    machineapi.MachineV1alpha1Interface
+	controlCoreClient       kubernetes.Interface
+	targetCoreClient        kubernetes.Interface
+	targetKubernetesVersion *semver.Version
+
+	recorder                record.EventRecorder
+	safetyOptions           options.SafetyOptions
+	internalExternalScheme  *runtime.Scheme
+	driver                  driver.Driver
+	volumeAttachmentHandler *drain.VolumeAttachmentHandler
+	// permitGiver store two things:
+	// - mutex per machinedeployment
+	// - lastAcquire time
+	// it is used to limit removal of `health timed out` machines
+	permitGiver permits.PermitGiver
+
+	// listers
+	pvcLister               corelisters.PersistentVolumeClaimLister
+	pvLister                corelisters.PersistentVolumeLister
+	secretLister            corelisters.SecretLister
+	nodeLister              corelisters.NodeLister
+	pdbV1beta1Lister        policyv1beta1listers.PodDisruptionBudgetLister
+	pdbV1Lister             policyv1listers.PodDisruptionBudgetLister
+	volumeAttachementLister storagelisters.VolumeAttachmentLister
+	machineClassLister      machinelisters.MachineClassLister
+	machineLister           machinelisters.MachineLister
+	// queues
+    // secretQueue = workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "secret"),
+	secretQueue                 workqueue.RateLimitingInterface
+	nodeQueue                   workqueue.RateLimitingInterface
+	machineClassQueue           workqueue.RateLimitingInterface
+	machineQueue                workqueue.RateLimitingInterface
+	machineSafetyOrphanVMsQueue workqueue.RateLimitingInterface
+	machineSafetyAPIServerQueue workqueue.RateLimitingInterface
+	// syncs
+	pvcSynced               cache.InformerSynced
+	pvSynced                cache.InformerSynced
+	secretSynced            cache.InformerSynced
+	pdbV1Synced             cache.InformerSynced
+	volumeAttachementSynced cache.InformerSynced
+	nodeSynced              cache.InformerSynced
+	machineClassSynced      cache.InformerSynced
+	machineSynced           cache.InformerSynced
+}
+
+```
+
+
+
+## Codes and (error) Status
 
 ### Code
 [github.com/gardener/machine-controller-manager/pkg/util/provider/machinecodes/codes.Code](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code) is a `uint32` with following error codes. These error codes are contained in errors returned from Driver methods.
@@ -367,6 +565,8 @@ Note: Un-happy with current design. It is clear that some error codes overlap ea
 | 16    | Unauthenticated     | request does not have valid creds for operation. Note: It would have been nice if 7 was called Unauthorized.
 
 ### Status
+
+NOTE: This type is madly named. It should be called `MachineError` instead of `Status`
 
 [status](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status) implements errors returned by MachineAPIs. MachineAPIs service handlers should return an error created by this package, and machineAPIs clients should expect a corresponding error to be returned from the RPC call.
 

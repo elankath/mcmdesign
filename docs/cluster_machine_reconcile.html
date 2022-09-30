@@ -143,12 +143,12 @@
                 <div id="content" class="content">
                     <main>
                         <ul>
-<li><a href="#cluster-machine-reconciliation">Cluster Machine Reconciliation</a>
+<li><a href="#cluster-machine-reconcile">Cluster Machine Reconcile</a>
 <ul>
-<li><a href="#controllerreconcileclustermachinekey">controller.reconcileClusterMachineKey</a>
+<li><a href="#triggerdeletionflow">triggerDeletionFlow</a>
 <ul>
-<li><a href="#triggerdeletionflow">triggerDeletionFlow</a></li>
 <li><a href="#controllergetvmstatus">controller.getVMStatus</a></li>
+<li><a href="#controllerdrainnode">controller.drainNode</a></li>
 </ul>
 </li>
 <li><a href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
@@ -156,11 +156,10 @@
 </ul>
 </li>
 </ul>
-<h1 id="cluster-machine-reconciliation"><a class="header" href="#cluster-machine-reconciliation">Cluster Machine Reconciliation</a></h1>
-<h2 id="controllerreconcileclustermachinekey"><a class="header" href="#controllerreconcileclustermachinekey">controller.reconcileClusterMachineKey</a></h2>
-<p>The primary reconcile function for the machine that analyzes machine status and triggers lifecalls calls to the driver. TODO: Provide descriptive summary</p>
+<h1 id="cluster-machine-reconcile"><a class="header" href="#cluster-machine-reconcile">Cluster Machine Reconcile</a></h1>
 <pre><code class="language-go">func (c *controller) reconcileClusterMachineKey(key string) error
 </code></pre>
+<p>The top-level reconcile function for the machine that analyzes machine status and delegates to the reconcile functions for creation and deletion flows. TODO: Provide descriptive summary</p>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
@@ -208,7 +207,7 @@ NewCreateReq--&gt;CreateFlow
 CreateFlow--&gt;EnqM
 
 </pre>
-<h3 id="triggerdeletionflow"><a class="header" href="#triggerdeletionflow">triggerDeletionFlow</a></h3>
+<h2 id="triggerdeletionflow"><a class="header" href="#triggerdeletionflow">triggerDeletionFlow</a></h2>
 <pre><code class="language-go">func (c *controller) triggerDeletionFlow(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error) 
 
 </code></pre>
@@ -335,8 +334,14 @@ CreateNodeDelOp--&gt;ShortR
 ShortR--&gt;MachineStatusUpdate
 LongR--&gt;MachineStatusUpdate
 MachineStatusUpdate--&gt;Z
-
-
+</pre>
+<h3 id="controllerdrainnode"><a class="header" href="#controllerdrainnode">controller.drainNode</a></h3>
+<p>Inside <code>pkg/util/provider/machinecontroller/machine_util.go</code></p>
+<pre><code class="language-go">func (c *controller) drainNode(ctx context.Context, deleteMachineRequest *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+Z((&quot;End&quot;))
 </pre>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
