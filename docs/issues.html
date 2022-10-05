@@ -3,8 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Page not found - Machine Controller Manager Design</title>
-        <base href="/">
+        <title>Issues - Machine Controller Manager Design</title>
 
 
         <!-- Custom HTML head -->
@@ -82,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html" class="active"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -143,13 +142,74 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="document-not-found-404"><a class="header" href="#document-not-found-404">Document not found (404)</a></h1>
-<p>This URL is invalid, sorry. Please use the navigation bar or search to continue.</p>
+                        <ul>
+<li><a href="#issues">Issues</a>
+<ul>
+<li><a href="#design-issues">Design Issues</a>
+<ul>
+<li><a href="#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></li>
+<li><a href="#description-misused">Description misused</a></li>
+</ul>
+</li>
+<li><a href="#gaps">Gaps</a></li>
+<li><a href="#drainnode-error-handling">drainNode Error Handling</a></li>
+<li><a href="#volumeattachment">VolumeAttachment</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="issues"><a class="header" href="#issues">Issues</a></h1>
+<h2 id="design-issues"><a class="header" href="#design-issues">Design Issues</a></h2>
+<h3 id="lastoperation-is-actually-next-operation"><a class="header" href="#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></h3>
+<p>Badly named. TODO: Describe more.</p>
+<h3 id="description-misused"><a class="header" href="#description-misused">Description misused</a></h3>
+<p>Error Prone stuff like below due to misuse of description.</p>
+<pre><code class="language-go">// isMachineStatusSimilar checks if the status of 2 machines is similar or not.
+func isMachineStatusSimilar(s1, s2 v1alpha1.MachineStatus) bool {
+	s1Copy, s2Copy := s1.DeepCopy(), s2.DeepCopy()
+	tolerateTimeDiff := 30 * time.Minute
+
+	// Since lastOperation hasn't been updated in the last 30minutes, force update this.
+	if (s1.LastOperation.LastUpdateTime.Time.Before(time.Now().Add(tolerateTimeDiff * -1))) || (s2.LastOperation.LastUpdateTime.Time.Before(time.Now().Add(tolerateTimeDiff * -1))) {
+		return false
+	}
+
+	if utilstrings.StringSimilarityRatio(s1Copy.LastOperation.Description, s2Copy.LastOperation.Description) &gt; 0.75 {
+		// If strings are similar, ignore comparison
+		// This occurs when cloud provider errors repeats with different request IDs
+		s1Copy.LastOperation.Description, s2Copy.LastOperation.Description = &quot;&quot;, &quot;&quot;
+	}
+
+	// Avoiding timestamp comparison
+	s1Copy.LastOperation.LastUpdateTime, s2Copy.LastOperation.LastUpdateTime = metav1.Time{}, metav1.Time{}
+	s1Copy.CurrentStatus.LastUpdateTime, s2Copy.CurrentStatus.LastUpdateTime = metav1.Time{}, metav1.Time{}
+
+	return apiequality.Semantic.DeepEqual(s1Copy.LastOperation, s2Copy.LastOperation) &amp;&amp; apiequality.Semantic.DeepEqual(s1Copy.CurrentStatus, s2Copy.CurrentStatus)
+}
+
+</code></pre>
+<h2 id="gaps"><a class="header" href="#gaps">Gaps</a></h2>
+<h2 id="drainnode-error-handling"><a class="header" href="#drainnode-error-handling">drainNode Error Handling</a></h2>
+<ul>
+<li>Does not set err when c.machineStatusUpdate is called</li>
+</ul>
+<h2 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h2>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
+//...
+volumeAttachment := obj.(*storagev1.VolumeAttachment)
+	if volumeAttachment == nil {
+		klog.Errorf(&quot;Couldn't convert to volumeAttachment from object %v&quot;, obj)
+		// Should return here.
+	}
+//...
+</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="mc_helper_funcs.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
 
 
                         <div style="clear: both"></div>
@@ -158,6 +218,9 @@
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="mc_helper_funcs.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
 
             </nav>
 

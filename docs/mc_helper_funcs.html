@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html" class="active"><strong aria-hidden="true">4.</strong> Machine Controller Helper Functions</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html" class="active"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -142,7 +142,17 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="machine-controller-helper-methods"><a class="header" href="#machine-controller-helper-methods">Machine Controller Helper Methods</a></h1>
+                        <ul>
+<li><a href="#machine-controller-helper-methods">Machine Controller Helper Methods</a>
+<ul>
+<li><a href="#controllervalidatemachineclass">controller.ValidateMachineClass</a></li>
+<li><a href="#controlleraddmachinefinalizers">controller.addMachineFinalizers</a></li>
+<li><a href="#controllersetmachineterminationstatus">controller.setMachineTerminationStatus</a></li>
+<li><a href="#controllermachinestatusupdate">controller.machineStatusUpdate</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="machine-controller-helper-methods"><a class="header" href="#machine-controller-helper-methods">Machine Controller Helper Methods</a></h1>
 <h2 id="controllervalidatemachineclass"><a class="header" href="#controllervalidatemachineclass">controller.ValidateMachineClass</a></h2>
 <pre><code class="language-go">func (c *controller) ValidateMachineClass(ctx context.Context, classSpec *v1alpha1.ClassSpec) (*v1alpha1.MachineClass, map[string][]byte, machineutils.RetryPeriod, error) 
 </code></pre>
@@ -194,17 +204,42 @@ ShortR--&gt;Z
 	machine *v1alpha1.Machine,
 	lastOperation v1alpha1.LastOperation,
 	currentStatus v1alpha1.CurrentStatus,
-	lastKnownState string) error
+	lastKnownState string) error 
 </code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+CreateClone[&quot;clone := machine.DeepCopy()&quot;]
+--&gt;InitClone[&quot;
+	clone.Status.LastOperation = lastOperation
+	clone.Status.CurrentStatus = currentStatus
+	clone.Status.LastKnownState = lastKnownState
+&quot;]
+--&gt;ChkSimilarStatus{&quot;isMachineStatusSimilar(
+	clone.Status,
+	machine.Status)&quot;}
+
+ChkSimilarStatus--No--&gt;UpdateStatus[&quot;
+	err:=c.controlMachineClient
+	.Machines(clone.Namespace)
+	.UpdateStatus(ctx, clone, metav1.UpdateOptions{})
+&quot;]
+--&gt;Z1((&quot;return err&quot;))
+ChkSimilarStatus--Yes--&gt;Z2((&quot;return nil&quot;))
+</pre>
+<p>NOTE: isMachineStatusSimilar is quite sad.</p>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="cluster_machine_reconcile.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="node_drain.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
+                            <a rel="next" href="issues.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
 
                         <div style="clear: both"></div>
                     </nav>
@@ -212,10 +247,13 @@ ShortR--&gt;Z
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="cluster_machine_reconcile.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="node_drain.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
+                    <a rel="next" href="issues.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
             </nav>
 
         </div>

@@ -9,9 +9,13 @@
 				- [MachineOperationType](#machineoperationtype)
 			- [CurrentStatus](#currentstatus)
 				- [MachinePhase](#machinephase)
-	- [MachineUtils](#machineutils)
-		- [Operation Descriptions](#operation-descriptions)
-		- [Retry Periods](#retry-periods)
+	- [Utilities](#utilities)
+		- [NodeOps](#nodeops)
+		- [MachineUtils](#machineutils)
+			- [Operation Descriptions](#operation-descriptions)
+			- [Retry Periods](#retry-periods)
+		- [Drain Utilities](#drain-utilities)
+			- [VolumeAttachmentHandler](#volumeattachmenthandler)
 	- [Main Server Structs](#main-server-structs)
 		- [MCServer](#mcserver)
 			- [MCServer Usage](#mcserver-usage)
@@ -269,11 +273,34 @@ const (
 	MachineCrashLoopBackOff MachinePhase = "CrashLoopBackOff"
 )
 ```
-## MachineUtils
+## Utilities
 
+### NodeOps
 
-### Operation Descriptions
-`machineutils` has a bunch of constants that are descriptions of machine operations that are set into `machine.Status.LastOperation.Description` by the machine controller while performing reconciliation.
+`github.com/gardener/machine-controller-manager/pkg/util/nodeops.GetNodeCondition` get the nodes condition matching the specified type 
+
+```go
+func GetNodeCondition(ctx context.Context, c clientset.Interface, nodeName string, conditionType v1.NodeConditionType) (*v1.NodeCondition, error) {
+	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return getNodeCondition(node, conditionType), nil
+}
+func getNodeCondition(node *v1.Node, conditionType v1.NodeConditionType) *v1.NodeCondition {
+	for _, cond := range node.Status.Conditions {
+		if cond.Type == conditionType {
+			return &cond
+		}
+	}
+	return nil
+}
+```
+
+### MachineUtils
+
+#### Operation Descriptions
+`machineutils` has a bunch of constants that are descriptions of machine operations that are set into `machine.Status.LastOperation.Description` by the machine controller while performing reconciliation. It also has some [reason phrase](k8s_facilities.md#conditions)
 
 ```go
 const (
@@ -326,7 +353,7 @@ const (
 
 ```
 
-### Retry Periods
+#### Retry Periods
 
 These are standard retry periods that are internally used by the machine controllers to enqueue keys into the work queue after the specified duration so that reconciliation can be retried afer elapsed duration.
 
@@ -345,6 +372,64 @@ const (
 )
 
 ```
+
+### Drain Utilities
+
+#### VolumeAttachmentHandler
+Inside `github.com/gardener/machine-controller-manager/pkg/util/provider/drain/volume_attachment.go`,
+[pkg/util/provider/drain.VolumeAttachmentHandler](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler) is an handler used to distribute
+incoming [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) requests to all listening workers via means of a slice of typed `VolumeAttachment` channels. A `VolumeAttachment` is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node.
+
+```go
+type VolumeAttachmentHandler struct {
+	sync.Mutex
+	workers []chan *storagev1.VolumeAttachment
+}
+
+// NewVolumeAttachmentHandler returns a new VolumeAttachmentHandler
+func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
+	return &VolumeAttachmentHandler{
+		Mutex:   sync.Mutex{},
+		workers: []chan *storagev1.VolumeAttachment{},
+	}
+}
+```
+
+The `dispatch` method is responsible for distributing incomding `VolumeAttachent`s to available channels.
+
+```go
+func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
+	if len(v.workers) == 0 {
+		// As no workers are registered, nothing to do here.
+		return
+	}
+	volumeAttachment := obj.(*storagev1.VolumeAttachment)
+	v.Lock()
+	defer v.Unlock()
+
+	for i, worker := range v.workers {
+		select {
+		case worker <- volumeAttachment:
+		default:
+			klog.Warningf("Worker %d/%v is full. Discarding value.", i, worker)
+			// TODO: Umm..isn't this problematic if we miss this ?
+		}
+	}
+}
+```
+
+The `Add|Update` methods below delegate to dispatch. The usage of this utility involves specifying the add/update methods below as the event handler callbacks on an instance of [k8s.io/client-go/informers/storage/v1.VolumeAttachmentInformer](https://pkg.go.dev/k8s.io/client-go@v0.25.2/informers/storage/v1#VolumeAttachmentInformer). This way incoming volume attachments are distributed to several worker channels.
+```go
+func (v *VolumeAttachmentHandler) AddVolumeAttachment(obj interface{}) {
+	v.dispatch(obj)
+}
+
+func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interface{}) {
+	v.dispatch(newObj)
+}
+```
+
+
 
 ## Main Server Structs
 

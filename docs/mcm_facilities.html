@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html" class="active"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">4.</strong> Machine Controller Helper Functions</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html" class="active"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -166,10 +166,20 @@
 </li>
 </ul>
 </li>
+<li><a href="#utilities">Utilities</a>
+<ul>
+<li><a href="#nodeops">NodeOps</a></li>
 <li><a href="#machineutils">MachineUtils</a>
 <ul>
 <li><a href="#operation-descriptions">Operation Descriptions</a></li>
 <li><a href="#retry-periods">Retry Periods</a></li>
+</ul>
+</li>
+<li><a href="#drain-utilities">Drain Utilities</a>
+<ul>
+<li><a href="#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li><a href="#main-server-structs">Main Server Structs</a>
@@ -410,9 +420,28 @@ const (
 	MachineCrashLoopBackOff MachinePhase = &quot;CrashLoopBackOff&quot;
 )
 </code></pre>
-<h2 id="machineutils"><a class="header" href="#machineutils">MachineUtils</a></h2>
-<h3 id="operation-descriptions"><a class="header" href="#operation-descriptions">Operation Descriptions</a></h3>
-<p><code>machineutils</code> has a bunch of constants that are descriptions of machine operations that are set into <code>machine.Status.LastOperation.Description</code> by the machine controller while performing reconciliation.</p>
+<h2 id="utilities"><a class="header" href="#utilities">Utilities</a></h2>
+<h3 id="nodeops"><a class="header" href="#nodeops">NodeOps</a></h3>
+<p><code>github.com/gardener/machine-controller-manager/pkg/util/nodeops.GetNodeCondition</code> get the nodes condition matching the specified type </p>
+<pre><code class="language-go">func GetNodeCondition(ctx context.Context, c clientset.Interface, nodeName string, conditionType v1.NodeConditionType) (*v1.NodeCondition, error) {
+	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return getNodeCondition(node, conditionType), nil
+}
+func getNodeCondition(node *v1.Node, conditionType v1.NodeConditionType) *v1.NodeCondition {
+	for _, cond := range node.Status.Conditions {
+		if cond.Type == conditionType {
+			return &amp;cond
+		}
+	}
+	return nil
+}
+</code></pre>
+<h3 id="machineutils"><a class="header" href="#machineutils">MachineUtils</a></h3>
+<h4 id="operation-descriptions"><a class="header" href="#operation-descriptions">Operation Descriptions</a></h4>
+<p><code>machineutils</code> has a bunch of constants that are descriptions of machine operations that are set into <code>machine.Status.LastOperation.Description</code> by the machine controller while performing reconciliation. It also has some <a href="k8s_facilities.html#conditions">reason phrase</a></p>
 <pre><code class="language-go">const (
 	// GetVMStatus sets machine status to terminating and specifies next step as getting VMs
 	GetVMStatus = &quot;Set machine status to termination. Now, getting VM Status&quot;
@@ -462,7 +491,7 @@ const (
 )
 
 </code></pre>
-<h3 id="retry-periods"><a class="header" href="#retry-periods">Retry Periods</a></h3>
+<h4 id="retry-periods"><a class="header" href="#retry-periods">Retry Periods</a></h4>
 <p>These are standard retry periods that are internally used by the machine controllers to enqueue keys into the work queue after the specified duration so that reconciliation can be retried afer elapsed duration.</p>
 <pre><code class="language-go">// RetryPeriod is an alias for specifying the retry period
 type RetryPeriod time.Duration
@@ -477,6 +506,53 @@ const (
 	LongRetry RetryPeriod = RetryPeriod(10 * time.Minute)
 )
 
+</code></pre>
+<h3 id="drain-utilities"><a class="header" href="#drain-utilities">Drain Utilities</a></h3>
+<h4 id="volumeattachmenthandler"><a class="header" href="#volumeattachmenthandler">VolumeAttachmentHandler</a></h4>
+<p>Inside <code>github.com/gardener/machine-controller-manager/pkg/util/provider/drain/volume_attachment.go</code>,
+<a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler">pkg/util/provider/drain.VolumeAttachmentHandler</a> is an handler used to distribute
+incoming <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> requests to all listening workers via means of a slice of typed <code>VolumeAttachment</code> channels. A <code>VolumeAttachment</code> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
+<pre><code class="language-go">type VolumeAttachmentHandler struct {
+	sync.Mutex
+	workers []chan *storagev1.VolumeAttachment
+}
+
+// NewVolumeAttachmentHandler returns a new VolumeAttachmentHandler
+func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
+	return &amp;VolumeAttachmentHandler{
+		Mutex:   sync.Mutex{},
+		workers: []chan *storagev1.VolumeAttachment{},
+	}
+}
+</code></pre>
+<p>The <code>dispatch</code> method is responsible for distributing incomding <code>VolumeAttachent</code>s to available channels.</p>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
+	if len(v.workers) == 0 {
+		// As no workers are registered, nothing to do here.
+		return
+	}
+	volumeAttachment := obj.(*storagev1.VolumeAttachment)
+	v.Lock()
+	defer v.Unlock()
+
+	for i, worker := range v.workers {
+		select {
+		case worker &lt;- volumeAttachment:
+		default:
+			klog.Warningf(&quot;Worker %d/%v is full. Discarding value.&quot;, i, worker)
+			// TODO: Umm..isn't this problematic if we miss this ?
+		}
+	}
+}
+</code></pre>
+<p>The <code>Add|Update</code> methods below delegate to dispatch. The usage of this utility involves specifying the add/update methods below as the event handler callbacks on an instance of <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/informers/storage/v1#VolumeAttachmentInformer">k8s.io/client-go/informers/storage/v1.VolumeAttachmentInformer</a>. This way incoming volume attachments are distributed to several worker channels.</p>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) AddVolumeAttachment(obj interface{}) {
+	v.dispatch(obj)
+}
+
+func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interface{}) {
+	v.dispatch(newObj)
+}
 </code></pre>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>

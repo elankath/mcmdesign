@@ -1,29 +1,32 @@
 - [Kubernetes Client Facilities](#kubernetes-client-facilities)
-  - [K8s apimachinery](#k8s-apimachinery)
-    - [K8s objects](#k8s-objects)
-      - [TypeMeta](#typemeta)
-      - [ObjectMeta](#objectmeta)
-        - [OwnerReferences](#ownerreferences)
-        - [Finalizers and Deletion](#finalizers-and-deletion)
-        - [Diff between Labels and Annotations](#diff-between-labels-and-annotations)
-    - [Utility Functions](#utility-functions)
-      - [wait.Until](#waituntil)
-  - [K8s API Core](#k8s-api-core)
-    - [Node](#node)
-      - [NodeSpec](#nodespec)
-        - [Node Taints](#node-taints)
-      - [NodeStatus](#nodestatus)
-        - [Capacity](#capacity)
-        - [Conditions](#conditions)
-        - [Addresses](#addresses)
-        - [NodeSystemInfo](#nodesysteminfo)
-        - [Images](#images)
-        - [Attached Volumes](#attached-volumes)
-  - [client-go](#client-go)
-    - [client-go Shared Informers.](#client-go-shared-informers)
-    - [client-go workqueues](#client-go-workqueues)
-    - [client-go controller steps](#client-go-controller-steps)
-  - [References](#references)
+	- [K8s apimachinery](#k8s-apimachinery)
+		- [K8s objects](#k8s-objects)
+			- [TypeMeta](#typemeta)
+			- [ObjectMeta](#objectmeta)
+				- [OwnerReferences](#ownerreferences)
+				- [Finalizers and Deletion](#finalizers-and-deletion)
+				- [Diff between Labels and Annotations](#diff-between-labels-and-annotations)
+		- [Utility Functions](#utility-functions)
+			- [wait.Until](#waituntil)
+	- [K8s API Core](#k8s-api-core)
+		- [Node](#node)
+			- [NodeSpec](#nodespec)
+				- [Node Taints](#node-taints)
+			- [NodeStatus](#nodestatus)
+				- [Capacity](#capacity)
+				- [Conditions](#conditions)
+					- [NodeConditionType](#nodeconditiontype)
+					- [ConditionStatus](#conditionstatus)
+				- [NodeSystemInfo](#nodesysteminfo)
+				- [Images](#images)
+				- [Attached Volumes](#attached-volumes)
+		- [VolumeAttachment](#volumeattachment)
+			- [VolumeAttachmentSpec](#volumeattachmentspec)
+	- [client-go](#client-go)
+		- [client-go Shared Informers.](#client-go-shared-informers)
+		- [client-go workqueues](#client-go-workqueues)
+		- [client-go controller steps](#client-go-controller-steps)
+	- [References](#references)
 
 # Kubernetes Client Facilities
 
@@ -316,6 +319,7 @@ type NodeCondition struct {
 }
 ```
 
+###### NodeConditionType
 `NodeConditionType` is one of the following:
 ```go
 const (
@@ -331,6 +335,18 @@ const (
 	NodeNetworkUnavailable NodeConditionType = "NetworkUnavailable"
 )
 ```
+###### ConditionStatus
+
+These are valid condition statuses. `ConditionTrue` means a resource is in the condition. `ConditionFalse` means a resource is not in the condition. `ConditionUnknown` means kubernetes can't decide if a resource is in the condition or not. 
+```go
+type ConditionStatus string
+
+const (
+	ConditionTrue    ConditionStatus = "True"
+	ConditionFalse   ConditionStatus = "False"
+	ConditionUnknown ConditionStatus = "Unknown"
+)
+````
 
 ##### Addresses
 See [Node Addresses](https://kubernetes.io/docs/concepts/architecture/nodes/#addresses)
@@ -403,6 +419,44 @@ type AttachedVolume struct {
 
 TODO: add another section with Node class diagram
 
+### VolumeAttachment
+
+A [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.
+
+```go
+type VolumeAttachment struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+
+	// Specification of the desired attach/detach volume behavior.
+	// Populated by the Kubernetes system.
+	Spec VolumeAttachmentSpec 
+
+	// Status of the VolumeAttachment request.
+	// Populated by the entity completing the attach or detach
+	// operation, i.e. the external-attacher.
+	Status VolumeAttachmentStatus 
+}
+```
+ 
+####  VolumeAttachmentSpec
+
+A [k8s.ip/api/storage/v1.VolumeAttachmentSpec](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec)is the specification of a VolumeAttachment request.
+```go
+type VolumeAttachmentSpec struct {
+	// Attacher indicates the name of the volume driver that MUST handle this
+	// request. Same as CSI Plugin name
+	Attacher string 
+
+	// Source represents the volume that should be attached.
+	Source VolumeAttachmentSource 
+
+	// The node that the volume should be attached to.
+	NodeName string
+}
+```
+See [Storage V1 Docs](https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1) for further elaboration. 
+
 ## client-go
 
 k8s clients have the type  [k8s.io/client-go/kubernetes.ClientSet](https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset) which is actually a high-level client set facade encapsulating clients for the  `core`, `appsv1`, `discoveryv1`, `eventsv1`, `networkingv1`, `nodev1`, `policyv1`, `storagev1` api groups. These individual clients are available via accessor methods. ie use [clientset.AppsV1()](https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset.AppsV1) to get the the [AppsV1](https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/apps/v1#AppsV1Interface) client.
@@ -445,10 +499,10 @@ The `ClientSet` struct implements the [kubernetes.Interface](https://pkg.go.dev/
 ```go
 type Interface interface {
 	Discovery() discovery.DiscoveryInterface
-  AppsV1() appsv1.AppsV1Interface
-  CoreV1() corev1.CoreV1Interface
-  EventsV1() eventsv1.EventsV1Interface
-  NodeV1() nodev1.NodeV1Interface
+	AppsV1() appsv1.AppsV1Interface
+	CoreV1() corev1.CoreV1Interface
+	EventsV1() eventsv1.EventsV1Interface
+	NodeV1() nodev1.NodeV1Interface
  // ... other facade accessor
 }
 ```

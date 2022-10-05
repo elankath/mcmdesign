@@ -82,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">4.</strong> Machine Controller Helper Functions</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -213,13 +213,22 @@
 <li><a href="k8s_facilities.html#nodestatus">NodeStatus</a>
 <ul>
 <li><a href="k8s_facilities.html#capacity">Capacity</a></li>
-<li><a href="k8s_facilities.html#conditions">Conditions</a></li>
-<li><a href="k8s_facilities.html#addresses">Addresses</a></li>
+<li><a href="k8s_facilities.html#conditions">Conditions</a>
+<ul>
+<li><a href="k8s_facilities.html#nodeconditiontype">NodeConditionType</a></li>
+<li><a href="k8s_facilities.html#conditionstatus">ConditionStatus</a></li>
+</ul>
+</li>
 <li><a href="k8s_facilities.html#nodesysteminfo">NodeSystemInfo</a></li>
 <li><a href="k8s_facilities.html#images">Images</a></li>
 <li><a href="k8s_facilities.html#attached-volumes">Attached Volumes</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li><a href="k8s_facilities.html#volumeattachment">VolumeAttachment</a>
+<ul>
+<li><a href="k8s_facilities.html#volumeattachmentspec">VolumeAttachmentSpec</a></li>
 </ul>
 </li>
 </ul>
@@ -472,6 +481,7 @@ spec:
 	Message string 
 }
 </code></pre>
+<h6 id="nodeconditiontype"><a class="header" href="#nodeconditiontype">NodeConditionType</a></h6>
 <p><code>NodeConditionType</code> is one of the following:</p>
 <pre><code class="language-go">const (
 	// NodeReady means kubelet is healthy and ready to accept pods.
@@ -484,6 +494,16 @@ spec:
 	NodePIDPressure NodeConditionType = &quot;PIDPressure&quot;
 	// NodeNetworkUnavailable means that network for the node is not correctly configured.
 	NodeNetworkUnavailable NodeConditionType = &quot;NetworkUnavailable&quot;
+)
+</code></pre>
+<h6 id="conditionstatus"><a class="header" href="#conditionstatus">ConditionStatus</a></h6>
+<p>These are valid condition statuses. <code>ConditionTrue</code> means a resource is in the condition. <code>ConditionFalse</code> means a resource is not in the condition. <code>ConditionUnknown</code> means kubernetes can't decide if a resource is in the condition or not. </p>
+<pre><code class="language-go">type ConditionStatus string
+
+const (
+	ConditionTrue    ConditionStatus = &quot;True&quot;
+	ConditionFalse   ConditionStatus = &quot;False&quot;
+	ConditionUnknown ConditionStatus = &quot;Unknown&quot;
 )
 </code></pre>
 <h5 id="addresses"><a class="header" href="#addresses">Addresses</a></h5>
@@ -543,6 +563,37 @@ type AttachedVolume struct {
 }
 </code></pre>
 <p>TODO: add another section with Node class diagram</p>
+<h3 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h3>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
+<pre><code class="language-go">type VolumeAttachment struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+
+	// Specification of the desired attach/detach volume behavior.
+	// Populated by the Kubernetes system.
+	Spec VolumeAttachmentSpec 
+
+	// Status of the VolumeAttachment request.
+	// Populated by the entity completing the attach or detach
+	// operation, i.e. the external-attacher.
+	Status VolumeAttachmentStatus 
+}
+</code></pre>
+<h4 id="volumeattachmentspec"><a class="header" href="#volumeattachmentspec">VolumeAttachmentSpec</a></h4>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec">k8s.ip/api/storage/v1.VolumeAttachmentSpec</a>is the specification of a VolumeAttachment request.</p>
+<pre><code class="language-go">type VolumeAttachmentSpec struct {
+	// Attacher indicates the name of the volume driver that MUST handle this
+	// request. Same as CSI Plugin name
+	Attacher string 
+
+	// Source represents the volume that should be attached.
+	Source VolumeAttachmentSource 
+
+	// The node that the volume should be attached to.
+	NodeName string
+}
+</code></pre>
+<p>See <a href="https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1">Storage V1 Docs</a> for further elaboration. </p>
 <h2 id="client-go"><a class="header" href="#client-go">client-go</a></h2>
 <p>k8s clients have the type  <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset">k8s.io/client-go/kubernetes.ClientSet</a> which is actually a high-level client set facade encapsulating clients for the  <code>core</code>, <code>appsv1</code>, <code>discoveryv1</code>, <code>eventsv1</code>, <code>networkingv1</code>, <code>nodev1</code>, <code>policyv1</code>, <code>storagev1</code> api groups. These individual clients are available via accessor methods. ie use <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset.AppsV1">clientset.AppsV1()</a> to get the the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/apps/v1#AppsV1Interface">AppsV1</a> client.</p>
 <pre><code class="language-go">// Clientset contains the clients for groups. Each group has exactly one
@@ -575,10 +626,10 @@ type EventsGetter interface {
 <p>The <code>ClientSet</code> struct implements the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes#Interface">kubernetes.Interface</a> facade which is a high-level facade containing all the methods to access the individual <em>GroupVersionInterface</em> facade clients.</p>
 <pre><code class="language-go">type Interface interface {
 	Discovery() discovery.DiscoveryInterface
-  AppsV1() appsv1.AppsV1Interface
-  CoreV1() corev1.CoreV1Interface
-  EventsV1() eventsv1.EventsV1Interface
-  NodeV1() nodev1.NodeV1Interface
+	AppsV1() appsv1.AppsV1Interface
+	CoreV1() corev1.CoreV1Interface
+	EventsV1() eventsv1.EventsV1Interface
+	NodeV1() nodev1.NodeV1Interface
  // ... other facade accessor
 }
 </code></pre>
@@ -727,10 +778,20 @@ Z((&quot;End&quot;))
 </li>
 </ul>
 </li>
+<li><a href="mcm_facilities.html#utilities">Utilities</a>
+<ul>
+<li><a href="mcm_facilities.html#nodeops">NodeOps</a></li>
 <li><a href="mcm_facilities.html#machineutils">MachineUtils</a>
 <ul>
 <li><a href="mcm_facilities.html#operation-descriptions">Operation Descriptions</a></li>
 <li><a href="mcm_facilities.html#retry-periods">Retry Periods</a></li>
+</ul>
+</li>
+<li><a href="mcm_facilities.html#drain-utilities">Drain Utilities</a>
+<ul>
+<li><a href="mcm_facilities.html#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li><a href="mcm_facilities.html#main-server-structs">Main Server Structs</a>
@@ -971,9 +1032,28 @@ const (
 	MachineCrashLoopBackOff MachinePhase = &quot;CrashLoopBackOff&quot;
 )
 </code></pre>
-<h2 id="machineutils"><a class="header" href="#machineutils">MachineUtils</a></h2>
-<h3 id="operation-descriptions"><a class="header" href="#operation-descriptions">Operation Descriptions</a></h3>
-<p><code>machineutils</code> has a bunch of constants that are descriptions of machine operations that are set into <code>machine.Status.LastOperation.Description</code> by the machine controller while performing reconciliation.</p>
+<h2 id="utilities"><a class="header" href="#utilities">Utilities</a></h2>
+<h3 id="nodeops"><a class="header" href="#nodeops">NodeOps</a></h3>
+<p><code>github.com/gardener/machine-controller-manager/pkg/util/nodeops.GetNodeCondition</code> get the nodes condition matching the specified type </p>
+<pre><code class="language-go">func GetNodeCondition(ctx context.Context, c clientset.Interface, nodeName string, conditionType v1.NodeConditionType) (*v1.NodeCondition, error) {
+	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	return getNodeCondition(node, conditionType), nil
+}
+func getNodeCondition(node *v1.Node, conditionType v1.NodeConditionType) *v1.NodeCondition {
+	for _, cond := range node.Status.Conditions {
+		if cond.Type == conditionType {
+			return &amp;cond
+		}
+	}
+	return nil
+}
+</code></pre>
+<h3 id="machineutils"><a class="header" href="#machineutils">MachineUtils</a></h3>
+<h4 id="operation-descriptions"><a class="header" href="#operation-descriptions">Operation Descriptions</a></h4>
+<p><code>machineutils</code> has a bunch of constants that are descriptions of machine operations that are set into <code>machine.Status.LastOperation.Description</code> by the machine controller while performing reconciliation. It also has some <a href="k8s_facilities.html#conditions">reason phrase</a></p>
 <pre><code class="language-go">const (
 	// GetVMStatus sets machine status to terminating and specifies next step as getting VMs
 	GetVMStatus = &quot;Set machine status to termination. Now, getting VM Status&quot;
@@ -1023,7 +1103,7 @@ const (
 )
 
 </code></pre>
-<h3 id="retry-periods"><a class="header" href="#retry-periods">Retry Periods</a></h3>
+<h4 id="retry-periods"><a class="header" href="#retry-periods">Retry Periods</a></h4>
 <p>These are standard retry periods that are internally used by the machine controllers to enqueue keys into the work queue after the specified duration so that reconciliation can be retried afer elapsed duration.</p>
 <pre><code class="language-go">// RetryPeriod is an alias for specifying the retry period
 type RetryPeriod time.Duration
@@ -1038,6 +1118,53 @@ const (
 	LongRetry RetryPeriod = RetryPeriod(10 * time.Minute)
 )
 
+</code></pre>
+<h3 id="drain-utilities"><a class="header" href="#drain-utilities">Drain Utilities</a></h3>
+<h4 id="volumeattachmenthandler"><a class="header" href="#volumeattachmenthandler">VolumeAttachmentHandler</a></h4>
+<p>Inside <code>github.com/gardener/machine-controller-manager/pkg/util/provider/drain/volume_attachment.go</code>,
+<a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler">pkg/util/provider/drain.VolumeAttachmentHandler</a> is an handler used to distribute
+incoming <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> requests to all listening workers via means of a slice of typed <code>VolumeAttachment</code> channels. A <code>VolumeAttachment</code> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
+<pre><code class="language-go">type VolumeAttachmentHandler struct {
+	sync.Mutex
+	workers []chan *storagev1.VolumeAttachment
+}
+
+// NewVolumeAttachmentHandler returns a new VolumeAttachmentHandler
+func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
+	return &amp;VolumeAttachmentHandler{
+		Mutex:   sync.Mutex{},
+		workers: []chan *storagev1.VolumeAttachment{},
+	}
+}
+</code></pre>
+<p>The <code>dispatch</code> method is responsible for distributing incomding <code>VolumeAttachent</code>s to available channels.</p>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
+	if len(v.workers) == 0 {
+		// As no workers are registered, nothing to do here.
+		return
+	}
+	volumeAttachment := obj.(*storagev1.VolumeAttachment)
+	v.Lock()
+	defer v.Unlock()
+
+	for i, worker := range v.workers {
+		select {
+		case worker &lt;- volumeAttachment:
+		default:
+			klog.Warningf(&quot;Worker %d/%v is full. Discarding value.&quot;, i, worker)
+			// TODO: Umm..isn't this problematic if we miss this ?
+		}
+	}
+}
+</code></pre>
+<p>The <code>Add|Update</code> methods below delegate to dispatch. The usage of this utility involves specifying the add/update methods below as the event handler callbacks on an instance of <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/informers/storage/v1#VolumeAttachmentInformer">k8s.io/client-go/informers/storage/v1.VolumeAttachmentInformer</a>. This way incoming volume attachments are distributed to several worker channels.</p>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) AddVolumeAttachment(obj interface{}) {
+	v.dispatch(obj)
+}
+
+func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interface{}) {
+	v.dispatch(newObj)
+}
 </code></pre>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
@@ -1453,7 +1580,18 @@ Z((&quot;End&quot;))
 <pre><code class="language-go">func (c *controller) syncMachineNodeTemplates(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error) 
 </code></pre>
 <p>TODO: illustrate me</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="machine-controller-helper-methods"><a class="header" href="#machine-controller-helper-methods">Machine Controller Helper Methods</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="node-drain"><a class="header" href="#node-drain">Node Drain</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><ul>
+<li><a href="mc_helper_funcs.html#machine-controller-helper-methods">Machine Controller Helper Methods</a>
+<ul>
+<li><a href="mc_helper_funcs.html#controllervalidatemachineclass">controller.ValidateMachineClass</a></li>
+<li><a href="mc_helper_funcs.html#controlleraddmachinefinalizers">controller.addMachineFinalizers</a></li>
+<li><a href="mc_helper_funcs.html#controllersetmachineterminationstatus">controller.setMachineTerminationStatus</a></li>
+<li><a href="mc_helper_funcs.html#controllermachinestatusupdate">controller.machineStatusUpdate</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="machine-controller-helper-methods"><a class="header" href="#machine-controller-helper-methods">Machine Controller Helper Methods</a></h1>
 <h2 id="controllervalidatemachineclass"><a class="header" href="#controllervalidatemachineclass">controller.ValidateMachineClass</a></h2>
 <pre><code class="language-go">func (c *controller) ValidateMachineClass(ctx context.Context, classSpec *v1alpha1.ClassSpec) (*v1alpha1.MachineClass, map[string][]byte, machineutils.RetryPeriod, error) 
 </code></pre>
@@ -1505,7 +1643,89 @@ ShortR--&gt;Z
 	machine *v1alpha1.Machine,
 	lastOperation v1alpha1.LastOperation,
 	currentStatus v1alpha1.CurrentStatus,
-	lastKnownState string) error
+	lastKnownState string) error 
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+CreateClone[&quot;clone := machine.DeepCopy()&quot;]
+--&gt;InitClone[&quot;
+	clone.Status.LastOperation = lastOperation
+	clone.Status.CurrentStatus = currentStatus
+	clone.Status.LastKnownState = lastKnownState
+&quot;]
+--&gt;ChkSimilarStatus{&quot;isMachineStatusSimilar(
+	clone.Status,
+	machine.Status)&quot;}
+
+ChkSimilarStatus--No--&gt;UpdateStatus[&quot;
+	err:=c.controlMachineClient
+	.Machines(clone.Namespace)
+	.UpdateStatus(ctx, clone, metav1.UpdateOptions{})
+&quot;]
+--&gt;Z1((&quot;return err&quot;))
+ChkSimilarStatus--Yes--&gt;Z2((&quot;return nil&quot;))
+</pre>
+<p>NOTE: isMachineStatusSimilar is quite sad.</p>
+<div style="break-before: page; page-break-before: always;"></div><ul>
+<li><a href="issues.html#issues">Issues</a>
+<ul>
+<li><a href="issues.html#design-issues">Design Issues</a>
+<ul>
+<li><a href="issues.html#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></li>
+<li><a href="issues.html#description-misused">Description misused</a></li>
+</ul>
+</li>
+<li><a href="issues.html#gaps">Gaps</a></li>
+<li><a href="issues.html#drainnode-error-handling">drainNode Error Handling</a></li>
+<li><a href="issues.html#volumeattachment">VolumeAttachment</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="issues"><a class="header" href="#issues">Issues</a></h1>
+<h2 id="design-issues"><a class="header" href="#design-issues">Design Issues</a></h2>
+<h3 id="lastoperation-is-actually-next-operation"><a class="header" href="#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></h3>
+<p>Badly named. TODO: Describe more.</p>
+<h3 id="description-misused"><a class="header" href="#description-misused">Description misused</a></h3>
+<p>Error Prone stuff like below due to misuse of description.</p>
+<pre><code class="language-go">// isMachineStatusSimilar checks if the status of 2 machines is similar or not.
+func isMachineStatusSimilar(s1, s2 v1alpha1.MachineStatus) bool {
+	s1Copy, s2Copy := s1.DeepCopy(), s2.DeepCopy()
+	tolerateTimeDiff := 30 * time.Minute
+
+	// Since lastOperation hasn't been updated in the last 30minutes, force update this.
+	if (s1.LastOperation.LastUpdateTime.Time.Before(time.Now().Add(tolerateTimeDiff * -1))) || (s2.LastOperation.LastUpdateTime.Time.Before(time.Now().Add(tolerateTimeDiff * -1))) {
+		return false
+	}
+
+	if utilstrings.StringSimilarityRatio(s1Copy.LastOperation.Description, s2Copy.LastOperation.Description) &gt; 0.75 {
+		// If strings are similar, ignore comparison
+		// This occurs when cloud provider errors repeats with different request IDs
+		s1Copy.LastOperation.Description, s2Copy.LastOperation.Description = &quot;&quot;, &quot;&quot;
+	}
+
+	// Avoiding timestamp comparison
+	s1Copy.LastOperation.LastUpdateTime, s2Copy.LastOperation.LastUpdateTime = metav1.Time{}, metav1.Time{}
+	s1Copy.CurrentStatus.LastUpdateTime, s2Copy.CurrentStatus.LastUpdateTime = metav1.Time{}, metav1.Time{}
+
+	return apiequality.Semantic.DeepEqual(s1Copy.LastOperation, s2Copy.LastOperation) &amp;&amp; apiequality.Semantic.DeepEqual(s1Copy.CurrentStatus, s2Copy.CurrentStatus)
+}
+
+</code></pre>
+<h2 id="gaps"><a class="header" href="#gaps">Gaps</a></h2>
+<h2 id="drainnode-error-handling"><a class="header" href="#drainnode-error-handling">drainNode Error Handling</a></h2>
+<ul>
+<li>Does not set err when c.machineStatusUpdate is called</li>
+</ul>
+<h2 id="volumeattachment-1"><a class="header" href="#volumeattachment-1">VolumeAttachment</a></h2>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
+//...
+volumeAttachment := obj.(*storagev1.VolumeAttachment)
+	if volumeAttachment == nil {
+		klog.Errorf(&quot;Couldn't convert to volumeAttachment from object %v&quot;, obj)
+		// Should return here.
+	}
+//...
 </code></pre>
 
                     </main>

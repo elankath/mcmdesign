@@ -1,3 +1,8 @@
+- [Machine Controller Helper Methods](#machine-controller-helper-methods)
+	- [controller.ValidateMachineClass](#controllervalidatemachineclass)
+	- [controller.addMachineFinalizers](#controlleraddmachinefinalizers)
+	- [controller.setMachineTerminationStatus](#controllersetmachineterminationstatus)
+	- [controller.machineStatusUpdate](#controllermachinestatusupdate)
 # Machine Controller Helper Methods
 
 ## controller.ValidateMachineClass
@@ -69,5 +74,31 @@ func (c *controller) machineStatusUpdate(
 	machine *v1alpha1.Machine,
 	lastOperation v1alpha1.LastOperation,
 	currentStatus v1alpha1.CurrentStatus,
-	lastKnownState string) error
+	lastKnownState string) error 
 ```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+CreateClone["clone := machine.DeepCopy()"]
+-->InitClone["
+	clone.Status.LastOperation = lastOperation
+	clone.Status.CurrentStatus = currentStatus
+	clone.Status.LastKnownState = lastKnownState
+"]
+-->ChkSimilarStatus{"isMachineStatusSimilar(
+	clone.Status,
+	machine.Status)"}
+
+ChkSimilarStatus--No-->UpdateStatus["
+	err:=c.controlMachineClient
+	.Machines(clone.Namespace)
+	.UpdateStatus(ctx, clone, metav1.UpdateOptions{})
+"]
+-->Z1(("return err"))
+ChkSimilarStatus--Yes-->Z2(("return nil"))
+```
+
+
+NOTE: isMachineStatusSimilar is quite sad.
