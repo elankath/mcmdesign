@@ -1,5 +1,6 @@
-(🚧 WIP: Book at: [MCM Design Book](https://elankath.github.io/mcmdesign/))
-(Please wait till 9/10th Oct for full MC/M Controller flows including node drain)
+NOTE: This README.md is deprecated
+🚧 WIP: Book at: [MCM Design Book](https://elankath.github.io/mcmdesign/))
+(Please wait till 9/10th Oct to read for full MC/M Controller flows including node drain)
 
 - [Machine Controller Manager](#machine-controller-manager)
 	- [K8s Facilities](#k8s-facilities)
