@@ -152,9 +152,15 @@
 </li>
 <li><a href="#drain">Drain</a>
 <ul>
+<li><a href="#drain-constants">Drain Constants</a></li>
 <li><a href="#drainoptions">drain.Options</a></li>
 <li><a href="#drainoptionsrundrain">drain.Options.RunDrain</a></li>
-<li><a href="#drainoptionsevictpodswithoutpv">drain.Options.evictPodsWithoutPv</a></li>
+<li><a href="#drainoptionsevictpodswithoutpv">drain.Options.evictPodsWithoutPv</a>
+<ul>
+<li><a href="#ismisconfiguredpdb">isMisconfiguredPdb</a></li>
+</ul>
+</li>
+<li><a href="#drainoptionswaitfordelete">drain.Options.waitForDelete</a></li>
 </ul>
 </li>
 </ul>
@@ -210,6 +216,14 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 }
 </code></pre>
 <h2 id="drain"><a class="header" href="#drain">Drain</a></h2>
+<h3 id="drain-constants"><a class="header" href="#drain-constants">Drain Constants</a></h3>
+<ul>
+<li><code>PodEvictionRetryInterval</code> is the interval in which to retry eviction for pods</li>
+</ul>
+<pre><code class="language-go">const (
+    PodEvictionRetryInterval = time.Second * 20
+)
+</code></pre>
 <h3 id="drainoptions"><a class="header" href="#drainoptions">drain.Options</a></h3>
 <p><code>drain.Options</code> are configurable options while draining a node before deletion</p>
 <p>NOTE: Unused fields/Fields with constant defaults omitted for brevity</p>
@@ -323,8 +337,17 @@ EvictPodsWithoutPV--&gt;CreateAggregateError[&quot;
     pods []*corev1.Pod,
 	policyGroupVersion string, //eviction API's GV
 	getPodFn func(namespace, name string) (*corev1.Pod, error),
-	returnCh chan error)
+	returnCh chan error) {
+    for _, pod := range pods {
+		go o.evictPodWithoutPVInternal(ctx, attemptEvict, pod, policyGroupVersion, getPodFn, returnCh)
+	}
+	return
+}
 </code></pre>
+<p>NOTE:</p>
+<ul>
+<li>Both <code>evictPodsWithoutPv</code> and its helper <code>evictPodWithoutPVInternal</code> should ideally NOT return an <code>error</code> as they are go-routine launch methods that communicate errors or success (nil) via a <code>returnCh</code>.</li>
+</ul>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
@@ -336,7 +359,7 @@ EvictOrDelPod--&gt;Begin
 subgraph &quot;evictPodWithoutPVInternal (evicts or deletes Pod) &quot;
 Begin((&quot;Begin&quot;))--&gt;SetRetry[&quot;retry := 0&quot;]
 SetRetry
---&gt;SetAttemptEvict[&quot;attemptEvict := retry &gt;= o.MaxEvictRetries&quot;]
+--&gt;SetAttemptEvict[&quot;if retry &gt;= o.MaxEvictRetries {attemptEvict=false}&quot;]
 --&gt;ChkAttemptEvict{&quot;attemptEvict ?&quot;}
 
 ChkAttemptEvict--Yes--&gt;EvictPod[&quot;err=o.evictPod(ctx, pod, policyGroupVersion)&quot;]
@@ -346,15 +369,69 @@ EvictPod--&gt;ChkErr
 DelPod--&gt;ChkErr
 
 ChkErr{&quot;Check err&quot;}
-ChkErr--&quot;apierrors.IsNotFound(err)&quot;--&gt;SendNilChannel--&gt;NilReturn
+ChkErr--&quot;Nil&quot;--&gt;ChkForceDelPods
+ChkErr--&quot;IsTooManyRequests(err)&quot;--&gt;GetPdb[&quot;
+    // Possible case where Pod couldn't be evicted because of PDB violation
+    pdbs, err = pdbLister.GetPodPodDisruptionBudgets(pod)
+    pdb=pdbs[0] if err !=nil &amp;&amp; len(pdbs) &gt; 0
+&quot;]
+ChkErr--&quot;IsNotFound(err)\n(pod evicted)&quot;--&gt;SendNilChannel--&gt;NilReturn
+ChkErr--&quot;OtherErr&quot;--&gt;SendErrChannel
+GetPdb--&gt;ChkMisConfiguredPdb{&quot;isMisconfiguredPdb(pdb)?&quot;}
+ChkMisConfiguredPdb--Yes--&gt;SetPdbError[&quot;err=fmt.Errorf('pdb misconfigured')&quot;]
+SetPdbError--&gt;SendErrChannel
+
+ChkMisConfiguredPdb--No--&gt;SleepEvictRetryInterval[&quot;time.Sleep(PodEvictionRetryInterval)&quot;]
+SleepEvictRetryInterval--&gt;IncRetry[&quot;retry+=1&quot;]--&gt;SetAttemptEvict
 
 
+SendErrChannel--&gt;NilReturn
+
+ChkForceDelPods{&quot;o.ForceDeletePods&quot;}
+ChkForceDelPods--&quot;Yes\n(dont wait for\npod disappear)&quot;--&gt;SendNilChannel
+ChkForceDelPods--No--&gt;GetPodTermGracePeriod[&quot;
+    // TODO: discuss this, shouldn't pod grace period override drain ?
+    timeout=Max(pod.Spec.TerminationGracePeriodSeconds,o.timeout)
+&quot;]
+--&gt;SetBufferPeriod[&quot;bufferPeriod := 30 * time.Second&quot;]
+--&gt;WaitForDelete[&quot;pendingPods=o.waitForDelete(pods, timeout,getPodFn)&quot;]
+--&gt;ChkWaitForDelError{err != nil ?}
+
+ChkWaitForDelError--Yes--&gt;SendErrChannel
+ChkWaitForDelError--No--&gt;ChkPendingPodsLength{&quot;len(pendingPods) &gt; 0?&quot;}
+ChkPendingPodsLength--Yes--&gt;SetTimeoutError[&quot;err = fmt.Errorf('pod term timeout')&quot;]
+SetTimeoutError--&gt;SendErrChannel
+
+ChkPendingPodsLength--No--&gt;SendNilChannel
 end
 
 SendNilChannel[&quot;returnCh &lt;- nil&quot;]
+SendErrChannel[&quot;returnCh &lt;- err&quot;]
 NilReturn((&quot;return nil&quot;))
 
+
 </pre>
+<h4 id="ismisconfiguredpdb"><a class="header" href="#ismisconfiguredpdb">isMisconfiguredPdb</a></h4>
+<p>TODO: Discuss/Elaborate on this.</p>
+<pre><code class="language-go">func isMisconfiguredPdbV1(pdb *policyv1.PodDisruptionBudget) bool {
+	if pdb.ObjectMeta.Generation != pdb.Status.ObservedGeneration {
+		return false
+	}
+
+	return pdb.Status.ExpectedPods &gt; 0 &amp;&amp; 
+        pdb.Status.CurrentHealthy &gt;= pdb.Status.ExpectedPods
+        &amp;&amp; pdb.Status.DisruptionsAllowed == 0
+}
+</code></pre>
+<h3 id="drainoptionswaitfordelete"><a class="header" href="#drainoptionswaitfordelete">drain.Options.waitForDelete</a></h3>
+<p>NOTE: Ideally should have been named <code>waitForPodDisappearance</code></p>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L1068">pkg/util/provider/drain.Options.waitForDelete</a> is a helper method defined on <code>drain.Options</code> that leverages <a href="./k8s_facilities.html#waitpollimmediate">wait.PollImmediate</a> and the <code>getPodFn</code> (get pod by name and namespace) and checks that all pods have disappeared within <code>timeout</code>. The set of pods that did not disappear within timeout is returned as <code>pendingPods</code></p>
+<pre><code class="language-go">func (o *Options) waitForDelete(
+        pods []*corev1.Pod, interval, 
+        timeout time.Duration,  
+        getPodFn func(string, string) (*corev1.Pod, error)
+    ) (pendingPods []*corev1.Pod, err error) 
+</code></pre>
 
                     </main>
 

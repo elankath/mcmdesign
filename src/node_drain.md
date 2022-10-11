@@ -2,9 +2,12 @@
   - [Drain Utilities](#drain-utilities)
     - [VolumeAttachmentHandler](#volumeattachmenthandler)
   - [Drain](#drain)
+    - [Drain Constants](#drain-constants)
     - [drain.Options](#drainoptions)
     - [drain.Options.RunDrain](#drainoptionsrundrain)
     - [drain.Options.evictPodsWithoutPv](#drainoptionsevictpodswithoutpv)
+      - [isMisconfiguredPdb](#ismisconfiguredpdb)
+    - [drain.Options.waitForDelete](#drainoptionswaitfordelete)
 # Node Drain
 
 Node Drain code is in [github.com/gardener/machine-controller-manager/pkg/util/provider/drain/drain.go](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go)
@@ -67,6 +70,15 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 ```
 
 ## Drain 
+
+### Drain Constants
+
+- `PodEvictionRetryInterval` is the interval in which to retry eviction for pods
+```go
+const (
+    PodEvictionRetryInterval = time.Second * 20
+)
+```
 
 ### drain.Options
 
@@ -189,8 +201,16 @@ func (o *Options) evictPodsWithoutPv(ctx context.Context,
     pods []*corev1.Pod,
 	policyGroupVersion string, //eviction API's GV
 	getPodFn func(namespace, name string) (*corev1.Pod, error),
-	returnCh chan error)
+	returnCh chan error) {
+    for _, pod := range pods {
+		go o.evictPodWithoutPVInternal(ctx, attemptEvict, pod, policyGroupVersion, getPodFn, returnCh)
+	}
+	return
+}
 ```
+NOTE:
+- Both `evictPodsWithoutPv` and its helper `evictPodWithoutPVInternal` should ideally NOT return an `error` as they are go-routine launch methods that communicate errors or success (nil) via a `returnCh`.
+
 
 ```mermaid
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
@@ -204,7 +224,7 @@ EvictOrDelPod-->Begin
 subgraph "evictPodWithoutPVInternal (evicts or deletes Pod) "
 Begin(("Begin"))-->SetRetry["retry := 0"]
 SetRetry
--->SetAttemptEvict["attemptEvict := retry >= o.MaxEvictRetries"]
+-->SetAttemptEvict["if retry >= o.MaxEvictRetries {attemptEvict=false}"]
 -->ChkAttemptEvict{"attemptEvict ?"}
 
 ChkAttemptEvict--Yes-->EvictPod["err=o.evictPod(ctx, pod, policyGroupVersion)"]
@@ -214,12 +234,74 @@ EvictPod-->ChkErr
 DelPod-->ChkErr
 
 ChkErr{"Check err"}
-ChkErr--"apierrors.IsNotFound(err)"-->SendNilChannel-->NilReturn
+ChkErr--"Nil"-->ChkForceDelPods
+ChkErr--"IsTooManyRequests(err)"-->GetPdb["
+    // Possible case where Pod couldn't be evicted because of PDB violation
+    pdbs, err = pdbLister.GetPodPodDisruptionBudgets(pod)
+    pdb=pdbs[0] if err !=nil && len(pdbs) > 0
+"]
+ChkErr--"IsNotFound(err)\n(pod evicted)"-->SendNilChannel-->NilReturn
+ChkErr--"OtherErr"-->SendErrChannel
+GetPdb-->ChkMisConfiguredPdb{"isMisconfiguredPdb(pdb)?"}
+ChkMisConfiguredPdb--Yes-->SetPdbError["err=fmt.Errorf('pdb misconfigured')"]
+SetPdbError-->SendErrChannel
+
+ChkMisConfiguredPdb--No-->SleepEvictRetryInterval["time.Sleep(PodEvictionRetryInterval)"]
+SleepEvictRetryInterval-->IncRetry["retry+=1"]-->SetAttemptEvict
 
 
+SendErrChannel-->NilReturn
+
+ChkForceDelPods{"o.ForceDeletePods"}
+ChkForceDelPods--"Yes\n(dont wait for\npod disappear)"-->SendNilChannel
+ChkForceDelPods--No-->GetPodTermGracePeriod["
+    // TODO: discuss this, shouldn't pod grace period override drain ?
+    timeout=Max(pod.Spec.TerminationGracePeriodSeconds,o.timeout)
+"]
+-->SetBufferPeriod["bufferPeriod := 30 * time.Second"]
+-->WaitForDelete["pendingPods=o.waitForDelete(pods, timeout,getPodFn)"]
+-->ChkWaitForDelError{err != nil ?}
+
+ChkWaitForDelError--Yes-->SendErrChannel
+ChkWaitForDelError--No-->ChkPendingPodsLength{"len(pendingPods) > 0?"}
+ChkPendingPodsLength--Yes-->SetTimeoutError["err = fmt.Errorf('pod term timeout')"]
+SetTimeoutError-->SendErrChannel
+
+ChkPendingPodsLength--No-->SendNilChannel
 end
 
 SendNilChannel["returnCh <- nil"]
+SendErrChannel["returnCh <- err"]
 NilReturn(("return nil"))
 
+
+```
+
+#### isMisconfiguredPdb
+
+TODO: Discuss/Elaborate on this.
+```go
+func isMisconfiguredPdbV1(pdb *policyv1.PodDisruptionBudget) bool {
+	if pdb.ObjectMeta.Generation != pdb.Status.ObservedGeneration {
+		return false
+	}
+
+	return pdb.Status.ExpectedPods > 0 && 
+        pdb.Status.CurrentHealthy >= pdb.Status.ExpectedPods
+        && pdb.Status.DisruptionsAllowed == 0
+}
+```
+
+### drain.Options.waitForDelete
+
+NOTE: Ideally should have been named `waitForPodDisappearance`
+
+[pkg/util/provider/drain.Options.waitForDelete](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L1068) is a helper method defined on `drain.Options` that leverages [wait.PollImmediate](./k8s_facilities.md#waitpollimmediate) and the `getPodFn` (get pod by name and namespace) and checks that all pods have disappeared within `timeout`. The set of pods that did not disappear within timeout is returned as `pendingPods`
+
+```go
+func (o *Options) waitForDelete(
+        pods []*corev1.Pod, interval, 
+        timeout time.Duration,  
+        getPodFn func(string, string) (*corev1.Pod, error)
+    ) (pendingPods []*corev1.Pod, err error) 
 ```

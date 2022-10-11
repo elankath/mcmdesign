@@ -228,7 +228,7 @@ machine-drain-timeout=5m
 <ol>
 <li>Does not set err when <code>c.machineStatusUpdate</code> is called</li>
 <li><code>o.RunCordonOrUncordon</code> should use <code>apierrors.NotFound</code> while checking error returned by a get node op</li>
-<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict bool usage</a> is confusing. Better design needed.</li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict bool usage</a> is confusing. Better design needed. For example what is point of passing <code>attemptEvict</code> to <code>evictPodsWithoutPv</code> ??? It is anyways overridden.</li>
 </ol>
 <h2 id="node-conditions"><a class="header" href="#node-conditions">Node Conditions</a></h2>
 <ul>

@@ -78,7 +78,7 @@ machine-drain-timeout=5m
 
 1. Does not set err when `c.machineStatusUpdate` is called
 2. `o.RunCordonOrUncordon` should use `apierrors.NotFound` while checking error returned by a get node op
-3. [attemptEvict bool usage](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400) is confusing. Better design needed.
+3. [attemptEvict bool usage](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400) is confusing. Better design needed. For example what is point of passing `attemptEvict` to `evictPodsWithoutPv` ??? It is anyways overridden.
 
 ## Node Conditions
 - `CloneAndAddCondition` logic seems erroneous ?

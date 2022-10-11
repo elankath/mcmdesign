@@ -753,7 +753,7 @@ type controller struct {
 </tbody></table>
 </div>
 <h3 id="status"><a class="header" href="#status">Status</a></h3>
-<p>(OPINION: I beleive this is design defect. Ideally one should have re-levaraged the k8s API machinery Status https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/apis/meta/v1#Status
+<p>(OPINION: I beleive this is a minor NIH design defect. Ideally one should have re-levaraged the k8s API machinery Status <a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/apis/meta/v1#Status">k8s.io/apimachinery/pkg/apis/meta/v1.Status</a>
 instead of making custom status object.)</p>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status">status</a> implements errors returned by MachineAPIs. MachineAPIs service handlers should return an error created by this package, and machineAPIs clients should expect a corresponding error to be returned from the RPC call.</p>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status#Status">status.Status</a> implements <code>error</code> and encapsulates a <code>code</code> which should be onf the codes in <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code">codes.Code</a> and a develoer-facing error message in English</p>

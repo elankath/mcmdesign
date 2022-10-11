@@ -664,7 +664,7 @@ Note: Un-happy with current design. It is clear that some error codes overlap ea
 
 ### Status
 
-(OPINION: I beleive this is design defect. Ideally one should have re-levaraged the k8s API machinery Status https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/apis/meta/v1#Status
+(OPINION: I beleive this is a minor NIH design defect. Ideally one should have re-levaraged the k8s API machinery Status [k8s.io/apimachinery/pkg/apis/meta/v1.Status](https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/apis/meta/v1#Status)
 instead of making custom status object.)
 
 [status](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status) implements errors returned by MachineAPIs. MachineAPIs service handlers should return an error created by this package, and machineAPIs clients should expect a corresponding error to be returned from the RPC call.
