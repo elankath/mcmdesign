@@ -6,8 +6,8 @@
 		- [Dead/Deprecated Code](#deaddeprecated-code)
 			- [controller.triggerUpdationFlow](#controllertriggerupdationflow)
 				- [SafetyOptions.MachineDrainTimeout](#safetyoptionsmachinedraintimeout)
-			- [Dup Methods and Constants](#dup-methods-and-constants)
-	- [drainNode Error Handling](#drainnode-error-handling)
+			- [Dup Code](#dup-code)
+	- [drainNode Handling](#drainnode-handling)
 	- [Node Conditions](#node-conditions)
 	- [VolumeAttachment](#volumeattachment)
 # Issues
@@ -68,17 +68,20 @@ cmd/machine-controller/main.go
 machine-drain-timeout=5m
 ```
 
-#### Dup Methods and Constants
+#### Dup Code
 
-- Methods in `pkg/controller/machine_util.go`
-- Dup [NodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48) in `pkg/controller/machine_util.go`. The one that is being actively used is [machineutils.NodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70)
+- Types/func/smethods in `pkg/controller/machine_util.go`
+  - Ex: Dup [NodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48) in `pkg/controller/machine_util.go`. The one that is being actively used is [machineutils.NodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70)
+- Types/funcs/methods in `pkg/controller/drain.go` 
 
-## drainNode Error Handling
+## drainNode Handling
 
-- Does not set err when c.machineStatusUpdate is called
+1. Does not set err when `c.machineStatusUpdate` is called
+2. `o.RunCordonOrUncordon` should use `apierrors.NotFound` while checking error returned by a get node op
+3. [attemptEvict bool usage](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400) is confusing. Better design needed.
 
 ## Node Conditions
-- `CloneAndAddCondition` logic seems erroneous.
+- `CloneAndAddCondition` logic seems erroneous ?
 ## VolumeAttachment
 
 ```go

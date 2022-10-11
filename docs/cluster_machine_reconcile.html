@@ -373,7 +373,7 @@ SetForceDelParams--No--&gt;UpdateNodeTermCond[&quot;err=c.UpdateNodeTerminationC
 ChkForceDelOrTimedOut--No--&gt;UpdateNodeTermCond
 
 UpdateNodeTermCond--&gt;ChkUpdateErr{&quot;err != nil ?&quot;}
-ChkUpdateErr----&gt;InitDrainOpts[&quot;
+ChkUpdateErr--No--&gt;InitDrainOpts[&quot;
   // params reduced for brevity
   drainOptions := drain.NewDrainOptions(
     c.targetCoreClient,
@@ -410,7 +410,8 @@ InitLastOp[&quot;lastOp:=v1alpha1.LastOperation{
 			State:          state,
 			Type:           v1alpha1.MachineOperationDelete,
 			LastUpdateTime: metav1.Now(),
-		}&quot;]
+		}
+  //lastOp is actually the *next* op semantically&quot;]
 SetOpStateFailed--&gt;InitLastOp
 InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)&quot;]
 --&gt;Return((&quot;machineutils.ShortRetry, err&quot;))
@@ -422,11 +423,9 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 <li>Check TODO:  <code>ReadonlyFilesystem</code> is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.</li>
 </ol>
 </li>
-<li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?</li>
+<li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?/</li>
+<li>See <a href="./node_drain.html#run-drain">Run Drain</a></li>
 </ol>
-<p>btmp</p>
-<pre><code></code></pre>
-<p>etmp</p>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
 </code></pre>

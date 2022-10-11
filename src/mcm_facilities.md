@@ -18,8 +18,6 @@
 		- [MachineUtils](#machineutils)
 			- [Operation Descriptions](#operation-descriptions)
 			- [Retry Periods](#retry-periods)
-		- [Drain Utilities](#drain-utilities)
-			- [VolumeAttachmentHandler](#volumeattachmenthandler)
 	- [Main Server Structs](#main-server-structs)
 		- [MCServer](#mcserver)
 			- [MCServer Usage](#mcserver-usage)
@@ -446,61 +444,7 @@ const (
 
 ```
 
-### Drain Utilities
 
-#### VolumeAttachmentHandler
-Inside `github.com/gardener/machine-controller-manager/pkg/util/provider/drain/volume_attachment.go`,
-[pkg/util/provider/drain.VolumeAttachmentHandler](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler) is an handler used to distribute
-incoming [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) requests to all listening workers via means of a slice of typed `VolumeAttachment` channels. A `VolumeAttachment` is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node.
-
-```go
-type VolumeAttachmentHandler struct {
-	sync.Mutex
-	workers []chan *storagev1.VolumeAttachment
-}
-
-// NewVolumeAttachmentHandler returns a new VolumeAttachmentHandler
-func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
-	return &VolumeAttachmentHandler{
-		Mutex:   sync.Mutex{},
-		workers: []chan *storagev1.VolumeAttachment{},
-	}
-}
-```
-
-The `dispatch` method is responsible for distributing incomding `VolumeAttachent`s to available channels.
-
-```go
-func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
-	if len(v.workers) == 0 {
-		// As no workers are registered, nothing to do here.
-		return
-	}
-	volumeAttachment := obj.(*storagev1.VolumeAttachment)
-	v.Lock()
-	defer v.Unlock()
-
-	for i, worker := range v.workers {
-		select {
-		case worker <- volumeAttachment:
-		default:
-			klog.Warningf("Worker %d/%v is full. Discarding value.", i, worker)
-			// TODO: Umm..isn't this problematic if we miss this ?
-		}
-	}
-}
-```
-
-The `Add|Update` methods below delegate to dispatch. The usage of this utility involves specifying the add/update methods below as the event handler callbacks on an instance of [k8s.io/client-go/informers/storage/v1.VolumeAttachmentInformer](https://pkg.go.dev/k8s.io/client-go@v0.25.2/informers/storage/v1#VolumeAttachmentInformer). This way incoming volume attachments are distributed to several worker channels.
-```go
-func (v *VolumeAttachmentHandler) AddVolumeAttachment(obj interface{}) {
-	v.dispatch(obj)
-}
-
-func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interface{}) {
-	v.dispatch(newObj)
-}
-```
 
 
 ## Main Server Structs
@@ -720,7 +664,8 @@ Note: Un-happy with current design. It is clear that some error codes overlap ea
 
 ### Status
 
-NOTE: This type is madly named. It should be called `MachineError` instead of `Status`
+(OPINION: I beleive this is design defect. Ideally one should have re-levaraged the k8s API machinery Status https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/apis/meta/v1#Status
+instead of making custom status object.)
 
 [status](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status) implements errors returned by MachineAPIs. MachineAPIs service handlers should return an error created by this package, and machineAPIs clients should expect a corresponding error to be returned from the RPC call.
 

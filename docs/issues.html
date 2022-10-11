@@ -160,12 +160,12 @@
 <li><a href="#safetyoptionsmachinedraintimeout">SafetyOptions.MachineDrainTimeout</a></li>
 </ul>
 </li>
-<li><a href="#dup-methods-and-constants">Dup Methods and Constants</a></li>
+<li><a href="#dup-code">Dup Code</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#drainnode-error-handling">drainNode Error Handling</a></li>
+<li><a href="#drainnode-handling">drainNode Handling</a></li>
 <li><a href="#node-conditions">Node Conditions</a></li>
 <li><a href="#volumeattachment">VolumeAttachment</a></li>
 </ul>
@@ -215,18 +215,24 @@ cmd/machine-controller/main.go
 ...
 machine-drain-timeout=5m
 </code></pre>
-<h4 id="dup-methods-and-constants"><a class="header" href="#dup-methods-and-constants">Dup Methods and Constants</a></h4>
+<h4 id="dup-code"><a class="header" href="#dup-code">Dup Code</a></h4>
 <ul>
-<li>Methods in <code>pkg/controller/machine_util.go</code></li>
-<li>Dup <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48">NodeTerminationCondition</a> in <code>pkg/controller/machine_util.go</code>. The one that is being actively used is <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70">machineutils.NodeTerminationCondition</a></li>
-</ul>
-<h2 id="drainnode-error-handling"><a class="header" href="#drainnode-error-handling">drainNode Error Handling</a></h2>
+<li>Types/func/smethods in <code>pkg/controller/machine_util.go</code>
 <ul>
-<li>Does not set err when c.machineStatusUpdate is called</li>
+<li>Ex: Dup <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48">NodeTerminationCondition</a> in <code>pkg/controller/machine_util.go</code>. The one that is being actively used is <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70">machineutils.NodeTerminationCondition</a></li>
 </ul>
+</li>
+<li>Types/funcs/methods in <code>pkg/controller/drain.go</code> </li>
+</ul>
+<h2 id="drainnode-handling"><a class="header" href="#drainnode-handling">drainNode Handling</a></h2>
+<ol>
+<li>Does not set err when <code>c.machineStatusUpdate</code> is called</li>
+<li><code>o.RunCordonOrUncordon</code> should use <code>apierrors.NotFound</code> while checking error returned by a get node op</li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict bool usage</a> is confusing. Better design needed.</li>
+</ol>
 <h2 id="node-conditions"><a class="header" href="#node-conditions">Node Conditions</a></h2>
 <ul>
-<li><code>CloneAndAddCondition</code> logic seems erroneous.</li>
+<li><code>CloneAndAddCondition</code> logic seems erroneous ?</li>
 </ul>
 <h2 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h2>
 <pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {

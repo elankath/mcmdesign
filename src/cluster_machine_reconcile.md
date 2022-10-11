@@ -237,7 +237,7 @@ SetForceDelParams--No-->UpdateNodeTermCond["err=c.UpdateNodeTerminationCondition
 ChkForceDelOrTimedOut--No-->UpdateNodeTermCond
 
 UpdateNodeTermCond-->ChkUpdateErr{"err != nil ?"}
-ChkUpdateErr---->InitDrainOpts["
+ChkUpdateErr--No-->InitDrainOpts["
   // params reduced for brevity
   drainOptions := drain.NewDrainOptions(
     c.targetCoreClient,
@@ -274,7 +274,8 @@ InitLastOp["lastOp:=v1alpha1.LastOperation{
 			State:          state,
 			Type:           v1alpha1.MachineOperationDelete,
 			LastUpdateTime: metav1.Now(),
-		}"]
+		}
+  //lastOp is actually the *next* op semantically"]
 SetOpStateFailed-->InitLastOp
 InitLastOp-->UpdateMachineStatus["c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)"]
 -->Return(("machineutils.ShortRetry, err"))
@@ -283,12 +284,9 @@ InitLastOp-->UpdateMachineStatus["c.machineStatusUpdate(ctx,machine,lastOp,machi
 Note on above
 1. We skip the drain if node is set to ReadonlyFilesystem for over 5 minutes
    1. Check TODO:  `ReadonlyFilesystem` is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.
-2. Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?
+2. Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?/
+3. See [Run Drain](./node_drain.md#run-drain)
 
-btmp
-```
-```
-etmp
 
 ## controller.reconcileMachineHealth
 

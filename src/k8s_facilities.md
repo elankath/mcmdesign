@@ -6,9 +6,12 @@
 				- [OwnerReferences](#ownerreferences)
 				- [Finalizers and Deletion](#finalizers-and-deletion)
 				- [Diff between Labels and Annotations](#diff-between-labels-and-annotations)
-		- [Utility Functions/Types](#utility-functionstypes)
+			- [API Errors](#api-errors)
+				- [errors.IsNotFound](#errorsisnotfound)
+		- [API Machinery Utilities](#api-machinery-utilities)
 			- [wait.Until](#waituntil)
 			- [wait.Backoff](#waitbackoff)
+			- [Errors](#errors)
 	- [K8s API Core](#k8s-api-core)
 		- [Node](#node)
 			- [NodeSpec](#nodespec)
@@ -21,6 +24,8 @@
 				- [NodeSystemInfo](#nodesysteminfo)
 				- [Images](#images)
 				- [Attached Volumes](#attached-volumes)
+		- [Pod](#pod)
+			- [Pod Eviction](#pod-eviction)
 		- [VolumeAttachment](#volumeattachment)
 			- [VolumeAttachmentSpec](#volumeattachmentspec)
 	- [client-go](#client-go)
@@ -142,7 +147,15 @@ _Labels_ are used in conjunction with selectors to identify groups of related re
 
 _Annotations_ are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not 
 
-### Utility Functions/Types
+#### API Errors
+
+[k8s.io/apimachinery/pkg/api/errors](https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/errors) provides detailed error types  ans `IsXXX` methods for k8s api errors.
+
+##### errors.IsNotFound
+
+[k8s.io/apimachinery/pkg/api/errors.IsNotFound](https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/errors#IsNotFound) returns true if the specified error was created by NewNotFound. It supports wrapped errors and returns false when the error is nil.
+
+### API Machinery Utilities
 
 #### wait.Until
 
@@ -168,6 +181,20 @@ type Backoff struct {
 - `Jitter` is the random amount of each duration added (between `Duration` and `Duration*(1+jitter)`
 - `Steps` is the remaining number of iterations in which the duration may increase.
 - `Cap` is the cap on the duration and may not exceed this value.
+
+#### Errors
+
+[k8s.io/apimachinery/pkg/util/errors.Aggregate](https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/util/errors#Aggregate) represents an object that contains multiple errors
+
+Use [k8s.io/apimachinery/pkg/util/errors.NewAggregate](https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/util/errors#NewAggregate) to construct the aggregate error from a slice of errors.
+```go
+type Aggregate interface {
+	error
+	Errors() []error
+	Is(error) bool
+}
+func NewAggregate(errlist []error) Aggregate {//...}
+```
 
 ## K8s API Core
 The MCM leverages several types from https://pkg.go.dev/k8s.io/api/core/v1 
@@ -442,6 +469,47 @@ type AttachedVolume struct {
 ```
 
 TODO: add another section with Node class diagram
+
+### Pod 
+
+[k8s.io/api/core/v1.Pod](k8s.io/api/core/v1#Pod) struct represents a k8s [Pod](https://kubernetes.io/docs/concepts/workloads/pods/) which a collection of containers that can run on a host. This resource is created by clients and scheduled onto hosts.
+
+```go
+type Pod struct {
+	metav1.TypeMeta `json:",inline"`
+	// Standard object's metadata.
+	metav1.ObjectMeta
+
+	// Specification of the desired behavior of the pod.
+	Spec PodSpec 
+
+	// Most recently observed status of the pod.
+	Status PodStatus
+}
+```
+
+#### Pod Eviction
+A [k8s.io/api/policy/v1.Eviction](k8s.io/api@v0.25.2/policy/v1#Eviction) can be used to evict a [Pod](#pod) from its [Node](#node) - eviction is the _graceful_ terimation of Pods on nodes.See [API Eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/)
+
+```go
+type Eviction struct {
+	metav1.TypeMeta 
+
+	// ObjectMeta describes the pod that is being evicted.
+	metav1.ObjectMeta 
+
+	// DeleteOptions may be provided
+	DeleteOptions *metav1.DeleteOptions 
+}
+
+```
+
+Construct the `ObjectMeta` using the Pod and namespace and then use instance of typed [Kubernetes Client Interface](https://pkg.go.dev/k8s.io/client-go/kubernetes#Interface), and get the [PolicyV1Interface](https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#PolicyV1Interface), get the [EvictionInterface](https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionInterface) and invoke the invoke the [Evict](https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionExpansion) method
+
+Example
+```go
+client.PolicyV1().Evictions(eviction.Namespace).Evict(ctx, eviction)
+```
 
 ### VolumeAttachment
 

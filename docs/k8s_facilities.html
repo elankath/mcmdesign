@@ -157,12 +157,18 @@
 <li><a href="#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></li>
 </ul>
 </li>
+<li><a href="#api-errors">API Errors</a>
+<ul>
+<li><a href="#errorsisnotfound">errors.IsNotFound</a></li>
 </ul>
 </li>
-<li><a href="#utility-functionstypes">Utility Functions/Types</a>
+</ul>
+</li>
+<li><a href="#api-machinery-utilities">API Machinery Utilities</a>
 <ul>
 <li><a href="#waituntil">wait.Until</a></li>
 <li><a href="#waitbackoff">wait.Backoff</a></li>
+<li><a href="#errors">Errors</a></li>
 </ul>
 </li>
 </ul>
@@ -190,6 +196,11 @@
 <li><a href="#attached-volumes">Attached Volumes</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li><a href="#pod">Pod</a>
+<ul>
+<li><a href="#pod-eviction">Pod Eviction</a></li>
 </ul>
 </li>
 <li><a href="#volumeattachment">VolumeAttachment</a>
@@ -306,7 +317,11 @@
 <h5 id="diff-between-labels-and-annotations"><a class="header" href="#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></h5>
 <p><em>Labels</em> are used in conjunction with selectors to identify groups of related resources and meant to be meaningful to users. Because selectors are used to query labels, this operation needs to be efficient. To ensure efficient queries, labels are constrained by RFC 1123. RFC 1123, among other constraints, restricts labels to a maximum 63 character length. Thus, labels should be used when you want Kubernetes to group a set of related resources. See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ on label key and value restrictions</p>
 <p><em>Annotations</em> are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not </p>
-<h3 id="utility-functionstypes"><a class="header" href="#utility-functionstypes">Utility Functions/Types</a></h3>
+<h4 id="api-errors"><a class="header" href="#api-errors">API Errors</a></h4>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/errors">k8s.io/apimachinery/pkg/api/errors</a> provides detailed error types  ans <code>IsXXX</code> methods for k8s api errors.</p>
+<h5 id="errorsisnotfound"><a class="header" href="#errorsisnotfound">errors.IsNotFound</a></h5>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/errors#IsNotFound">k8s.io/apimachinery/pkg/api/errors.IsNotFound</a> returns true if the specified error was created by NewNotFound. It supports wrapped errors and returns false when the error is nil.</p>
+<h3 id="api-machinery-utilities"><a class="header" href="#api-machinery-utilities">API Machinery Utilities</a></h3>
 <h4 id="waituntil"><a class="header" href="#waituntil">wait.Until</a></h4>
 <p><a href="https://github.com/kubernetes/apimachinery/blob/v0.25.0/pkg/util/wait/wait.go#L91">k8s.io/apimachinery/pkg/wait.Until</a> loops until <code>stop</code> channel is closed, running <code>f</code> every given <code>period.</code> </p>
 <p><code>func Until(f func(), period time.Duration, stopCh &lt;-chan struct{})</code></p>
@@ -327,6 +342,16 @@
 <li><code>Steps</code> is the remaining number of iterations in which the duration may increase.</li>
 <li><code>Cap</code> is the cap on the duration and may not exceed this value.</li>
 </ul>
+<h4 id="errors"><a class="header" href="#errors">Errors</a></h4>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/util/errors#Aggregate">k8s.io/apimachinery/pkg/util/errors.Aggregate</a> represents an object that contains multiple errors</p>
+<p>Use <a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/util/errors#NewAggregate">k8s.io/apimachinery/pkg/util/errors.NewAggregate</a> to construct the aggregate error from a slice of errors.</p>
+<pre><code class="language-go">type Aggregate interface {
+	error
+	Errors() []error
+	Is(error) bool
+}
+func NewAggregate(errlist []error) Aggregate {//...}
+</code></pre>
 <h2 id="k8s-api-core"><a class="header" href="#k8s-api-core">K8s API Core</a></h2>
 <p>The MCM leverages several types from https://pkg.go.dev/k8s.io/api/core/v1 </p>
 <h3 id="node"><a class="header" href="#node">Node</a></h3>
@@ -552,6 +577,37 @@ type AttachedVolume struct {
 }
 </code></pre>
 <p>TODO: add another section with Node class diagram</p>
+<h3 id="pod"><a class="header" href="#pod">Pod</a></h3>
+<p><a href="k8s.io/api/core/v1#Pod">k8s.io/api/core/v1.Pod</a> struct represents a k8s <a href="https://kubernetes.io/docs/concepts/workloads/pods/">Pod</a> which a collection of containers that can run on a host. This resource is created by clients and scheduled onto hosts.</p>
+<pre><code class="language-go">type Pod struct {
+	metav1.TypeMeta `json:&quot;,inline&quot;`
+	// Standard object's metadata.
+	metav1.ObjectMeta
+
+	// Specification of the desired behavior of the pod.
+	Spec PodSpec 
+
+	// Most recently observed status of the pod.
+	Status PodStatus
+}
+</code></pre>
+<h4 id="pod-eviction"><a class="header" href="#pod-eviction">Pod Eviction</a></h4>
+<p>A <a href="k8s.io/api@v0.25.2/policy/v1#Eviction">k8s.io/api/policy/v1.Eviction</a> can be used to evict a <a href="#pod">Pod</a> from its <a href="#node">Node</a> - eviction is the <em>graceful</em> terimation of Pods on nodes.See <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/">API Eviction</a></p>
+<pre><code class="language-go">type Eviction struct {
+	metav1.TypeMeta 
+
+	// ObjectMeta describes the pod that is being evicted.
+	metav1.ObjectMeta 
+
+	// DeleteOptions may be provided
+	DeleteOptions *metav1.DeleteOptions 
+}
+
+</code></pre>
+<p>Construct the <code>ObjectMeta</code> using the Pod and namespace and then use instance of typed <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Interface">Kubernetes Client Interface</a>, and get the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#PolicyV1Interface">PolicyV1Interface</a>, get the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionInterface">EvictionInterface</a> and invoke the invoke the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionExpansion">Evict</a> method</p>
+<p>Example</p>
+<pre><code class="language-go">client.PolicyV1().Evictions(eviction.Namespace).Evict(ctx, eviction)
+</code></pre>
 <h3 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h3>
 <p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
 <pre><code class="language-go">type VolumeAttachment struct {

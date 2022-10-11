@@ -192,12 +192,18 @@
 <li><a href="k8s_facilities.html#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></li>
 </ul>
 </li>
+<li><a href="k8s_facilities.html#api-errors">API Errors</a>
+<ul>
+<li><a href="k8s_facilities.html#errorsisnotfound">errors.IsNotFound</a></li>
 </ul>
 </li>
-<li><a href="k8s_facilities.html#utility-functionstypes">Utility Functions/Types</a>
+</ul>
+</li>
+<li><a href="k8s_facilities.html#api-machinery-utilities">API Machinery Utilities</a>
 <ul>
 <li><a href="k8s_facilities.html#waituntil">wait.Until</a></li>
 <li><a href="k8s_facilities.html#waitbackoff">wait.Backoff</a></li>
+<li><a href="k8s_facilities.html#errors">Errors</a></li>
 </ul>
 </li>
 </ul>
@@ -225,6 +231,11 @@
 <li><a href="k8s_facilities.html#attached-volumes">Attached Volumes</a></li>
 </ul>
 </li>
+</ul>
+</li>
+<li><a href="k8s_facilities.html#pod">Pod</a>
+<ul>
+<li><a href="k8s_facilities.html#pod-eviction">Pod Eviction</a></li>
 </ul>
 </li>
 <li><a href="k8s_facilities.html#volumeattachment">VolumeAttachment</a>
@@ -341,7 +352,11 @@
 <h5 id="diff-between-labels-and-annotations"><a class="header" href="#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></h5>
 <p><em>Labels</em> are used in conjunction with selectors to identify groups of related resources and meant to be meaningful to users. Because selectors are used to query labels, this operation needs to be efficient. To ensure efficient queries, labels are constrained by RFC 1123. RFC 1123, among other constraints, restricts labels to a maximum 63 character length. Thus, labels should be used when you want Kubernetes to group a set of related resources. See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ on label key and value restrictions</p>
 <p><em>Annotations</em> are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not </p>
-<h3 id="utility-functionstypes"><a class="header" href="#utility-functionstypes">Utility Functions/Types</a></h3>
+<h4 id="api-errors"><a class="header" href="#api-errors">API Errors</a></h4>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/errors">k8s.io/apimachinery/pkg/api/errors</a> provides detailed error types  ans <code>IsXXX</code> methods for k8s api errors.</p>
+<h5 id="errorsisnotfound"><a class="header" href="#errorsisnotfound">errors.IsNotFound</a></h5>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/errors#IsNotFound">k8s.io/apimachinery/pkg/api/errors.IsNotFound</a> returns true if the specified error was created by NewNotFound. It supports wrapped errors and returns false when the error is nil.</p>
+<h3 id="api-machinery-utilities"><a class="header" href="#api-machinery-utilities">API Machinery Utilities</a></h3>
 <h4 id="waituntil"><a class="header" href="#waituntil">wait.Until</a></h4>
 <p><a href="https://github.com/kubernetes/apimachinery/blob/v0.25.0/pkg/util/wait/wait.go#L91">k8s.io/apimachinery/pkg/wait.Until</a> loops until <code>stop</code> channel is closed, running <code>f</code> every given <code>period.</code> </p>
 <p><code>func Until(f func(), period time.Duration, stopCh &lt;-chan struct{})</code></p>
@@ -362,6 +377,16 @@
 <li><code>Steps</code> is the remaining number of iterations in which the duration may increase.</li>
 <li><code>Cap</code> is the cap on the duration and may not exceed this value.</li>
 </ul>
+<h4 id="errors"><a class="header" href="#errors">Errors</a></h4>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/util/errors#Aggregate">k8s.io/apimachinery/pkg/util/errors.Aggregate</a> represents an object that contains multiple errors</p>
+<p>Use <a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/util/errors#NewAggregate">k8s.io/apimachinery/pkg/util/errors.NewAggregate</a> to construct the aggregate error from a slice of errors.</p>
+<pre><code class="language-go">type Aggregate interface {
+	error
+	Errors() []error
+	Is(error) bool
+}
+func NewAggregate(errlist []error) Aggregate {//...}
+</code></pre>
 <h2 id="k8s-api-core"><a class="header" href="#k8s-api-core">K8s API Core</a></h2>
 <p>The MCM leverages several types from https://pkg.go.dev/k8s.io/api/core/v1 </p>
 <h3 id="node"><a class="header" href="#node">Node</a></h3>
@@ -587,6 +612,37 @@ type AttachedVolume struct {
 }
 </code></pre>
 <p>TODO: add another section with Node class diagram</p>
+<h3 id="pod"><a class="header" href="#pod">Pod</a></h3>
+<p><a href="k8s.io/api/core/v1#Pod">k8s.io/api/core/v1.Pod</a> struct represents a k8s <a href="https://kubernetes.io/docs/concepts/workloads/pods/">Pod</a> which a collection of containers that can run on a host. This resource is created by clients and scheduled onto hosts.</p>
+<pre><code class="language-go">type Pod struct {
+	metav1.TypeMeta `json:&quot;,inline&quot;`
+	// Standard object's metadata.
+	metav1.ObjectMeta
+
+	// Specification of the desired behavior of the pod.
+	Spec PodSpec 
+
+	// Most recently observed status of the pod.
+	Status PodStatus
+}
+</code></pre>
+<h4 id="pod-eviction"><a class="header" href="#pod-eviction">Pod Eviction</a></h4>
+<p>A <a href="k8s.io/api@v0.25.2/policy/v1#Eviction">k8s.io/api/policy/v1.Eviction</a> can be used to evict a <a href="k8s_facilities.html#pod">Pod</a> from its <a href="k8s_facilities.html#node">Node</a> - eviction is the <em>graceful</em> terimation of Pods on nodes.See <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/">API Eviction</a></p>
+<pre><code class="language-go">type Eviction struct {
+	metav1.TypeMeta 
+
+	// ObjectMeta describes the pod that is being evicted.
+	metav1.ObjectMeta 
+
+	// DeleteOptions may be provided
+	DeleteOptions *metav1.DeleteOptions 
+}
+
+</code></pre>
+<p>Construct the <code>ObjectMeta</code> using the Pod and namespace and then use instance of typed <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Interface">Kubernetes Client Interface</a>, and get the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#PolicyV1Interface">PolicyV1Interface</a>, get the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionInterface">EvictionInterface</a> and invoke the invoke the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionExpansion">Evict</a> method</p>
+<p>Example</p>
+<pre><code class="language-go">client.PolicyV1().Evictions(eviction.Namespace).Evict(ctx, eviction)
+</code></pre>
 <h3 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h3>
 <p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
 <pre><code class="language-go">type VolumeAttachment struct {
@@ -826,11 +882,6 @@ Z((&quot;End&quot;))
 <ul>
 <li><a href="mcm_facilities.html#operation-descriptions">Operation Descriptions</a></li>
 <li><a href="mcm_facilities.html#retry-periods">Retry Periods</a></li>
-</ul>
-</li>
-<li><a href="mcm_facilities.html#drain-utilities">Drain Utilities</a>
-<ul>
-<li><a href="mcm_facilities.html#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
 </ul>
 </li>
 </ul>
@@ -1215,53 +1266,6 @@ const (
 )
 
 </code></pre>
-<h3 id="drain-utilities"><a class="header" href="#drain-utilities">Drain Utilities</a></h3>
-<h4 id="volumeattachmenthandler"><a class="header" href="#volumeattachmenthandler">VolumeAttachmentHandler</a></h4>
-<p>Inside <code>github.com/gardener/machine-controller-manager/pkg/util/provider/drain/volume_attachment.go</code>,
-<a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler">pkg/util/provider/drain.VolumeAttachmentHandler</a> is an handler used to distribute
-incoming <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> requests to all listening workers via means of a slice of typed <code>VolumeAttachment</code> channels. A <code>VolumeAttachment</code> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
-<pre><code class="language-go">type VolumeAttachmentHandler struct {
-	sync.Mutex
-	workers []chan *storagev1.VolumeAttachment
-}
-
-// NewVolumeAttachmentHandler returns a new VolumeAttachmentHandler
-func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
-	return &amp;VolumeAttachmentHandler{
-		Mutex:   sync.Mutex{},
-		workers: []chan *storagev1.VolumeAttachment{},
-	}
-}
-</code></pre>
-<p>The <code>dispatch</code> method is responsible for distributing incomding <code>VolumeAttachent</code>s to available channels.</p>
-<pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
-	if len(v.workers) == 0 {
-		// As no workers are registered, nothing to do here.
-		return
-	}
-	volumeAttachment := obj.(*storagev1.VolumeAttachment)
-	v.Lock()
-	defer v.Unlock()
-
-	for i, worker := range v.workers {
-		select {
-		case worker &lt;- volumeAttachment:
-		default:
-			klog.Warningf(&quot;Worker %d/%v is full. Discarding value.&quot;, i, worker)
-			// TODO: Umm..isn't this problematic if we miss this ?
-		}
-	}
-}
-</code></pre>
-<p>The <code>Add|Update</code> methods below delegate to dispatch. The usage of this utility involves specifying the add/update methods below as the event handler callbacks on an instance of <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/informers/storage/v1#VolumeAttachmentInformer">k8s.io/client-go/informers/storage/v1.VolumeAttachmentInformer</a>. This way incoming volume attachments are distributed to several worker channels.</p>
-<pre><code class="language-go">func (v *VolumeAttachmentHandler) AddVolumeAttachment(obj interface{}) {
-	v.dispatch(obj)
-}
-
-func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interface{}) {
-	v.dispatch(newObj)
-}
-</code></pre>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40">machine-controller-manager/pkg/util/provider/app/options.MCServer</a>
@@ -1451,7 +1455,8 @@ type controller struct {
 </tbody></table>
 </div>
 <h3 id="status"><a class="header" href="#status">Status</a></h3>
-<p>NOTE: This type is madly named. It should be called <code>MachineError</code> instead of <code>Status</code></p>
+<p>(OPINION: I beleive this is design defect. Ideally one should have re-levaraged the k8s API machinery Status https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/apis/meta/v1#Status
+instead of making custom status object.)</p>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status">status</a> implements errors returned by MachineAPIs. MachineAPIs service handlers should return an error created by this package, and machineAPIs clients should expect a corresponding error to be returned from the RPC call.</p>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status#Status">status.Status</a> implements <code>error</code> and encapsulates a <code>code</code> which should be onf the codes in <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code">codes.Code</a> and a develoer-facing error message in English</p>
 <pre><code class="language-go">type Status struct {
@@ -1695,7 +1700,7 @@ SetForceDelParams--No--&gt;UpdateNodeTermCond[&quot;err=c.UpdateNodeTerminationC
 ChkForceDelOrTimedOut--No--&gt;UpdateNodeTermCond
 
 UpdateNodeTermCond--&gt;ChkUpdateErr{&quot;err != nil ?&quot;}
-ChkUpdateErr----&gt;InitDrainOpts[&quot;
+ChkUpdateErr--No--&gt;InitDrainOpts[&quot;
   // params reduced for brevity
   drainOptions := drain.NewDrainOptions(
     c.targetCoreClient,
@@ -1732,7 +1737,8 @@ InitLastOp[&quot;lastOp:=v1alpha1.LastOperation{
 			State:          state,
 			Type:           v1alpha1.MachineOperationDelete,
 			LastUpdateTime: metav1.Now(),
-		}&quot;]
+		}
+  //lastOp is actually the *next* op semantically&quot;]
 SetOpStateFailed--&gt;InitLastOp
 InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)&quot;]
 --&gt;Return((&quot;machineutils.ShortRetry, err&quot;))
@@ -1744,11 +1750,9 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 <li>Check TODO:  <code>ReadonlyFilesystem</code> is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.</li>
 </ol>
 </li>
-<li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?</li>
+<li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?/</li>
+<li>See <a href="./node_drain.html#run-drain">Run Drain</a></li>
 </ol>
-<p>btmp</p>
-<pre><code></code></pre>
-<p>etmp</p>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
 </code></pre>
@@ -1757,7 +1761,219 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 <pre><code class="language-go">func (c *controller) syncMachineNodeTemplates(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error) 
 </code></pre>
 <p>TODO: illustrate me</p>
-<div style="break-before: page; page-break-before: always;"></div><h1 id="node-drain"><a class="header" href="#node-drain">Node Drain</a></h1>
+<div style="break-before: page; page-break-before: always;"></div><ul>
+<li><a href="node_drain.html#node-drain">Node Drain</a>
+<ul>
+<li><a href="node_drain.html#drain-utilities">Drain Utilities</a>
+<ul>
+<li><a href="node_drain.html#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
+</ul>
+</li>
+<li><a href="node_drain.html#drain">Drain</a>
+<ul>
+<li><a href="node_drain.html#drainoptions">drain.Options</a></li>
+<li><a href="node_drain.html#drainoptionsrundrain">drain.Options.RunDrain</a></li>
+<li><a href="node_drain.html#drainoptionsevictpodswithoutpv">drain.Options.evictPodsWithoutPv</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h1 id="node-drain"><a class="header" href="#node-drain">Node Drain</a></h1>
+<p>Node Drain code is in <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go">github.com/gardener/machine-controller-manager/pkg/util/provider/drain/drain.go</a></p>
+<h2 id="drain-utilities"><a class="header" href="#drain-utilities">Drain Utilities</a></h2>
+<h3 id="volumeattachmenthandler"><a class="header" href="#volumeattachmenthandler">VolumeAttachmentHandler</a></h3>
+<p>Inside <code>github.com/gardener/machine-controller-manager/pkg/util/provider/drain/volume_attachment.go</code>,
+<a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler">pkg/util/provider/drain.VolumeAttachmentHandler</a> is an handler used to distribute
+incoming <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> requests to all listening workers via means of a slice of typed <code>VolumeAttachment</code> channels. A <code>VolumeAttachment</code> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
+<pre><code class="language-go">type VolumeAttachmentHandler struct {
+	sync.Mutex
+	workers []chan *storagev1.VolumeAttachment
+}
+
+// NewVolumeAttachmentHandler returns a new VolumeAttachmentHandler
+func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
+	return &amp;VolumeAttachmentHandler{
+		Mutex:   sync.Mutex{},
+		workers: []chan *storagev1.VolumeAttachment{},
+	}
+}
+</code></pre>
+<p>The <code>dispatch</code> method is responsible for distributing incomding <code>VolumeAttachent</code>s to available channels.</p>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
+	if len(v.workers) == 0 {
+		// As no workers are registered, nothing to do here.
+		return
+	}
+	volumeAttachment := obj.(*storagev1.VolumeAttachment)
+	v.Lock()
+	defer v.Unlock()
+
+	for i, worker := range v.workers {
+		select {
+		case worker &lt;- volumeAttachment:
+		default:
+			klog.Warningf(&quot;Worker %d/%v is full. Discarding value.&quot;, i, worker)
+			// TODO: Umm..isn't this problematic if we miss this ?
+		}
+	}
+}
+</code></pre>
+<p>The <code>Add|Update</code> methods below delegate to dispatch. The usage of this utility involves specifying the add/update methods below as the event handler callbacks on an instance of <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/informers/storage/v1#VolumeAttachmentInformer">k8s.io/client-go/informers/storage/v1.VolumeAttachmentInformer</a>. This way incoming volume attachments are distributed to several worker channels.</p>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) AddVolumeAttachment(obj interface{}) {
+	v.dispatch(obj)
+}
+
+func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interface{}) {
+	v.dispatch(newObj)
+}
+</code></pre>
+<h2 id="drain"><a class="header" href="#drain">Drain</a></h2>
+<h3 id="drainoptions"><a class="header" href="#drainoptions">drain.Options</a></h3>
+<p><code>drain.Options</code> are configurable options while draining a node before deletion</p>
+<p>NOTE: Unused fields/Fields with constant defaults omitted for brevity</p>
+<pre><code class="language-go">type Options struct {
+	client                       kubernetes.Interface
+	kubernetesVersion            *semver.Version
+	Driver                       driver.Driver
+	drainStartedOn               time.Time
+	drainEndedOn                 time.Time
+	ErrOut                       io.Writer
+	ForceDeletePods              bool
+	MaxEvictRetries              int32
+	PvDetachTimeout              time.Duration
+	PvReattachTimeout            time.Duration
+	nodeName                     string
+	Out                          io.Writer
+	pvcLister                    corelisters.PersistentVolumeClaimLister
+	pvLister                     corelisters.PersistentVolumeLister
+	pdbV1Lister                  policyv1listers.PodDisruptionBudgetLister
+	nodeLister                   corelisters.NodeLister
+	volumeAttachmentHandler      *VolumeAttachmentHandler
+	Timeout                      time.Duration
+}
+
+</code></pre>
+<h3 id="drainoptionsrundrain"><a class="header" href="#drainoptionsrundrain">drain.Options.RunDrain</a></h3>
+<pre><code class="language-go">func (o *Options) RunDrain(ctx context.Context) error
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+
+GetNode[&quot;node, err = .client.CoreV1().Nodes().Get(ctx, o.nodeName, metav1.GetOptions{})&quot;]
+--&gt;ChkGetNodeErr{err != nil}
+
+ChkGetNodeErr--Yes--&gt;ReturnNilEarly((&quot;return nil
+(case where deletion 
+triggered during machine creation, 
+so node is nil. 
+TODO: should use apierrors.NotFound)&quot;))
+
+ChkGetNodeErr--No--&gt;ChkNodeUnschedulable{node.Spec.Unschedulable?}
+
+ChkNodeUnschedulable--Yes--&gt;GetPodsForDeletion[&quot;
+    pods, err := o.getPodsForDeletion(ctx)
+    if err!=nil return err&quot;]
+ChkNodeUnschedulable--No--&gt;CloneNode[&quot;clone := node.DeepCopy()
+		clone.Spec.Unschedulable = true&quot;]
+        --&gt;UpdateNode[&quot;_, err = o.client.CoreV1().Nodes().Update(ctx, clone, metav1.UpdateOptions{})
+        if err != nil return err
+        &quot;]
+
+UpdateNode--&gt;GetPodsForDeletion
+GetPodsForDeletion--&gt;GetEvictionPGV[&quot;
+    policyGroupVersion, err := SupportEviction(o.client)
+    if err != nil return err
+    &quot;]
+--&gt;
+DefineAttemptEvict[&quot;
+attemptEvict := !o.ForceDeletePods &amp;&amp; len(policyGroupVersion) &gt; 0
+&quot;]
+--&gt;
+DefineGetPodFn[&quot;
+getPodFn := func(namespace, name string) (*corev1.Pod, error) {
+		return o.client.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
+}&quot;]
+--&gt;
+CreateReturnChannel[&quot;
+    returnCh := make(chan error, len(pods))
+	defer close(returnCh)
+    &quot;]
+--&gt;ChkForceDelPods{&quot;o.ForceDeletePods?&quot;}
+
+ChkForceDelPods--Yes--&gt;EvictPodsWithoutPV[&quot;go o.evictPodsWithoutPv(ctx, attemptEvict, pods, policyGroupVersion, getPodFn, returnCh)
+// go-routine feels un-necessary here.&quot;]
+ChkForceDelPods--No--&gt;FilterPodsWithPv[&quot;
+podsWithPv, podsWithoutPv := filterPodsWithPv(pods)
+&quot;]
+
+FilterPodsWithPv--&gt;EvictPodsWithPv[&quot;
+go o.evictPodsWithPv(ctx, attemptEvict, podsWithPv, policyGroupVersion, getPodFn, returnCh)
+&quot;]
+--&gt;EvictPodsWithoutPV
+
+EvictPodsWithoutPV--&gt;CreateAggregateError[&quot;
+	var errors []error
+    errors =
+	for i = 0; i &lt;  len(pods); ++i {
+		err := &lt;-returnCh
+		if err != nil {
+			errors = append(errors, err)
+		}
+	}
+	
+&quot;]
+--&gt;ReturnAggError((&quot;return\nerrors.NewAggregate(errors)&quot;))
+
+</pre>
+<p>Notes:</p>
+<ol>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L1106">machine-controller-manager/pkg/util/provider/drain.SupportEviction</a> uses Discovery API to find out if the server support eviction subresource and if so return its groupVersion or &quot;&quot; if it doesn't.
+<ol>
+<li><a href="https://pkg.go.dev/k8s.io/kubectl/pkg/drain#CheckEvictionSupport">k8s.io/kubectl/pkg/drain.CheckEvictionSupport</a> already does this.</li>
+</ol>
+</li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict boolean</a> usage is confusing.</li>
+</ol>
+<h3 id="drainoptionsevictpodswithoutpv"><a class="header" href="#drainoptionsevictpodswithoutpv">drain.Options.evictPodsWithoutPv</a></h3>
+<p>method that iterates through each given pod and launchews a go-routine that performs either pod eviction or pod deletion followed by a wait accompanied with error and retry handling for each pod in an independent go-routine for every pod. </p>
+<pre><code class="language-go">func (o *Options) evictPodsWithoutPv(ctx context.Context, 
+    pods []*corev1.Pod,
+	policyGroupVersion string, //eviction API's GV
+	getPodFn func(namespace, name string) (*corev1.Pod, error),
+	returnCh chan error)
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+
+RangePod[&quot;pod := range pods&quot;]
+RangePod--&gt;EvictOrDelPod[&quot;go evictPodWithoutPVInternal(attemptEvict bool, pod, policyGroupVersion,pod,getPodFn,returnCh)&quot;]
+EvictOrDelPod--&gt;Begin
+
+subgraph &quot;evictPodWithoutPVInternal (evicts or deletes Pod) &quot;
+Begin((&quot;Begin&quot;))--&gt;SetRetry[&quot;retry := 0&quot;]
+SetRetry
+--&gt;SetAttemptEvict[&quot;attemptEvict := retry &gt;= o.MaxEvictRetries&quot;]
+--&gt;ChkAttemptEvict{&quot;attemptEvict ?&quot;}
+
+ChkAttemptEvict--Yes--&gt;EvictPod[&quot;err=o.evictPod(ctx, pod, policyGroupVersion)&quot;]
+ChkAttemptEvict--No--&gt;DelPod[&quot;err=o.deletePod(ctx, pod)&quot;]
+
+EvictPod--&gt;ChkErr
+DelPod--&gt;ChkErr
+
+ChkErr{&quot;Check err&quot;}
+ChkErr--&quot;apierrors.IsNotFound(err)&quot;--&gt;SendNilChannel--&gt;NilReturn
+
+
+end
+
+SendNilChannel[&quot;returnCh &lt;- nil&quot;]
+NilReturn((&quot;return nil&quot;))
+
+</pre>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="mc_helper_funcs.html#machine-controller-helper-methods">Machine Controller Helper Methods</a>
 <ul>
@@ -1903,12 +2119,12 @@ UpdateCondOnNode--&gt;ChkNotFound
 <li><a href="issues.html#safetyoptionsmachinedraintimeout">SafetyOptions.MachineDrainTimeout</a></li>
 </ul>
 </li>
-<li><a href="issues.html#dup-methods-and-constants">Dup Methods and Constants</a></li>
+<li><a href="issues.html#dup-code">Dup Code</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="issues.html#drainnode-error-handling">drainNode Error Handling</a></li>
+<li><a href="issues.html#drainnode-handling">drainNode Handling</a></li>
 <li><a href="issues.html#node-conditions">Node Conditions</a></li>
 <li><a href="issues.html#volumeattachment">VolumeAttachment</a></li>
 </ul>
@@ -1958,18 +2174,24 @@ cmd/machine-controller/main.go
 ...
 machine-drain-timeout=5m
 </code></pre>
-<h4 id="dup-methods-and-constants"><a class="header" href="#dup-methods-and-constants">Dup Methods and Constants</a></h4>
+<h4 id="dup-code"><a class="header" href="#dup-code">Dup Code</a></h4>
 <ul>
-<li>Methods in <code>pkg/controller/machine_util.go</code></li>
-<li>Dup <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48">NodeTerminationCondition</a> in <code>pkg/controller/machine_util.go</code>. The one that is being actively used is <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70">machineutils.NodeTerminationCondition</a></li>
-</ul>
-<h2 id="drainnode-error-handling"><a class="header" href="#drainnode-error-handling">drainNode Error Handling</a></h2>
+<li>Types/func/smethods in <code>pkg/controller/machine_util.go</code>
 <ul>
-<li>Does not set err when c.machineStatusUpdate is called</li>
+<li>Ex: Dup <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48">NodeTerminationCondition</a> in <code>pkg/controller/machine_util.go</code>. The one that is being actively used is <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70">machineutils.NodeTerminationCondition</a></li>
 </ul>
+</li>
+<li>Types/funcs/methods in <code>pkg/controller/drain.go</code> </li>
+</ul>
+<h2 id="drainnode-handling"><a class="header" href="#drainnode-handling">drainNode Handling</a></h2>
+<ol>
+<li>Does not set err when <code>c.machineStatusUpdate</code> is called</li>
+<li><code>o.RunCordonOrUncordon</code> should use <code>apierrors.NotFound</code> while checking error returned by a get node op</li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict bool usage</a> is confusing. Better design needed.</li>
+</ol>
 <h2 id="node-conditions"><a class="header" href="#node-conditions">Node Conditions</a></h2>
 <ul>
-<li><code>CloneAndAddCondition</code> logic seems erroneous.</li>
+<li><code>CloneAndAddCondition</code> logic seems erroneous ?</li>
 </ul>
 <h2 id="volumeattachment-1"><a class="header" href="#volumeattachment-1">VolumeAttachment</a></h2>
 <pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {

@@ -182,11 +182,6 @@
 <li><a href="#retry-periods">Retry Periods</a></li>
 </ul>
 </li>
-<li><a href="#drain-utilities">Drain Utilities</a>
-<ul>
-<li><a href="#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
-</ul>
-</li>
 </ul>
 </li>
 <li><a href="#main-server-structs">Main Server Structs</a>
@@ -569,53 +564,6 @@ const (
 )
 
 </code></pre>
-<h3 id="drain-utilities"><a class="header" href="#drain-utilities">Drain Utilities</a></h3>
-<h4 id="volumeattachmenthandler"><a class="header" href="#volumeattachmenthandler">VolumeAttachmentHandler</a></h4>
-<p>Inside <code>github.com/gardener/machine-controller-manager/pkg/util/provider/drain/volume_attachment.go</code>,
-<a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler">pkg/util/provider/drain.VolumeAttachmentHandler</a> is an handler used to distribute
-incoming <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> requests to all listening workers via means of a slice of typed <code>VolumeAttachment</code> channels. A <code>VolumeAttachment</code> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
-<pre><code class="language-go">type VolumeAttachmentHandler struct {
-	sync.Mutex
-	workers []chan *storagev1.VolumeAttachment
-}
-
-// NewVolumeAttachmentHandler returns a new VolumeAttachmentHandler
-func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
-	return &amp;VolumeAttachmentHandler{
-		Mutex:   sync.Mutex{},
-		workers: []chan *storagev1.VolumeAttachment{},
-	}
-}
-</code></pre>
-<p>The <code>dispatch</code> method is responsible for distributing incomding <code>VolumeAttachent</code>s to available channels.</p>
-<pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
-	if len(v.workers) == 0 {
-		// As no workers are registered, nothing to do here.
-		return
-	}
-	volumeAttachment := obj.(*storagev1.VolumeAttachment)
-	v.Lock()
-	defer v.Unlock()
-
-	for i, worker := range v.workers {
-		select {
-		case worker &lt;- volumeAttachment:
-		default:
-			klog.Warningf(&quot;Worker %d/%v is full. Discarding value.&quot;, i, worker)
-			// TODO: Umm..isn't this problematic if we miss this ?
-		}
-	}
-}
-</code></pre>
-<p>The <code>Add|Update</code> methods below delegate to dispatch. The usage of this utility involves specifying the add/update methods below as the event handler callbacks on an instance of <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/informers/storage/v1#VolumeAttachmentInformer">k8s.io/client-go/informers/storage/v1.VolumeAttachmentInformer</a>. This way incoming volume attachments are distributed to several worker channels.</p>
-<pre><code class="language-go">func (v *VolumeAttachmentHandler) AddVolumeAttachment(obj interface{}) {
-	v.dispatch(obj)
-}
-
-func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interface{}) {
-	v.dispatch(newObj)
-}
-</code></pre>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40">machine-controller-manager/pkg/util/provider/app/options.MCServer</a>
@@ -805,7 +753,8 @@ type controller struct {
 </tbody></table>
 </div>
 <h3 id="status"><a class="header" href="#status">Status</a></h3>
-<p>NOTE: This type is madly named. It should be called <code>MachineError</code> instead of <code>Status</code></p>
+<p>(OPINION: I beleive this is design defect. Ideally one should have re-levaraged the k8s API machinery Status https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/apis/meta/v1#Status
+instead of making custom status object.)</p>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status">status</a> implements errors returned by MachineAPIs. MachineAPIs service handlers should return an error created by this package, and machineAPIs clients should expect a corresponding error to be returned from the RPC call.</p>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/status#Status">status.Status</a> implements <code>error</code> and encapsulates a <code>code</code> which should be onf the codes in <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code">codes.Code</a> and a develoer-facing error message in English</p>
 <pre><code class="language-go">type Status struct {
