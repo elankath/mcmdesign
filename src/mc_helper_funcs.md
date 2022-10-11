@@ -105,7 +105,7 @@ NOTE: [isMachineStatusSimilar](https://github.com/gardener/machine-controller-ma
 
 ## controller.UpdateNodeTerminationCondition
 
-[controller.UpdateNodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L1316) updates termination condition on the node object
+[controller.UpdateNodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L1316) adds or updates the termination condition to the `Node.Status.Conditions` of the node object corresponding to the machine.
 
 ```go
 func (c *controller) UpdateNodeTerminationCondition(ctx context.Context, machine *v1alpha1.Machine) error 
@@ -127,16 +127,26 @@ Init["
 ChkIfErr--Yes-->ChkNotFound{"apierrors.IsNotFound(err)"}
 ChkNotFound--Yes-->ReturnNil(("return nil"))
 ChkNotFound--No-->ReturnErr(("return err"))
-ChkIfErr--No-->ChkOldTermCondNil{"oldTermCond == nil?"}
-ChkOldTermCondNil--Yes-->ChkMachinePhase{"machine.Status.CurrentStatus.Phase?"}
+ChkIfErr--No-->ChkOldTermCondNotNil{"oldTermCond != nil
+&& machine.Status.CurrentStatus.Phase 
+== MachineTerminating ?"}
+
+ChkOldTermCondNotNil--No-->ChkMachinePhase{"Check\nmachine\n.Status.CurrentStatus\n.Phase?"}
 ChkMachinePhase--MachineFailed-->NodeUnhealthy["newTermCond.Reason = machineutils.NodeUnhealthy"]
 ChkMachinePhase--"else"-->NodeScaleDown["newTermCond.Reason=machineutils.NodeScaledDown
 //assumes scaledown..why?"]
 NodeUnhealthy-->UpdateCondOnNode["err=nodeops.AddOrUpdateConditionsOnNode(ctx, c.targetCoreClient, nodeName, newTermCond)"]
 NodeScaleDown-->UpdateCondOnNode
+
+
+ChkOldTermCondNotNil--Yes-->CopyTermReasonAndMessage["
+newTermCond.Reason=oldTermCond.Reason
+newTermCond.Message=oldTermCond.Message
+"]
+CopyTermReasonAndMessage-->UpdateCondOnNode
+
+
 UpdateCondOnNode-->ChkNotFound
-
-
 ```
 
 

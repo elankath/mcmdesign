@@ -1796,7 +1796,7 @@ ChkSimilarStatus--Yes--&gt;Z2((&quot;return nil&quot;))
 </pre>
 <p>NOTE: <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L544">isMachineStatusSimilar</a> implementation is quite sad. TODO: we should improve stuff like this when we move to controller-runtime.</p>
 <h2 id="controllerupdatenodeterminationcondition"><a class="header" href="#controllerupdatenodeterminationcondition">controller.UpdateNodeTerminationCondition</a></h2>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L1316">controller.UpdateNodeTerminationCondition</a> updates termination condition on the node object</p>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L1316">controller.UpdateNodeTerminationCondition</a> adds or updates the termination condition to the <code>Node.Status.Conditions</code> of the node object corresponding to the machine.</p>
 <pre><code class="language-go">func (c *controller) UpdateNodeTerminationCondition(ctx context.Context, machine *v1alpha1.Machine) error 
 </code></pre>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
@@ -1814,16 +1814,26 @@ Init[&quot;
 ChkIfErr--Yes--&gt;ChkNotFound{&quot;apierrors.IsNotFound(err)&quot;}
 ChkNotFound--Yes--&gt;ReturnNil((&quot;return nil&quot;))
 ChkNotFound--No--&gt;ReturnErr((&quot;return err&quot;))
-ChkIfErr--No--&gt;ChkOldTermCondNil{&quot;oldTermCond == nil?&quot;}
-ChkOldTermCondNil--Yes--&gt;ChkMachinePhase{&quot;machine.Status.CurrentStatus.Phase?&quot;}
+ChkIfErr--No--&gt;ChkOldTermCondNotNil{&quot;oldTermCond != nil
+&amp;&amp; machine.Status.CurrentStatus.Phase 
+== MachineTerminating ?&quot;}
+
+ChkOldTermCondNotNil--No--&gt;ChkMachinePhase{&quot;Check\nmachine\n.Status.CurrentStatus\n.Phase?&quot;}
 ChkMachinePhase--MachineFailed--&gt;NodeUnhealthy[&quot;newTermCond.Reason = machineutils.NodeUnhealthy&quot;]
 ChkMachinePhase--&quot;else&quot;--&gt;NodeScaleDown[&quot;newTermCond.Reason=machineutils.NodeScaledDown
 //assumes scaledown..why?&quot;]
 NodeUnhealthy--&gt;UpdateCondOnNode[&quot;err=nodeops.AddOrUpdateConditionsOnNode(ctx, c.targetCoreClient, nodeName, newTermCond)&quot;]
 NodeScaleDown--&gt;UpdateCondOnNode
+
+
+ChkOldTermCondNotNil--Yes--&gt;CopyTermReasonAndMessage[&quot;
+newTermCond.Reason=oldTermCond.Reason
+newTermCond.Message=oldTermCond.Message
+&quot;]
+CopyTermReasonAndMessage--&gt;UpdateCondOnNode
+
+
 UpdateCondOnNode--&gt;ChkNotFound
-
-
 </pre>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="issues.html#issues">Issues</a>
