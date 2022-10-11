@@ -20,7 +20,6 @@
 			- [Retry Periods](#retry-periods)
 		- [Drain Utilities](#drain-utilities)
 			- [VolumeAttachmentHandler](#volumeattachmenthandler)
-				- [Utility Functions](#utility-functions)
 	- [Main Server Structs](#main-server-structs)
 		- [MCServer](#mcserver)
 			- [MCServer Usage](#mcserver-usage)
@@ -502,11 +501,6 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 	v.dispatch(newObj)
 }
 ```
-
-##### Utility Functions
-
-`getEffectiveDrainTimeout`
-
 
 
 ## Main Server Structs

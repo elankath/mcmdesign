@@ -332,9 +332,9 @@ CreaterRetryVMStatusOp--&gt;ShortR
 
 CreateDrainOp--&gt;ShortR
 CreateNodeDelOp--&gt;ShortR
-ShortR--&gt;MachineStatusUpdate
-LongR--&gt;MachineStatusUpdate
-MachineStatusUpdate--&gt;Z
+ShortR--&gt;UpdateMachineStatus
+LongR--&gt;UpdateMachineStatus
+UpdateMachineStatus--&gt;Z
 </pre>
 <h3 id="controllerdrainnode"><a class="header" href="#controllerdrainnode">controller.drainNode</a></h3>
 <p>Inside <code>pkg/util/provider/machinecontroller/machine_util.go</code></p>
@@ -344,20 +344,76 @@ MachineStatusUpdate--&gt;Z
 %%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
-Initialize[&quot;machine = dmr.Machine
+
+Initialize[&quot;err = nil
+machine = dmr.Machine
 nodeName= machine.Labels['node']
 drainTimeout=machine.Spec.MachineConfiguration.MachineDrainTimeout || c.safetyOptions.MachineDrainTimeout
-forceDeleteLabelPresent = machine.Labels['force-deletion'] == 'True'
+maxEvictRetries=machine.Spec.MachineConfiguration.MaxEvictRetries || c.safetyOptions.MaxEvictRetries
 skipDrain = false&quot;]
 --&gt;GetNodeReadyCond[&quot;nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
 readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
 &quot;]
---&gt;ChkNodeNotReady[&quot;skipDrain = (nodeReadyCond.Status == ConditionFalse) &amp;&amp; nodeReadyCondition.LastTransitionTime.Time &gt; 5m&quot;]
---&gt;ChkReadOnlyFS[&quot;skipDrain = (readOnlyFSCond.Status == ConditionTrue) &amp;&amp; readOnlyFSCond.LastTransitionTime.Time &gt; 5m&quot;]
---&gt;ChkSkipDrain1{&quot;skipDrain true?&quot;}
-ChkSkipDrain1--No--&gt;
-ChkSkipDrain1--Yes--&gt;SetOpState[&quot;opState=MachineStateProcessing&quot;]
-Z((&quot;End&quot;))
+--&gt;ChkNodeNotReady[&quot;skipDrain = (nodeReadyCond.Status == ConditionFalse) &amp;&amp; nodeReadyCondition.LastTransitionTime.Time &gt; 5m
+or (readOnlyFSCond.Status == ConditionTrue) &amp;&amp; readOnlyFSCond.LastTransitionTime.Time &gt; 5m
+// discuss this
+&quot;]
+--&gt;ChkSkipDrain{&quot;skipDrain true?&quot;}
+ChkSkipDrain--Yes--&gt;SetOpStateProcessing
+ChkSkipDrain--No--&gt;SetHasDrainTimedOut[&quot;hasDrainTimedOut = time.Now() &gt; machine.DeletionTimestamp + drainTimeout&quot;]
+SetHasDrainTimedOut--&gt;ChkForceDelOrTimedOut{&quot;machine.Labels['force-deletion']
+  || hasDrainTimedOut&quot;}
+
+ChkForceDelOrTimedOut--Yes--&gt;SetForceDelParams[&quot;
+  forceDeletePods=true
+  drainTimeout=1m
+  maxEvictRetries=1
+  &quot;]
+SetForceDelParams--No--&gt;UpdateNodeTermCond[&quot;err=c.UpdateNodeTerminationCondition(ctx, machine)&quot;]
+ChkForceDelOrTimedOut--No--&gt;UpdateNodeTermCond
+
+UpdateNodeTermCond--&gt;ChkUpdateErr{&quot;err != nil ?&quot;}
+ChkUpdateErr----&gt;InitDrainOpts[&quot;
+  // params reduced for brevity
+  drainOptions := drain.NewDrainOptions(
+    c.targetCoreClient,
+    drainTimeout,
+    maxEvictRetries,
+    c.safetyOptions.PvDetachTimeout.Duration,
+    c.safetyOptions.PvReattachTimeout.Duration,
+    nodeName,
+    forceDeletePods,
+    c.driver,
+		c.pvcLister,
+		c.pvLister,
+    c.pdbV1Lister,
+		c.nodeLister,
+		c.volumeAttachmentHandler)
+&quot;]
+ChkUpdateErr--&quot;Yes&amp;&amp;forceDelPods&quot;--&gt;InitDrainOpts
+ChkUpdateErr--Yes--&gt;SetOpStateFailed[&quot;opstate = v1alpha1.MachineStateFailed
+  description=machineutils.InitiateDrain
+  //drain failed. retry next sync
+  &quot;]
+
+InitDrainOpts--&gt;RunDrain[&quot;err = drainOptions.RunDrain(ctx)&quot;]
+RunDrain--&gt;ChkDrainErr{&quot;err!=nil?&quot;}
+ChkDrainErr--No--&gt;SetOpStateProcessing[&quot;
+  opstate= v1alpha1.MachineStateProcessing
+  description=machineutils.InitiateVMDeletion
+// proceed with vm deletion&quot;]
+ChkDrainErr--&quot;Yes &amp;&amp; forceDeletePods&quot;--&gt;SetOpStateProcessing
+ChkDrainErr--Yes--&gt;SetOpStateFailed
+SetOpStateProcessing--&gt;
+InitLastOp[&quot;lastOp:=v1alpha1.LastOperation{
+			Description:    description,
+			State:          state,
+			Type:           v1alpha1.MachineOperationDelete,
+			LastUpdateTime: metav1.Now(),
+		}&quot;]
+SetOpStateFailed--&gt;InitLastOp
+InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)&quot;]
+--&gt;Return((&quot;machineutils.ShortRetry, err&quot;))
 </pre>
 <p>Note on above</p>
 <ol>

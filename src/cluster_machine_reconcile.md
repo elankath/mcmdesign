@@ -190,9 +190,9 @@ CreaterRetryVMStatusOp-->ShortR
 
 CreateDrainOp-->ShortR
 CreateNodeDelOp-->ShortR
-ShortR-->MachineStatusUpdate
-LongR-->MachineStatusUpdate
-MachineStatusUpdate-->Z
+ShortR-->UpdateMachineStatus
+LongR-->UpdateMachineStatus
+UpdateMachineStatus-->Z
 ```
 
 ### controller.drainNode
@@ -208,20 +208,76 @@ func (c *controller) drainNode(ctx context.Context, dmr *driver.DeleteMachineReq
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
 
-Initialize["machine = dmr.Machine
+
+Initialize["err = nil
+machine = dmr.Machine
 nodeName= machine.Labels['node']
 drainTimeout=machine.Spec.MachineConfiguration.MachineDrainTimeout || c.safetyOptions.MachineDrainTimeout
-forceDeleteLabelPresent = machine.Labels['force-deletion'] == 'True'
+maxEvictRetries=machine.Spec.MachineConfiguration.MaxEvictRetries || c.safetyOptions.MaxEvictRetries
 skipDrain = false"]
 -->GetNodeReadyCond["nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
 readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
 "]
--->ChkNodeNotReady["skipDrain = (nodeReadyCond.Status == ConditionFalse) && nodeReadyCondition.LastTransitionTime.Time > 5m"]
--->ChkReadOnlyFS["skipDrain = (readOnlyFSCond.Status == ConditionTrue) && readOnlyFSCond.LastTransitionTime.Time > 5m"]
--->ChkSkipDrain1{"skipDrain true?"}
-ChkSkipDrain1--No-->
-ChkSkipDrain1--Yes-->SetOpState["opState=MachineStateProcessing"]
-Z(("End"))
+-->ChkNodeNotReady["skipDrain = (nodeReadyCond.Status == ConditionFalse) && nodeReadyCondition.LastTransitionTime.Time > 5m
+or (readOnlyFSCond.Status == ConditionTrue) && readOnlyFSCond.LastTransitionTime.Time > 5m
+// discuss this
+"]
+-->ChkSkipDrain{"skipDrain true?"}
+ChkSkipDrain--Yes-->SetOpStateProcessing
+ChkSkipDrain--No-->SetHasDrainTimedOut["hasDrainTimedOut = time.Now() > machine.DeletionTimestamp + drainTimeout"]
+SetHasDrainTimedOut-->ChkForceDelOrTimedOut{"machine.Labels['force-deletion']
+  || hasDrainTimedOut"}
+
+ChkForceDelOrTimedOut--Yes-->SetForceDelParams["
+  forceDeletePods=true
+  drainTimeout=1m
+  maxEvictRetries=1
+  "]
+SetForceDelParams--No-->UpdateNodeTermCond["err=c.UpdateNodeTerminationCondition(ctx, machine)"]
+ChkForceDelOrTimedOut--No-->UpdateNodeTermCond
+
+UpdateNodeTermCond-->ChkUpdateErr{"err != nil ?"}
+ChkUpdateErr---->InitDrainOpts["
+  // params reduced for brevity
+  drainOptions := drain.NewDrainOptions(
+    c.targetCoreClient,
+    drainTimeout,
+    maxEvictRetries,
+    c.safetyOptions.PvDetachTimeout.Duration,
+    c.safetyOptions.PvReattachTimeout.Duration,
+    nodeName,
+    forceDeletePods,
+    c.driver,
+		c.pvcLister,
+		c.pvLister,
+    c.pdbV1Lister,
+		c.nodeLister,
+		c.volumeAttachmentHandler)
+"]
+ChkUpdateErr--"Yes&&forceDelPods"-->InitDrainOpts
+ChkUpdateErr--Yes-->SetOpStateFailed["opstate = v1alpha1.MachineStateFailed
+  description=machineutils.InitiateDrain
+  //drain failed. retry next sync
+  "]
+
+InitDrainOpts-->RunDrain["err = drainOptions.RunDrain(ctx)"]
+RunDrain-->ChkDrainErr{"err!=nil?"}
+ChkDrainErr--No-->SetOpStateProcessing["
+  opstate= v1alpha1.MachineStateProcessing
+  description=machineutils.InitiateVMDeletion
+// proceed with vm deletion"]
+ChkDrainErr--"Yes && forceDeletePods"-->SetOpStateProcessing
+ChkDrainErr--Yes-->SetOpStateFailed
+SetOpStateProcessing-->
+InitLastOp["lastOp:=v1alpha1.LastOperation{
+			Description:    description,
+			State:          state,
+			Type:           v1alpha1.MachineOperationDelete,
+			LastUpdateTime: metav1.Now(),
+		}"]
+SetOpStateFailed-->InitLastOp
+InitLastOp-->UpdateMachineStatus["c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)"]
+-->Return(("machineutils.ShortRetry, err"))
 ```
 
 Note on above

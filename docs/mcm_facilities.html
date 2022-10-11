@@ -184,11 +184,7 @@
 </li>
 <li><a href="#drain-utilities">Drain Utilities</a>
 <ul>
-<li><a href="#volumeattachmenthandler">VolumeAttachmentHandler</a>
-<ul>
-<li><a href="#utility-functions">Utility Functions</a></li>
-</ul>
-</li>
+<li><a href="#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
 </ul>
 </li>
 </ul>
@@ -620,8 +616,6 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 	v.dispatch(newObj)
 }
 </code></pre>
-<h5 id="utility-functions"><a class="header" href="#utility-functions">Utility Functions</a></h5>
-<p><code>getEffectiveDrainTimeout</code></p>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40">machine-controller-manager/pkg/util/provider/app/options.MCServer</a>
