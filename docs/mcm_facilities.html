@@ -151,6 +151,7 @@
 <ul>
 <li><a href="#machinespec">MachineSpec</a></li>
 <li><a href="#machinestatus">MachineStatus</a></li>
+<li><a href="#extended-nodeconditiontypes">Extended NodeConditionTypes</a></li>
 <li><a href="#lastoperation">LastOperation</a>
 <ul>
 <li><a href="#machinestate-should-be-called-machineoperationstate">MachineState (should be called MachineOperationState)</a></li>
@@ -168,7 +169,13 @@
 </li>
 <li><a href="#utilities">Utilities</a>
 <ul>
-<li><a href="#nodeops">NodeOps</a></li>
+<li><a href="#nodeops">NodeOps</a>
+<ul>
+<li><a href="#nodeopsgetnodecondition">nodeops.GetNodeCondition</a></li>
+<li><a href="#nodeopscloneandaddcondition">nodeops.CloneAndAddCondition</a></li>
+<li><a href="#nodeopsaddorupdateconditionsonnode">nodeops.AddOrUpdateConditionsOnNode</a></li>
+</ul>
+</li>
 <li><a href="#machineutils">MachineUtils</a>
 <ul>
 <li><a href="#operation-descriptions">Operation Descriptions</a></li>
@@ -177,7 +184,11 @@
 </li>
 <li><a href="#drain-utilities">Drain Utilities</a>
 <ul>
-<li><a href="#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
+<li><a href="#volumeattachmenthandler">VolumeAttachmentHandler</a>
+<ul>
+<li><a href="#utility-functions">Utility Functions</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -328,6 +339,12 @@ type NodeTemplateSpec struct { // BADLY NAMED!
 	LastKnownState string 
 }
 </code></pre>
+<h4 id="extended-nodeconditiontypes"><a class="header" href="#extended-nodeconditiontypes">Extended NodeConditionTypes</a></h4>
+<p>The MCM extends standard k8s <a href="./k8s_facilities.html#nodeconditiontype">NodeConditionType</a> with several custom conditions. (TODO: isn't this hacky/error prone?)</p>
+<ul>
+<li><a href="">NodeTerminationCondition</a> defined as <code>	NodeTerminationCondition v1.NodeConditionType = &quot;Terminating&quot;</code></li>
+</ul>
+<p>NodeTerminationCondition</p>
 <h4 id="lastoperation"><a class="header" href="#lastoperation">LastOperation</a></h4>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#LastOperation">github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.LastOperation</a> represents the last operation performed on the object</p>
 <pre><code class="language-go">type LastOperation struct {
@@ -422,7 +439,8 @@ const (
 </code></pre>
 <h2 id="utilities"><a class="header" href="#utilities">Utilities</a></h2>
 <h3 id="nodeops"><a class="header" href="#nodeops">NodeOps</a></h3>
-<p><code>github.com/gardener/machine-controller-manager/pkg/util/nodeops.GetNodeCondition</code> get the nodes condition matching the specified type </p>
+<h4 id="nodeopsgetnodecondition"><a class="header" href="#nodeopsgetnodecondition">nodeops.GetNodeCondition</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/nodeops/conditions.go#L72">machine-controller-manager/pkg/util/nodeops.GetNodeCondition</a> get the nodes condition matching the specified type </p>
 <pre><code class="language-go">func GetNodeCondition(ctx context.Context, c clientset.Interface, nodeName string, conditionType v1.NodeConditionType) (*v1.NodeCondition, error) {
 	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -439,6 +457,54 @@ func getNodeCondition(node *v1.Node, conditionType v1.NodeConditionType) *v1.Nod
 	return nil
 }
 </code></pre>
+<h4 id="nodeopscloneandaddcondition"><a class="header" href="#nodeopscloneandaddcondition">nodeops.CloneAndAddCondition</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/nodeops/conditions.go#L31">machine-controller-manager/pkg/util/nodeops.CloneAndAddCondition</a> adds a condition to the node condition slice. If condition with this type already exists, it updates the <code>LastTransitionTime</code></p>
+<pre><code class="language-go">func CloneAndAddCondition(conditions []v1.NodeCondition, condition v1.NodeCondition) []v1.NodeCondition {
+	if condition.Type == &quot;&quot; || condition.Status == &quot;&quot; {
+		return conditions
+	}
+	var newConditions []v1.NodeCondition
+
+	for _, existingCondition := range conditions {
+		if existingCondition.Type != condition.Type { 
+			newConditions = append(newConditions, existingCondition)
+		} else { 
+			// condition with this type already exists
+			if existingCondition.Status == condition.Status 
+			&amp;&amp; existingCondition.Reason == condition.Reason {
+				// condition status and reason are  the same, keep existing transition time
+				condition.LastTransitionTime = existingCondition.LastTransitionTime
+			}
+		}
+	}
+	newConditions = append(newConditions, condition)
+	return newConditions
+}
+</code></pre>
+<p>TODO: Bug ? Logic above will end up adding duplicate node condition if status and reason phrase are different</p>
+<h4 id="nodeopsaddorupdateconditionsonnode"><a class="header" href="#nodeopsaddorupdateconditionsonnode">nodeops.AddOrUpdateConditionsOnNode</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/nodeops/conditions.go#L81">machine-controller-manager/pkg/util/nodeops.AddOrUpdateConditionsOnNode</a> adds a condition to the node's status, retrying on conflict with backoff.</p>
+<pre><code class="language-go">func AddOrUpdateConditionsOnNode(ctx context.Context, c clientset.Interface, nodeName string, condition v1.NodeCondition) error 
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Init[&quot;backoff = wait.Backoff{
+	Steps:    5,
+	Duration: 100 * time.Millisecond,
+	Jitter:   1.0,
+}&quot;]
+--&gt;retry.RetryOnConflict[&quot;retry.RetryOnConflict(backoff, fn)&quot;]
+--&gt;GetNode[&quot;oldNode, err = c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})&quot;]
+subgraph &quot;fn&quot;
+    GetNode--&gt;ChkIfErr{&quot;err != nil&quot;}
+	ChkIfErr--Yes--&gt;ReturnErr((&quot;return err&quot;))
+	ChkIfErr--No--&gt;InitNewNode[&quot;newNode := oldNode.DeepCopy()&quot;]
+	InitNewNode--&gt;InitConditions[&quot;newNode.Status.Conditions:= CloneAndAddCondition(newNode.Status.Conditions, condition)&quot;]
+	--&gt;UpdateNewNode[&quot;_, err := c.CoreV1().Nodes().UpdateStatus(ctx, newNodeClone, metav1.UpdateOptions{}&quot;]
+	--&gt;ReturnErr
+end
+</pre>
 <h3 id="machineutils"><a class="header" href="#machineutils">MachineUtils</a></h3>
 <h4 id="operation-descriptions"><a class="header" href="#operation-descriptions">Operation Descriptions</a></h4>
 <p><code>machineutils</code> has a bunch of constants that are descriptions of machine operations that are set into <code>machine.Status.LastOperation.Description</code> by the machine controller while performing reconciliation. It also has some <a href="k8s_facilities.html#conditions">reason phrase</a></p>
@@ -554,6 +620,8 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 	v.dispatch(newObj)
 }
 </code></pre>
+<h5 id="utility-functions"><a class="header" href="#utility-functions">Utility Functions</a></h5>
+<p><code>getEffectiveDrainTimeout</code></p>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40">machine-controller-manager/pkg/util/provider/app/options.MCServer</a>
@@ -637,9 +705,6 @@ type SafetyOptions struct {
 	// Timeout (in durartion) used while health-check of
 	// a machine before it is declared as failed
 	MachineHealthTimeout metav1.Duration
-	// Deprecated. No effect. Timeout (in durartion) used while draining of machine before deletion,
-	// beyond which it forcefully deletes machine
-	MachineDrainTimeout metav1.Duration
 	// Maximum number of times evicts would be attempted on a pod for it is forcibly deleted
 	// during draining of a machine.
 	MaxEvictRetries int32

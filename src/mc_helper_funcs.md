@@ -3,6 +3,7 @@
 	- [controller.addMachineFinalizers](#controlleraddmachinefinalizers)
 	- [controller.setMachineTerminationStatus](#controllersetmachineterminationstatus)
 	- [controller.machineStatusUpdate](#controllermachinestatusupdate)
+	- [controller.UpdateNodeTerminationCondition](#controllerupdatenodeterminationcondition)
 # Machine Controller Helper Methods
 
 ## controller.ValidateMachineClass
@@ -100,5 +101,43 @@ ChkSimilarStatus--No-->UpdateStatus["
 ChkSimilarStatus--Yes-->Z2(("return nil"))
 ```
 
+NOTE: [isMachineStatusSimilar](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L544) implementation is quite sad. TODO: we should improve stuff like this when we move to controller-runtime.
 
-NOTE: isMachineStatusSimilar is quite sad.
+## controller.UpdateNodeTerminationCondition
+
+[controller.UpdateNodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L1316) updates termination condition on the node object
+
+```go
+func (c *controller) UpdateNodeTerminationCondition(ctx context.Context, machine *v1alpha1.Machine) error 
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+Init["
+	nodeName := machine.Labels['node']
+	newTermCond := v1.NodeCondition{
+		Type:               machineutils.NodeTerminationCondition,
+		Status:             v1.ConditionTrue,
+		LastHeartbeatTime:  Now(),
+		LastTransitionTime: Now()}"]
+-->GetCond["oldTermCond, err := nodeops.GetNodeCondition(ctx, c.targetCoreClient, nodeName, machineutils.NodeTerminationCondition)"]
+-->ChkIfErr{"err != nil ?"}
+ChkIfErr--Yes-->ChkNotFound{"apierrors.IsNotFound(err)"}
+ChkNotFound--Yes-->ReturnNil(("return nil"))
+ChkNotFound--No-->ReturnErr(("return err"))
+ChkIfErr--No-->ChkOldTermCondNil{"oldTermCond == nil?"}
+ChkOldTermCondNil--Yes-->ChkMachinePhase{"machine.Status.CurrentStatus.Phase?"}
+ChkMachinePhase--MachineFailed-->NodeUnhealthy["newTermCond.Reason = machineutils.NodeUnhealthy"]
+ChkMachinePhase--"else"-->NodeScaleDown["newTermCond.Reason=machineutils.NodeScaledDown
+//assumes scaledown..why?"]
+NodeUnhealthy-->UpdateCondOnNode["err=nodeops.AddOrUpdateConditionsOnNode(ctx, c.targetCoreClient, nodeName, newTermCond)"]
+NodeScaleDown-->UpdateCondOnNode
+UpdateCondOnNode-->ChkNotFound
+
+
+```
+
+
+

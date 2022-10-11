@@ -149,6 +149,7 @@
 <li><a href="#controlleraddmachinefinalizers">controller.addMachineFinalizers</a></li>
 <li><a href="#controllersetmachineterminationstatus">controller.setMachineTerminationStatus</a></li>
 <li><a href="#controllermachinestatusupdate">controller.machineStatusUpdate</a></li>
+<li><a href="#controllerupdatenodeterminationcondition">controller.UpdateNodeTerminationCondition</a></li>
 </ul>
 </li>
 </ul>
@@ -227,7 +228,37 @@ ChkSimilarStatus--No--&gt;UpdateStatus[&quot;
 --&gt;Z1((&quot;return err&quot;))
 ChkSimilarStatus--Yes--&gt;Z2((&quot;return nil&quot;))
 </pre>
-<p>NOTE: isMachineStatusSimilar is quite sad.</p>
+<p>NOTE: <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L544">isMachineStatusSimilar</a> implementation is quite sad. TODO: we should improve stuff like this when we move to controller-runtime.</p>
+<h2 id="controllerupdatenodeterminationcondition"><a class="header" href="#controllerupdatenodeterminationcondition">controller.UpdateNodeTerminationCondition</a></h2>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L1316">controller.UpdateNodeTerminationCondition</a> updates termination condition on the node object</p>
+<pre><code class="language-go">func (c *controller) UpdateNodeTerminationCondition(ctx context.Context, machine *v1alpha1.Machine) error 
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Init[&quot;
+	nodeName := machine.Labels['node']
+	newTermCond := v1.NodeCondition{
+		Type:               machineutils.NodeTerminationCondition,
+		Status:             v1.ConditionTrue,
+		LastHeartbeatTime:  Now(),
+		LastTransitionTime: Now()}&quot;]
+--&gt;GetCond[&quot;oldTermCond, err := nodeops.GetNodeCondition(ctx, c.targetCoreClient, nodeName, machineutils.NodeTerminationCondition)&quot;]
+--&gt;ChkIfErr{&quot;err != nil ?&quot;}
+ChkIfErr--Yes--&gt;ChkNotFound{&quot;apierrors.IsNotFound(err)&quot;}
+ChkNotFound--Yes--&gt;ReturnNil((&quot;return nil&quot;))
+ChkNotFound--No--&gt;ReturnErr((&quot;return err&quot;))
+ChkIfErr--No--&gt;ChkOldTermCondNil{&quot;oldTermCond == nil?&quot;}
+ChkOldTermCondNil--Yes--&gt;ChkMachinePhase{&quot;machine.Status.CurrentStatus.Phase?&quot;}
+ChkMachinePhase--MachineFailed--&gt;NodeUnhealthy[&quot;newTermCond.Reason = machineutils.NodeUnhealthy&quot;]
+ChkMachinePhase--&quot;else&quot;--&gt;NodeScaleDown[&quot;newTermCond.Reason=machineutils.NodeScaledDown
+//assumes scaledown..why?&quot;]
+NodeUnhealthy--&gt;UpdateCondOnNode[&quot;err=nodeops.AddOrUpdateConditionsOnNode(ctx, c.targetCoreClient, nodeName, newTermCond)&quot;]
+NodeScaleDown--&gt;UpdateCondOnNode
+UpdateCondOnNode--&gt;ChkNotFound
+
+
+</pre>
 
                     </main>
 

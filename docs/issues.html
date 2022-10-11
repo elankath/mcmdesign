@@ -151,13 +151,28 @@
 <li><a href="#description-misused">Description misused</a></li>
 </ul>
 </li>
-<li><a href="#gaps">Gaps</a></li>
+<li><a href="#gaps">Gaps</a>
+<ul>
+<li><a href="#deaddeprecated-code">Dead/Deprecated Code</a>
+<ul>
+<li><a href="#controllertriggerupdationflow">controller.triggerUpdationFlow</a>
+<ul>
+<li><a href="#safetyoptionsmachinedraintimeout">SafetyOptions.MachineDrainTimeout</a></li>
+</ul>
+</li>
+<li><a href="#dup-methods-and-constants">Dup Methods and Constants</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li><a href="#drainnode-error-handling">drainNode Error Handling</a></li>
+<li><a href="#node-conditions">Node Conditions</a></li>
 <li><a href="#volumeattachment">VolumeAttachment</a></li>
 </ul>
 </li>
 </ul>
 <h1 id="issues"><a class="header" href="#issues">Issues</a></h1>
+<p>This section is WIP atm. Please check after this warning has been removed. Lots more to be added.</p>
 <h2 id="design-issues"><a class="header" href="#design-issues">Design Issues</a></h2>
 <h3 id="lastoperation-is-actually-next-operation"><a class="header" href="#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></h3>
 <p>Badly named. TODO: Describe more.</p>
@@ -188,9 +203,30 @@ func isMachineStatusSimilar(s1, s2 v1alpha1.MachineStatus) bool {
 
 </code></pre>
 <h2 id="gaps"><a class="header" href="#gaps">Gaps</a></h2>
+<p>TODO: Not comprehensive. Lots more to be added here</p>
+<h3 id="deaddeprecated-code"><a class="header" href="#deaddeprecated-code">Dead/Deprecated Code</a></h3>
+<h4 id="controllertriggerupdationflow"><a class="header" href="#controllertriggerupdationflow">controller.triggerUpdationFlow</a></h4>
+<p>This is unused and appears to be dead code.</p>
+<h5 id="safetyoptionsmachinedraintimeout"><a class="header" href="#safetyoptionsmachinedraintimeout">SafetyOptions.MachineDrainTimeout</a></h5>
+<p>This field is commented as deprecated but is still in <code>MCServer.AddFlags</code> and in the launch script of individual providers.
+Ex</p>
+<pre><code>go run
+cmd/machine-controller/main.go
+...
+machine-drain-timeout=5m
+</code></pre>
+<h4 id="dup-methods-and-constants"><a class="header" href="#dup-methods-and-constants">Dup Methods and Constants</a></h4>
+<ul>
+<li>Methods in <code>pkg/controller/machine_util.go</code></li>
+<li>Dup <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48">NodeTerminationCondition</a> in <code>pkg/controller/machine_util.go</code>. The one that is being actively used is <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70">machineutils.NodeTerminationCondition</a></li>
+</ul>
 <h2 id="drainnode-error-handling"><a class="header" href="#drainnode-error-handling">drainNode Error Handling</a></h2>
 <ul>
 <li>Does not set err when c.machineStatusUpdate is called</li>
+</ul>
+<h2 id="node-conditions"><a class="header" href="#node-conditions">Node Conditions</a></h2>
+<ul>
+<li><code>CloneAndAddCondition</code> logic seems erroneous.</li>
 </ul>
 <h2 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h2>
 <pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {

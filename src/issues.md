@@ -3,11 +3,16 @@
 		- [LastOperation is actually Next Operation](#lastoperation-is-actually-next-operation)
 		- [Description misused](#description-misused)
 	- [Gaps](#gaps)
-		- [Dead Code](#dead-code)
-	- [controller.triggerUpdationFlow](#controllertriggerupdationflow)
+		- [Dead/Deprecated Code](#deaddeprecated-code)
+			- [controller.triggerUpdationFlow](#controllertriggerupdationflow)
+				- [SafetyOptions.MachineDrainTimeout](#safetyoptionsmachinedraintimeout)
+			- [Dup Methods and Constants](#dup-methods-and-constants)
 	- [drainNode Error Handling](#drainnode-error-handling)
+	- [Node Conditions](#node-conditions)
 	- [VolumeAttachment](#volumeattachment)
 # Issues
+
+This section is WIP atm. Please check after this warning has been removed. Lots more to be added.
 
 ## Design Issues
 
@@ -45,15 +50,35 @@ func isMachineStatusSimilar(s1, s2 v1alpha1.MachineStatus) bool {
 ```
 ## Gaps
 
-### Dead Code 
+TODO: Not comprehensive. Lots more to be added here
 
-## controller.triggerUpdationFlow
+### Dead/Deprecated Code 
+
+#### controller.triggerUpdationFlow
 This is unused and appears to be dead code.
+
+##### SafetyOptions.MachineDrainTimeout
+
+This field is commented as deprecated but is still in `MCServer.AddFlags` and in the launch script of individual providers.
+Ex
+```
+go run
+cmd/machine-controller/main.go
+...
+machine-drain-timeout=5m
+```
+
+#### Dup Methods and Constants
+
+- Methods in `pkg/controller/machine_util.go`
+- Dup [NodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48) in `pkg/controller/machine_util.go`. The one that is being actively used is [machineutils.NodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70)
 
 ## drainNode Error Handling
 
 - Does not set err when c.machineStatusUpdate is called
 
+## Node Conditions
+- `CloneAndAddCondition` logic seems erroneous.
 ## VolumeAttachment
 
 ```go

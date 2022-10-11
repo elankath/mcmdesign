@@ -194,9 +194,10 @@
 </li>
 </ul>
 </li>
-<li><a href="k8s_facilities.html#utility-functions">Utility Functions</a>
+<li><a href="k8s_facilities.html#utility-functionstypes">Utility Functions/Types</a>
 <ul>
 <li><a href="k8s_facilities.html#waituntil">wait.Until</a></li>
+<li><a href="k8s_facilities.html#waitbackoff">wait.Backoff</a></li>
 </ul>
 </li>
 </ul>
@@ -238,6 +239,11 @@
 <li><a href="k8s_facilities.html#client-go-shared-informers">client-go Shared Informers.</a></li>
 <li><a href="k8s_facilities.html#client-go-workqueues">client-go workqueues</a></li>
 <li><a href="k8s_facilities.html#client-go-controller-steps">client-go controller steps</a></li>
+<li><a href="k8s_facilities.html#client-go-utilities">client-go utilities</a>
+<ul>
+<li><a href="k8s_facilities.html#k8sioclient-goutilretryretryonconflict">k8s.io/client-go/util/retry.RetryOnConflict</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li><a href="k8s_facilities.html#references">References</a></li>
@@ -335,10 +341,27 @@
 <h5 id="diff-between-labels-and-annotations"><a class="header" href="#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></h5>
 <p><em>Labels</em> are used in conjunction with selectors to identify groups of related resources and meant to be meaningful to users. Because selectors are used to query labels, this operation needs to be efficient. To ensure efficient queries, labels are constrained by RFC 1123. RFC 1123, among other constraints, restricts labels to a maximum 63 character length. Thus, labels should be used when you want Kubernetes to group a set of related resources. See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ on label key and value restrictions</p>
 <p><em>Annotations</em> are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not </p>
-<h3 id="utility-functions"><a class="header" href="#utility-functions">Utility Functions</a></h3>
+<h3 id="utility-functionstypes"><a class="header" href="#utility-functionstypes">Utility Functions/Types</a></h3>
 <h4 id="waituntil"><a class="header" href="#waituntil">wait.Until</a></h4>
 <p><a href="https://github.com/kubernetes/apimachinery/blob/v0.25.0/pkg/util/wait/wait.go#L91">k8s.io/apimachinery/pkg/wait.Until</a> loops until <code>stop</code> channel is closed, running <code>f</code> every given <code>period.</code> </p>
 <p><code>func Until(f func(), period time.Duration, stopCh &lt;-chan struct{})</code></p>
+<h4 id="waitbackoff"><a class="header" href="#waitbackoff">wait.Backoff</a></h4>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/util/wait#Backoff">wait.Backoff</a> holds parameters applied to a Backoff function. There are many <code>retry</code> functions in <code>client-go</code> and MCM that take an instance of this struct as parameter.</p>
+<pre><code class="language-go">type Backoff struct {
+	Duration time.Duration
+	Factor float64
+	Jitter float64
+	Steps int
+	Cap time.Duration
+}
+</code></pre>
+<ul>
+<li><code>Duration</code> is the initial backoff duration.</li>
+<li><code>Duration</code> is multiplied by <code>Factor</code> for the next iteration. </li>
+<li><code>Jitter</code> is the random amount of each duration added (between <code>Duration</code> and <code>Duration*(1+jitter)</code></li>
+<li><code>Steps</code> is the remaining number of iterations in which the duration may increase.</li>
+<li><code>Cap</code> is the cap on the duration and may not exceed this value.</li>
+</ul>
 <h2 id="k8s-api-core"><a class="header" href="#k8s-api-core">K8s API Core</a></h2>
 <p>The MCM leverages several types from https://pkg.go.dev/k8s.io/api/core/v1 </p>
 <h3 id="node"><a class="header" href="#node">Node</a></h3>
@@ -496,6 +519,7 @@ spec:
 	NodeNetworkUnavailable NodeConditionType = &quot;NetworkUnavailable&quot;
 )
 </code></pre>
+<p>Note: The MCM extends the above with further custom node condition types of its own. Not sure if this is correct - could break later if k8s enforces some validation ?</p>
 <h6 id="conditionstatus"><a class="header" href="#conditionstatus">ConditionStatus</a></h6>
 <p>These are valid condition statuses. <code>ConditionTrue</code> means a resource is in the condition. <code>ConditionFalse</code> means a resource is not in the condition. <code>ConditionUnknown</code> means kubernetes can't decide if a resource is in the condition or not. </p>
 <pre><code class="language-go">type ConditionStatus string
@@ -741,6 +765,16 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
 Z((&quot;End&quot;))
 </pre>
 <p>A more elaborate example of basic client-go controller flow is demonstrated in the <a href="https://github.com/kubernetes/client-go/blob/master/examples/workqueue/main.go">clien-go workqueue example</a></p>
+<h3 id="client-go-utilities"><a class="header" href="#client-go-utilities">client-go utilities</a></h3>
+<h4 id="k8sioclient-goutilretryretryonconflict"><a class="header" href="#k8sioclient-goutilretryretryonconflict">k8s.io/client-go/util/retry.RetryOnConflict</a></h4>
+<pre><code class="language-go">func RetryOnConflict(backoff wait.Backoff, fn func() error) error
+</code></pre>
+<ul>
+<li><a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/util/retry#RetryOnConflict">retry.RetryOnConflict</a> is used to make an update to a resource when you have to worry about conflicts caused by other code making unrelated updates to the resource at the same time. </li>
+<li><code>fn</code> should fetch the resource to be modified, make appropriate changes to it, try to update it, and return (unmodified) the error from the update function.</li>
+<li>On a successful update, <code>RetryOnConflict</code> will return <code>nil</code>. If the update <code>fn</code> returns a <em>Conflict</em> error, <code>RetryOnConflict</code> will wait some amount of time as described by <code>backoff</code>, and then try again. </li>
+<li>On a <em>non-Conflict</em> error, or if it retries too many times (<code>backoff.Steps</code> has reached zero) and gives up, <code>RetryOnConflict</code> will return an error to the caller.</li>
+</ul>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
 <li><a href="https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md">K8s API Conventions</a></li>
@@ -763,6 +797,7 @@ Z((&quot;End&quot;))
 <ul>
 <li><a href="mcm_facilities.html#machinespec">MachineSpec</a></li>
 <li><a href="mcm_facilities.html#machinestatus">MachineStatus</a></li>
+<li><a href="mcm_facilities.html#extended-nodeconditiontypes">Extended NodeConditionTypes</a></li>
 <li><a href="mcm_facilities.html#lastoperation">LastOperation</a>
 <ul>
 <li><a href="mcm_facilities.html#machinestate-should-be-called-machineoperationstate">MachineState (should be called MachineOperationState)</a></li>
@@ -780,7 +815,13 @@ Z((&quot;End&quot;))
 </li>
 <li><a href="mcm_facilities.html#utilities">Utilities</a>
 <ul>
-<li><a href="mcm_facilities.html#nodeops">NodeOps</a></li>
+<li><a href="mcm_facilities.html#nodeops">NodeOps</a>
+<ul>
+<li><a href="mcm_facilities.html#nodeopsgetnodecondition">nodeops.GetNodeCondition</a></li>
+<li><a href="mcm_facilities.html#nodeopscloneandaddcondition">nodeops.CloneAndAddCondition</a></li>
+<li><a href="mcm_facilities.html#nodeopsaddorupdateconditionsonnode">nodeops.AddOrUpdateConditionsOnNode</a></li>
+</ul>
+</li>
 <li><a href="mcm_facilities.html#machineutils">MachineUtils</a>
 <ul>
 <li><a href="mcm_facilities.html#operation-descriptions">Operation Descriptions</a></li>
@@ -789,7 +830,11 @@ Z((&quot;End&quot;))
 </li>
 <li><a href="mcm_facilities.html#drain-utilities">Drain Utilities</a>
 <ul>
-<li><a href="mcm_facilities.html#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
+<li><a href="mcm_facilities.html#volumeattachmenthandler">VolumeAttachmentHandler</a>
+<ul>
+<li><a href="mcm_facilities.html#utility-functions">Utility Functions</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -940,6 +985,12 @@ type NodeTemplateSpec struct { // BADLY NAMED!
 	LastKnownState string 
 }
 </code></pre>
+<h4 id="extended-nodeconditiontypes"><a class="header" href="#extended-nodeconditiontypes">Extended NodeConditionTypes</a></h4>
+<p>The MCM extends standard k8s <a href="./k8s_facilities.html#nodeconditiontype">NodeConditionType</a> with several custom conditions. (TODO: isn't this hacky/error prone?)</p>
+<ul>
+<li><a href="">NodeTerminationCondition</a> defined as <code>	NodeTerminationCondition v1.NodeConditionType = &quot;Terminating&quot;</code></li>
+</ul>
+<p>NodeTerminationCondition</p>
 <h4 id="lastoperation"><a class="header" href="#lastoperation">LastOperation</a></h4>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#LastOperation">github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.LastOperation</a> represents the last operation performed on the object</p>
 <pre><code class="language-go">type LastOperation struct {
@@ -1034,7 +1085,8 @@ const (
 </code></pre>
 <h2 id="utilities"><a class="header" href="#utilities">Utilities</a></h2>
 <h3 id="nodeops"><a class="header" href="#nodeops">NodeOps</a></h3>
-<p><code>github.com/gardener/machine-controller-manager/pkg/util/nodeops.GetNodeCondition</code> get the nodes condition matching the specified type </p>
+<h4 id="nodeopsgetnodecondition"><a class="header" href="#nodeopsgetnodecondition">nodeops.GetNodeCondition</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/nodeops/conditions.go#L72">machine-controller-manager/pkg/util/nodeops.GetNodeCondition</a> get the nodes condition matching the specified type </p>
 <pre><code class="language-go">func GetNodeCondition(ctx context.Context, c clientset.Interface, nodeName string, conditionType v1.NodeConditionType) (*v1.NodeCondition, error) {
 	node, err := c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
@@ -1051,6 +1103,54 @@ func getNodeCondition(node *v1.Node, conditionType v1.NodeConditionType) *v1.Nod
 	return nil
 }
 </code></pre>
+<h4 id="nodeopscloneandaddcondition"><a class="header" href="#nodeopscloneandaddcondition">nodeops.CloneAndAddCondition</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/nodeops/conditions.go#L31">machine-controller-manager/pkg/util/nodeops.CloneAndAddCondition</a> adds a condition to the node condition slice. If condition with this type already exists, it updates the <code>LastTransitionTime</code></p>
+<pre><code class="language-go">func CloneAndAddCondition(conditions []v1.NodeCondition, condition v1.NodeCondition) []v1.NodeCondition {
+	if condition.Type == &quot;&quot; || condition.Status == &quot;&quot; {
+		return conditions
+	}
+	var newConditions []v1.NodeCondition
+
+	for _, existingCondition := range conditions {
+		if existingCondition.Type != condition.Type { 
+			newConditions = append(newConditions, existingCondition)
+		} else { 
+			// condition with this type already exists
+			if existingCondition.Status == condition.Status 
+			&amp;&amp; existingCondition.Reason == condition.Reason {
+				// condition status and reason are  the same, keep existing transition time
+				condition.LastTransitionTime = existingCondition.LastTransitionTime
+			}
+		}
+	}
+	newConditions = append(newConditions, condition)
+	return newConditions
+}
+</code></pre>
+<p>TODO: Bug ? Logic above will end up adding duplicate node condition if status and reason phrase are different</p>
+<h4 id="nodeopsaddorupdateconditionsonnode"><a class="header" href="#nodeopsaddorupdateconditionsonnode">nodeops.AddOrUpdateConditionsOnNode</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/nodeops/conditions.go#L81">machine-controller-manager/pkg/util/nodeops.AddOrUpdateConditionsOnNode</a> adds a condition to the node's status, retrying on conflict with backoff.</p>
+<pre><code class="language-go">func AddOrUpdateConditionsOnNode(ctx context.Context, c clientset.Interface, nodeName string, condition v1.NodeCondition) error 
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Init[&quot;backoff = wait.Backoff{
+	Steps:    5,
+	Duration: 100 * time.Millisecond,
+	Jitter:   1.0,
+}&quot;]
+--&gt;retry.RetryOnConflict[&quot;retry.RetryOnConflict(backoff, fn)&quot;]
+--&gt;GetNode[&quot;oldNode, err = c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})&quot;]
+subgraph &quot;fn&quot;
+    GetNode--&gt;ChkIfErr{&quot;err != nil&quot;}
+	ChkIfErr--Yes--&gt;ReturnErr((&quot;return err&quot;))
+	ChkIfErr--No--&gt;InitNewNode[&quot;newNode := oldNode.DeepCopy()&quot;]
+	InitNewNode--&gt;InitConditions[&quot;newNode.Status.Conditions:= CloneAndAddCondition(newNode.Status.Conditions, condition)&quot;]
+	--&gt;UpdateNewNode[&quot;_, err := c.CoreV1().Nodes().UpdateStatus(ctx, newNodeClone, metav1.UpdateOptions{}&quot;]
+	--&gt;ReturnErr
+end
+</pre>
 <h3 id="machineutils"><a class="header" href="#machineutils">MachineUtils</a></h3>
 <h4 id="operation-descriptions"><a class="header" href="#operation-descriptions">Operation Descriptions</a></h4>
 <p><code>machineutils</code> has a bunch of constants that are descriptions of machine operations that are set into <code>machine.Status.LastOperation.Description</code> by the machine controller while performing reconciliation. It also has some <a href="k8s_facilities.html#conditions">reason phrase</a></p>
@@ -1166,6 +1266,8 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 	v.dispatch(newObj)
 }
 </code></pre>
+<h5 id="utility-functions"><a class="header" href="#utility-functions">Utility Functions</a></h5>
+<p><code>getEffectiveDrainTimeout</code></p>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40">machine-controller-manager/pkg/util/provider/app/options.MCServer</a>
@@ -1249,9 +1351,6 @@ type SafetyOptions struct {
 	// Timeout (in durartion) used while health-check of
 	// a machine before it is declared as failed
 	MachineHealthTimeout metav1.Duration
-	// Deprecated. No effect. Timeout (in durartion) used while draining of machine before deletion,
-	// beyond which it forcefully deletes machine
-	MachineDrainTimeout metav1.Duration
 	// Maximum number of times evicts would be attempted on a pod for it is forcibly deleted
 	// during draining of a machine.
 	MaxEvictRetries int32
@@ -1385,6 +1484,7 @@ func New(code codes.Code, msg string) *Status {
 </ul>
 </li>
 </ul>
+<p>While perusing the below, you might need to reference <a href="./mc_helper_funcs.html">Machine Controller Helper Functions</a>  as several reconcile functions delegate to helper methods defined on the machine controller struct.</p>
 <h1 id="cluster-machine-reconcile"><a class="header" href="#cluster-machine-reconcile">Cluster Machine Reconcile</a></h1>
 <pre><code class="language-go">func (c *controller) reconcileClusterMachineKey(key string) error
 </code></pre>
@@ -1566,12 +1666,39 @@ MachineStatusUpdate--&gt;Z
 </pre>
 <h3 id="controllerdrainnode"><a class="header" href="#controllerdrainnode">controller.drainNode</a></h3>
 <p>Inside <code>pkg/util/provider/machinecontroller/machine_util.go</code></p>
-<pre><code class="language-go">func (c *controller) drainNode(ctx context.Context, deleteMachineRequest *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
+<pre><code class="language-go">func (c *controller) drainNode(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
 </code></pre>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+<pre class="mermaid">
+%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
+
+Initialize[&quot;machine = dmr.Machine
+nodeName= machine.Labels['node']
+drainTimeout=machine.Spec.MachineConfiguration.MachineDrainTimeout || c.safetyOptions.MachineDrainTimeout
+forceDeleteLabelPresent = machine.Labels['force-deletion'] == 'True'
+skipDrain = false&quot;]
+--&gt;GetNodeReadyCond[&quot;nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
+readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
+&quot;]
+--&gt;ChkNodeNotReady[&quot;skipDrain = (nodeReadyCond.Status == ConditionFalse) &amp;&amp; nodeReadyCondition.LastTransitionTime.Time &gt; 5m&quot;]
+--&gt;ChkReadOnlyFS[&quot;skipDrain = (readOnlyFSCond.Status == ConditionTrue) &amp;&amp; readOnlyFSCond.LastTransitionTime.Time &gt; 5m&quot;]
+--&gt;ChkSkipDrain1{&quot;skipDrain true?&quot;}
+ChkSkipDrain1--No--&gt;
+ChkSkipDrain1--Yes--&gt;SetOpState[&quot;opState=MachineStateProcessing&quot;]
 Z((&quot;End&quot;))
 </pre>
+<p>Note on above</p>
+<ol>
+<li>We skip the drain if node is set to ReadonlyFilesystem for over 5 minutes
+<ol>
+<li>Check TODO:  <code>ReadonlyFilesystem</code> is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.</li>
+</ol>
+</li>
+<li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?</li>
+</ol>
+<p>btmp</p>
+<pre><code></code></pre>
+<p>etmp</p>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
 </code></pre>
@@ -1588,6 +1715,7 @@ Z((&quot;End&quot;))
 <li><a href="mc_helper_funcs.html#controlleraddmachinefinalizers">controller.addMachineFinalizers</a></li>
 <li><a href="mc_helper_funcs.html#controllersetmachineterminationstatus">controller.setMachineTerminationStatus</a></li>
 <li><a href="mc_helper_funcs.html#controllermachinestatusupdate">controller.machineStatusUpdate</a></li>
+<li><a href="mc_helper_funcs.html#controllerupdatenodeterminationcondition">controller.UpdateNodeTerminationCondition</a></li>
 </ul>
 </li>
 </ul>
@@ -1666,7 +1794,37 @@ ChkSimilarStatus--No--&gt;UpdateStatus[&quot;
 --&gt;Z1((&quot;return err&quot;))
 ChkSimilarStatus--Yes--&gt;Z2((&quot;return nil&quot;))
 </pre>
-<p>NOTE: isMachineStatusSimilar is quite sad.</p>
+<p>NOTE: <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L544">isMachineStatusSimilar</a> implementation is quite sad. TODO: we should improve stuff like this when we move to controller-runtime.</p>
+<h2 id="controllerupdatenodeterminationcondition"><a class="header" href="#controllerupdatenodeterminationcondition">controller.UpdateNodeTerminationCondition</a></h2>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L1316">controller.UpdateNodeTerminationCondition</a> updates termination condition on the node object</p>
+<pre><code class="language-go">func (c *controller) UpdateNodeTerminationCondition(ctx context.Context, machine *v1alpha1.Machine) error 
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Init[&quot;
+	nodeName := machine.Labels['node']
+	newTermCond := v1.NodeCondition{
+		Type:               machineutils.NodeTerminationCondition,
+		Status:             v1.ConditionTrue,
+		LastHeartbeatTime:  Now(),
+		LastTransitionTime: Now()}&quot;]
+--&gt;GetCond[&quot;oldTermCond, err := nodeops.GetNodeCondition(ctx, c.targetCoreClient, nodeName, machineutils.NodeTerminationCondition)&quot;]
+--&gt;ChkIfErr{&quot;err != nil ?&quot;}
+ChkIfErr--Yes--&gt;ChkNotFound{&quot;apierrors.IsNotFound(err)&quot;}
+ChkNotFound--Yes--&gt;ReturnNil((&quot;return nil&quot;))
+ChkNotFound--No--&gt;ReturnErr((&quot;return err&quot;))
+ChkIfErr--No--&gt;ChkOldTermCondNil{&quot;oldTermCond == nil?&quot;}
+ChkOldTermCondNil--Yes--&gt;ChkMachinePhase{&quot;machine.Status.CurrentStatus.Phase?&quot;}
+ChkMachinePhase--MachineFailed--&gt;NodeUnhealthy[&quot;newTermCond.Reason = machineutils.NodeUnhealthy&quot;]
+ChkMachinePhase--&quot;else&quot;--&gt;NodeScaleDown[&quot;newTermCond.Reason=machineutils.NodeScaledDown
+//assumes scaledown..why?&quot;]
+NodeUnhealthy--&gt;UpdateCondOnNode[&quot;err=nodeops.AddOrUpdateConditionsOnNode(ctx, c.targetCoreClient, nodeName, newTermCond)&quot;]
+NodeScaleDown--&gt;UpdateCondOnNode
+UpdateCondOnNode--&gt;ChkNotFound
+
+
+</pre>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="issues.html#issues">Issues</a>
 <ul>
@@ -1676,13 +1834,28 @@ ChkSimilarStatus--Yes--&gt;Z2((&quot;return nil&quot;))
 <li><a href="issues.html#description-misused">Description misused</a></li>
 </ul>
 </li>
-<li><a href="issues.html#gaps">Gaps</a></li>
+<li><a href="issues.html#gaps">Gaps</a>
+<ul>
+<li><a href="issues.html#deaddeprecated-code">Dead/Deprecated Code</a>
+<ul>
+<li><a href="issues.html#controllertriggerupdationflow">controller.triggerUpdationFlow</a>
+<ul>
+<li><a href="issues.html#safetyoptionsmachinedraintimeout">SafetyOptions.MachineDrainTimeout</a></li>
+</ul>
+</li>
+<li><a href="issues.html#dup-methods-and-constants">Dup Methods and Constants</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li><a href="issues.html#drainnode-error-handling">drainNode Error Handling</a></li>
+<li><a href="issues.html#node-conditions">Node Conditions</a></li>
 <li><a href="issues.html#volumeattachment">VolumeAttachment</a></li>
 </ul>
 </li>
 </ul>
 <h1 id="issues"><a class="header" href="#issues">Issues</a></h1>
+<p>This section is WIP atm. Please check after this warning has been removed. Lots more to be added.</p>
 <h2 id="design-issues"><a class="header" href="#design-issues">Design Issues</a></h2>
 <h3 id="lastoperation-is-actually-next-operation"><a class="header" href="#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></h3>
 <p>Badly named. TODO: Describe more.</p>
@@ -1713,9 +1886,30 @@ func isMachineStatusSimilar(s1, s2 v1alpha1.MachineStatus) bool {
 
 </code></pre>
 <h2 id="gaps"><a class="header" href="#gaps">Gaps</a></h2>
+<p>TODO: Not comprehensive. Lots more to be added here</p>
+<h3 id="deaddeprecated-code"><a class="header" href="#deaddeprecated-code">Dead/Deprecated Code</a></h3>
+<h4 id="controllertriggerupdationflow"><a class="header" href="#controllertriggerupdationflow">controller.triggerUpdationFlow</a></h4>
+<p>This is unused and appears to be dead code.</p>
+<h5 id="safetyoptionsmachinedraintimeout"><a class="header" href="#safetyoptionsmachinedraintimeout">SafetyOptions.MachineDrainTimeout</a></h5>
+<p>This field is commented as deprecated but is still in <code>MCServer.AddFlags</code> and in the launch script of individual providers.
+Ex</p>
+<pre><code>go run
+cmd/machine-controller/main.go
+...
+machine-drain-timeout=5m
+</code></pre>
+<h4 id="dup-methods-and-constants"><a class="header" href="#dup-methods-and-constants">Dup Methods and Constants</a></h4>
+<ul>
+<li>Methods in <code>pkg/controller/machine_util.go</code></li>
+<li>Dup <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48">NodeTerminationCondition</a> in <code>pkg/controller/machine_util.go</code>. The one that is being actively used is <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70">machineutils.NodeTerminationCondition</a></li>
+</ul>
 <h2 id="drainnode-error-handling"><a class="header" href="#drainnode-error-handling">drainNode Error Handling</a></h2>
 <ul>
 <li>Does not set err when c.machineStatusUpdate is called</li>
+</ul>
+<h2 id="node-conditions"><a class="header" href="#node-conditions">Node Conditions</a></h2>
+<ul>
+<li><code>CloneAndAddCondition</code> logic seems erroneous.</li>
 </ul>
 <h2 id="volumeattachment-1"><a class="header" href="#volumeattachment-1">VolumeAttachment</a></h2>
 <pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {

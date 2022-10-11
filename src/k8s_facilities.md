@@ -6,8 +6,9 @@
 				- [OwnerReferences](#ownerreferences)
 				- [Finalizers and Deletion](#finalizers-and-deletion)
 				- [Diff between Labels and Annotations](#diff-between-labels-and-annotations)
-		- [Utility Functions](#utility-functions)
+		- [Utility Functions/Types](#utility-functionstypes)
 			- [wait.Until](#waituntil)
+			- [wait.Backoff](#waitbackoff)
 	- [K8s API Core](#k8s-api-core)
 		- [Node](#node)
 			- [NodeSpec](#nodespec)
@@ -26,6 +27,8 @@
 		- [client-go Shared Informers.](#client-go-shared-informers)
 		- [client-go workqueues](#client-go-workqueues)
 		- [client-go controller steps](#client-go-controller-steps)
+		- [client-go utilities](#client-go-utilities)
+			- [k8s.io/client-go/util/retry.RetryOnConflict](#k8sioclient-goutilretryretryonconflict)
 	- [References](#references)
 
 # Kubernetes Client Facilities
@@ -139,13 +142,32 @@ _Labels_ are used in conjunction with selectors to identify groups of related re
 
 _Annotations_ are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not 
 
-### Utility Functions
+### Utility Functions/Types
 
 #### wait.Until
 
 [k8s.io/apimachinery/pkg/wait.Until](https://github.com/kubernetes/apimachinery/blob/v0.25.0/pkg/util/wait/wait.go#L91) loops until `stop` channel is closed, running `f` every given `period.` 
 
 `func Until(f func(), period time.Duration, stopCh <-chan struct{})`
+
+#### wait.Backoff
+
+[wait.Backoff](https://pkg.go.dev/k8s.io/apimachinery/pkg/util/wait#Backoff) holds parameters applied to a Backoff function. There are many `retry` functions in `client-go` and MCM that take an instance of this struct as parameter.
+
+```go
+type Backoff struct {
+	Duration time.Duration
+	Factor float64
+	Jitter float64
+	Steps int
+	Cap time.Duration
+}
+```
+- `Duration` is the initial backoff duration.
+- `Duration` is multiplied by `Factor` for the next iteration. 
+- `Jitter` is the random amount of each duration added (between `Duration` and `Duration*(1+jitter)`
+- `Steps` is the remaining number of iterations in which the duration may increase.
+- `Cap` is the cap on the duration and may not exceed this value.
 
 ## K8s API Core
 The MCM leverages several types from https://pkg.go.dev/k8s.io/api/core/v1 
@@ -335,6 +357,8 @@ const (
 	NodeNetworkUnavailable NodeConditionType = "NetworkUnavailable"
 )
 ```
+Note: The MCM extends the above with further custom node condition types of its own. Not sure if this is correct - could break later if k8s enforces some validation ?
+
 ###### ConditionStatus
 
 These are valid condition statuses. `ConditionTrue` means a resource is in the condition. `ConditionFalse` means a resource is not in the condition. `ConditionUnknown` means kubernetes can't decide if a resource is in the condition or not. 
@@ -637,6 +661,18 @@ Z(("End"))
 ```
 
 A more elaborate example of basic client-go controller flow is demonstrated in the [clien-go workqueue example](https://github.com/kubernetes/client-go/blob/master/examples/workqueue/main.go)
+
+### client-go utilities
+
+#### k8s.io/client-go/util/retry.RetryOnConflict
+
+```go
+func RetryOnConflict(backoff wait.Backoff, fn func() error) error
+```
+- [retry.RetryOnConflict](https://pkg.go.dev/k8s.io/client-go@v0.25.2/util/retry#RetryOnConflict) is used to make an update to a resource when you have to worry about conflicts caused by other code making unrelated updates to the resource at the same time. 
+-  `fn` should fetch the resource to be modified, make appropriate changes to it, try to update it, and return (unmodified) the error from the update function.  
+-  On a successful update, `RetryOnConflict` will return `nil`. If the update `fn` returns a _Conflict_ error, `RetryOnConflict` will wait some amount of time as described by `backoff`, and then try again. 
+-  On a _non-Conflict_ error, or if it retries too many times (`backoff.Steps` has reached zero) and gives up, `RetryOnConflict` will return an error to the caller.
 
 ## References
 

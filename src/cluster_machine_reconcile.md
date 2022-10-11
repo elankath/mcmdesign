@@ -5,6 +5,8 @@
   - [controller.reconcileMachineHealth](#controllerreconcilemachinehealth)
   - [controller.syncMachineNodeTemplates](#controllersyncmachinenodetemplates)
 
+While perusing the below, you might need to reference [Machine Controller Helper Functions](./mc_helper_funcs.md)  as several reconcile functions delegate to helper methods defined on the machine controller struct.
+
 # Cluster Machine Reconcile 
 
 ```go
@@ -206,14 +208,19 @@ func (c *controller) drainNode(ctx context.Context, dmr *driver.DeleteMachineReq
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
 
-Initialize["nodeName= machine.Labels['node']
+Initialize["machine = dmr.Machine
+nodeName= machine.Labels['node']
+drainTimeout=machine.Spec.MachineConfiguration.MachineDrainTimeout || c.safetyOptions.MachineDrainTimeout
+forceDeleteLabelPresent = machine.Labels['force-deletion'] == 'True'
 skipDrain = false"]
 -->GetNodeReadyCond["nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
 readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
 "]
 -->ChkNodeNotReady["skipDrain = (nodeReadyCond.Status == ConditionFalse) && nodeReadyCondition.LastTransitionTime.Time > 5m"]
 -->ChkReadOnlyFS["skipDrain = (readOnlyFSCond.Status == ConditionTrue) && readOnlyFSCond.LastTransitionTime.Time > 5m"]
-
+-->ChkSkipDrain1{"skipDrain true?"}
+ChkSkipDrain1--No-->
+ChkSkipDrain1--Yes-->SetOpState["opState=MachineStateProcessing"]
 Z(("End"))
 ```
 

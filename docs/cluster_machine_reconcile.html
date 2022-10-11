@@ -156,6 +156,7 @@
 </ul>
 </li>
 </ul>
+<p>While perusing the below, you might need to reference <a href="./mc_helper_funcs.html">Machine Controller Helper Functions</a>  as several reconcile functions delegate to helper methods defined on the machine controller struct.</p>
 <h1 id="cluster-machine-reconcile"><a class="header" href="#cluster-machine-reconcile">Cluster Machine Reconcile</a></h1>
 <pre><code class="language-go">func (c *controller) reconcileClusterMachineKey(key string) error
 </code></pre>
@@ -337,12 +338,39 @@ MachineStatusUpdate--&gt;Z
 </pre>
 <h3 id="controllerdrainnode"><a class="header" href="#controllerdrainnode">controller.drainNode</a></h3>
 <p>Inside <code>pkg/util/provider/machinecontroller/machine_util.go</code></p>
-<pre><code class="language-go">func (c *controller) drainNode(ctx context.Context, deleteMachineRequest *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
+<pre><code class="language-go">func (c *controller) drainNode(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
 </code></pre>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+<pre class="mermaid">
+%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
+
+Initialize[&quot;machine = dmr.Machine
+nodeName= machine.Labels['node']
+drainTimeout=machine.Spec.MachineConfiguration.MachineDrainTimeout || c.safetyOptions.MachineDrainTimeout
+forceDeleteLabelPresent = machine.Labels['force-deletion'] == 'True'
+skipDrain = false&quot;]
+--&gt;GetNodeReadyCond[&quot;nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
+readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
+&quot;]
+--&gt;ChkNodeNotReady[&quot;skipDrain = (nodeReadyCond.Status == ConditionFalse) &amp;&amp; nodeReadyCondition.LastTransitionTime.Time &gt; 5m&quot;]
+--&gt;ChkReadOnlyFS[&quot;skipDrain = (readOnlyFSCond.Status == ConditionTrue) &amp;&amp; readOnlyFSCond.LastTransitionTime.Time &gt; 5m&quot;]
+--&gt;ChkSkipDrain1{&quot;skipDrain true?&quot;}
+ChkSkipDrain1--No--&gt;
+ChkSkipDrain1--Yes--&gt;SetOpState[&quot;opState=MachineStateProcessing&quot;]
 Z((&quot;End&quot;))
 </pre>
+<p>Note on above</p>
+<ol>
+<li>We skip the drain if node is set to ReadonlyFilesystem for over 5 minutes
+<ol>
+<li>Check TODO:  <code>ReadonlyFilesystem</code> is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.</li>
+</ol>
+</li>
+<li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?</li>
+</ol>
+<p>btmp</p>
+<pre><code></code></pre>
+<p>etmp</p>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
 </code></pre>

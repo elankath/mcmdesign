@@ -159,9 +159,10 @@
 </li>
 </ul>
 </li>
-<li><a href="#utility-functions">Utility Functions</a>
+<li><a href="#utility-functionstypes">Utility Functions/Types</a>
 <ul>
 <li><a href="#waituntil">wait.Until</a></li>
+<li><a href="#waitbackoff">wait.Backoff</a></li>
 </ul>
 </li>
 </ul>
@@ -203,6 +204,11 @@
 <li><a href="#client-go-shared-informers">client-go Shared Informers.</a></li>
 <li><a href="#client-go-workqueues">client-go workqueues</a></li>
 <li><a href="#client-go-controller-steps">client-go controller steps</a></li>
+<li><a href="#client-go-utilities">client-go utilities</a>
+<ul>
+<li><a href="#k8sioclient-goutilretryretryonconflict">k8s.io/client-go/util/retry.RetryOnConflict</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li><a href="#references">References</a></li>
@@ -300,10 +306,27 @@
 <h5 id="diff-between-labels-and-annotations"><a class="header" href="#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></h5>
 <p><em>Labels</em> are used in conjunction with selectors to identify groups of related resources and meant to be meaningful to users. Because selectors are used to query labels, this operation needs to be efficient. To ensure efficient queries, labels are constrained by RFC 1123. RFC 1123, among other constraints, restricts labels to a maximum 63 character length. Thus, labels should be used when you want Kubernetes to group a set of related resources. See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ on label key and value restrictions</p>
 <p><em>Annotations</em> are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not </p>
-<h3 id="utility-functions"><a class="header" href="#utility-functions">Utility Functions</a></h3>
+<h3 id="utility-functionstypes"><a class="header" href="#utility-functionstypes">Utility Functions/Types</a></h3>
 <h4 id="waituntil"><a class="header" href="#waituntil">wait.Until</a></h4>
 <p><a href="https://github.com/kubernetes/apimachinery/blob/v0.25.0/pkg/util/wait/wait.go#L91">k8s.io/apimachinery/pkg/wait.Until</a> loops until <code>stop</code> channel is closed, running <code>f</code> every given <code>period.</code> </p>
 <p><code>func Until(f func(), period time.Duration, stopCh &lt;-chan struct{})</code></p>
+<h4 id="waitbackoff"><a class="header" href="#waitbackoff">wait.Backoff</a></h4>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/util/wait#Backoff">wait.Backoff</a> holds parameters applied to a Backoff function. There are many <code>retry</code> functions in <code>client-go</code> and MCM that take an instance of this struct as parameter.</p>
+<pre><code class="language-go">type Backoff struct {
+	Duration time.Duration
+	Factor float64
+	Jitter float64
+	Steps int
+	Cap time.Duration
+}
+</code></pre>
+<ul>
+<li><code>Duration</code> is the initial backoff duration.</li>
+<li><code>Duration</code> is multiplied by <code>Factor</code> for the next iteration. </li>
+<li><code>Jitter</code> is the random amount of each duration added (between <code>Duration</code> and <code>Duration*(1+jitter)</code></li>
+<li><code>Steps</code> is the remaining number of iterations in which the duration may increase.</li>
+<li><code>Cap</code> is the cap on the duration and may not exceed this value.</li>
+</ul>
 <h2 id="k8s-api-core"><a class="header" href="#k8s-api-core">K8s API Core</a></h2>
 <p>The MCM leverages several types from https://pkg.go.dev/k8s.io/api/core/v1 </p>
 <h3 id="node"><a class="header" href="#node">Node</a></h3>
@@ -461,6 +484,7 @@ spec:
 	NodeNetworkUnavailable NodeConditionType = &quot;NetworkUnavailable&quot;
 )
 </code></pre>
+<p>Note: The MCM extends the above with further custom node condition types of its own. Not sure if this is correct - could break later if k8s enforces some validation ?</p>
 <h6 id="conditionstatus"><a class="header" href="#conditionstatus">ConditionStatus</a></h6>
 <p>These are valid condition statuses. <code>ConditionTrue</code> means a resource is in the condition. <code>ConditionFalse</code> means a resource is not in the condition. <code>ConditionUnknown</code> means kubernetes can't decide if a resource is in the condition or not. </p>
 <pre><code class="language-go">type ConditionStatus string
@@ -706,6 +730,16 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
 Z((&quot;End&quot;))
 </pre>
 <p>A more elaborate example of basic client-go controller flow is demonstrated in the <a href="https://github.com/kubernetes/client-go/blob/master/examples/workqueue/main.go">clien-go workqueue example</a></p>
+<h3 id="client-go-utilities"><a class="header" href="#client-go-utilities">client-go utilities</a></h3>
+<h4 id="k8sioclient-goutilretryretryonconflict"><a class="header" href="#k8sioclient-goutilretryretryonconflict">k8s.io/client-go/util/retry.RetryOnConflict</a></h4>
+<pre><code class="language-go">func RetryOnConflict(backoff wait.Backoff, fn func() error) error
+</code></pre>
+<ul>
+<li><a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/util/retry#RetryOnConflict">retry.RetryOnConflict</a> is used to make an update to a resource when you have to worry about conflicts caused by other code making unrelated updates to the resource at the same time. </li>
+<li><code>fn</code> should fetch the resource to be modified, make appropriate changes to it, try to update it, and return (unmodified) the error from the update function.</li>
+<li>On a successful update, <code>RetryOnConflict</code> will return <code>nil</code>. If the update <code>fn</code> returns a <em>Conflict</em> error, <code>RetryOnConflict</code> will wait some amount of time as described by <code>backoff</code>, and then try again. </li>
+<li>On a <em>non-Conflict</em> error, or if it retries too many times (<code>backoff.Steps</code> has reached zero) and gives up, <code>RetryOnConflict</code> will return an error to the caller.</li>
+</ul>
 <h2 id="references"><a class="header" href="#references">References</a></h2>
 <ul>
 <li><a href="https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md">K8s API Conventions</a></li>

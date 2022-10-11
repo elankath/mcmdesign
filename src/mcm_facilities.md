@@ -4,6 +4,7 @@
 		- [Machine](#machine)
 			- [MachineSpec](#machinespec)
 			- [MachineStatus](#machinestatus)
+			- [Extended NodeConditionTypes](#extended-nodeconditiontypes)
 			- [LastOperation](#lastoperation)
 				- [MachineState (should be called MachineOperationState)](#machinestate-should-be-called-machineoperationstate)
 				- [MachineOperationType](#machineoperationtype)
@@ -11,11 +12,15 @@
 				- [MachinePhase](#machinephase)
 	- [Utilities](#utilities)
 		- [NodeOps](#nodeops)
+			- [nodeops.GetNodeCondition](#nodeopsgetnodecondition)
+			- [nodeops.CloneAndAddCondition](#nodeopscloneandaddcondition)
+			- [nodeops.AddOrUpdateConditionsOnNode](#nodeopsaddorupdateconditionsonnode)
 		- [MachineUtils](#machineutils)
 			- [Operation Descriptions](#operation-descriptions)
 			- [Retry Periods](#retry-periods)
 		- [Drain Utilities](#drain-utilities)
 			- [VolumeAttachmentHandler](#volumeattachmenthandler)
+				- [Utility Functions](#utility-functions)
 	- [Main Server Structs](#main-server-structs)
 		- [MCServer](#mcserver)
 			- [MCServer Usage](#mcserver-usage)
@@ -165,6 +170,15 @@ type MachineStatus struct {
 	LastKnownState string 
 }
 ```
+#### Extended NodeConditionTypes
+
+The MCM extends standard k8s [NodeConditionType](./k8s_facilities.md#nodeconditiontype) with several custom conditions. (TODO: isn't this hacky/error prone?)
+
+-  [NodeTerminationCondition]() defined as `	NodeTerminationCondition v1.NodeConditionType = "Terminating"`
+
+
+NodeTerminationCondition
+
 
 #### LastOperation
 
@@ -277,7 +291,8 @@ const (
 
 ### NodeOps
 
-`github.com/gardener/machine-controller-manager/pkg/util/nodeops.GetNodeCondition` get the nodes condition matching the specified type 
+#### nodeops.GetNodeCondition
+[machine-controller-manager/pkg/util/nodeops.GetNodeCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/nodeops/conditions.go#L72) get the nodes condition matching the specified type 
 
 ```go
 func GetNodeCondition(ctx context.Context, c clientset.Interface, nodeName string, conditionType v1.NodeConditionType) (*v1.NodeCondition, error) {
@@ -295,6 +310,65 @@ func getNodeCondition(node *v1.Node, conditionType v1.NodeConditionType) *v1.Nod
 	}
 	return nil
 }
+```
+
+#### nodeops.CloneAndAddCondition
+
+[machine-controller-manager/pkg/util/nodeops.CloneAndAddCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/nodeops/conditions.go#L31) adds a condition to the node condition slice. If condition with this type already exists, it updates the `LastTransitionTime`
+
+```go
+func CloneAndAddCondition(conditions []v1.NodeCondition, condition v1.NodeCondition) []v1.NodeCondition {
+	if condition.Type == "" || condition.Status == "" {
+		return conditions
+	}
+	var newConditions []v1.NodeCondition
+
+	for _, existingCondition := range conditions {
+		if existingCondition.Type != condition.Type { 
+			newConditions = append(newConditions, existingCondition)
+		} else { 
+			// condition with this type already exists
+			if existingCondition.Status == condition.Status 
+			&& existingCondition.Reason == condition.Reason {
+				// condition status and reason are  the same, keep existing transition time
+				condition.LastTransitionTime = existingCondition.LastTransitionTime
+			}
+		}
+	}
+	newConditions = append(newConditions, condition)
+	return newConditions
+}
+```
+TODO: Bug ? Logic above will end up adding duplicate node condition if status and reason phrase are different
+
+
+#### nodeops.AddOrUpdateConditionsOnNode
+[machine-controller-manager/pkg/util/nodeops.AddOrUpdateConditionsOnNode](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/nodeops/conditions.go#L81) adds a condition to the node's status, retrying on conflict with backoff.
+
+```go
+func AddOrUpdateConditionsOnNode(ctx context.Context, c clientset.Interface, nodeName string, condition v1.NodeCondition) error 
+```
+
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+Init["backoff = wait.Backoff{
+	Steps:    5,
+	Duration: 100 * time.Millisecond,
+	Jitter:   1.0,
+}"]
+-->retry.RetryOnConflict["retry.RetryOnConflict(backoff, fn)"]
+-->GetNode["oldNode, err = c.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})"]
+subgraph "fn"
+    GetNode-->ChkIfErr{"err != nil"}
+	ChkIfErr--Yes-->ReturnErr(("return err"))
+	ChkIfErr--No-->InitNewNode["newNode := oldNode.DeepCopy()"]
+	InitNewNode-->InitConditions["newNode.Status.Conditions:= CloneAndAddCondition(newNode.Status.Conditions, condition)"]
+	-->UpdateNewNode["_, err := c.CoreV1().Nodes().UpdateStatus(ctx, newNodeClone, metav1.UpdateOptions{}"]
+	-->ReturnErr
+end
 ```
 
 ### MachineUtils
@@ -429,6 +503,10 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 }
 ```
 
+##### Utility Functions
+
+`getEffectiveDrainTimeout`
+
 
 
 ## Main Server Structs
@@ -529,9 +607,6 @@ type SafetyOptions struct {
 	// Timeout (in durartion) used while health-check of
 	// a machine before it is declared as failed
 	MachineHealthTimeout metav1.Duration
-	// Deprecated. No effect. Timeout (in durartion) used while draining of machine before deletion,
-	// beyond which it forcefully deletes machine
-	MachineDrainTimeout metav1.Duration
 	// Maximum number of times evicts would be attempted on a pod for it is forcibly deleted
 	// during draining of a machine.
 	MaxEvictRetries int32
