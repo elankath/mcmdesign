@@ -197,15 +197,35 @@ MachineStatusUpdate-->Z
 
 Inside `pkg/util/provider/machinecontroller/machine_util.go`
 ```go
-func (c *controller) drainNode(ctx context.Context, deleteMachineRequest *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
+func (c *controller) drainNode(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
 ```
 
+
 ```mermaid
+
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
+
+Initialize["nodeName= machine.Labels['node']
+skipDrain = false"]
+-->GetNodeReadyCond["nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
+readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
+"]
+-->ChkNodeNotReady["skipDrain = (nodeReadyCond.Status == ConditionFalse) && nodeReadyCondition.LastTransitionTime.Time > 5m"]
+-->ChkReadOnlyFS["skipDrain = (readOnlyFSCond.Status == ConditionTrue) && readOnlyFSCond.LastTransitionTime.Time > 5m"]
+
 Z(("End"))
 ```
 
+Note on above
+1. We skip the drain if node is set to ReadonlyFilesystem for over 5 minutes
+   1. Check TODO:  `ReadonlyFilesystem` is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.
+2. Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?
+
+btmp
+```
+```
+etmp
 
 ## controller.reconcileMachineHealth
 

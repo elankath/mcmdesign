@@ -3,6 +3,8 @@
 		- [LastOperation is actually Next Operation](#lastoperation-is-actually-next-operation)
 		- [Description misused](#description-misused)
 	- [Gaps](#gaps)
+		- [Dead Code](#dead-code)
+	- [controller.triggerUpdationFlow](#controllertriggerupdationflow)
 	- [drainNode Error Handling](#drainnode-error-handling)
 	- [VolumeAttachment](#volumeattachment)
 # Issues
@@ -42,6 +44,11 @@ func isMachineStatusSimilar(s1, s2 v1alpha1.MachineStatus) bool {
 
 ```
 ## Gaps
+
+### Dead Code 
+
+## controller.triggerUpdationFlow
+This is unused and appears to be dead code.
 
 ## drainNode Error Handling
 
