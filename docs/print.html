@@ -82,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.1.</strong> Cluster Machine Reconciliation</a></li></ol></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.2.</strong> Cluster Machine Reconciliation</a></li></ol></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -1626,7 +1626,6 @@ func New(code codes.Code, msg string) *Status {
 </li>
 <li><a href="machine-controller/index.html#4-reconciliation-functions-executed-by-worker">4. reconciliation functions executed by worker</a>
 <ul>
-<li><a href="machine-controller/index.html#41--reconcileclustersecretkey">4.1  reconcileclustersecretkey</a></li>
 <li><a href="machine-controller/index.html#42--reconcileclustermachineclasskey">4.2  reconcileclustermachineclasskey</a></li>
 <li><a href="machine-controller/index.html#43--reconcileclustermachinekey">4.3  reconcileclustermachinekey</a>
 <ul>
@@ -2135,31 +2134,10 @@ added to the wait group when started and marked done when finished.</p>
 </code></pre>
 <h4 id="4-reconciliation-functions-executed-by-worker"><a class="header" href="#4-reconciliation-functions-executed-by-worker">4. reconciliation functions executed by worker</a></h4>
 <p>the controller starts worker go-routines that pop out keys from the relevant workqueue and execute the reconcile function.</p>
-<h5 id="41--reconcileclustersecretkey"><a class="header" href="#41--reconcileclustersecretkey">4.1  reconcileclustersecretkey</a></h5>
-<p><code>reconcileclustersecretkey</code> basically adds the <code>mcfinalizer</code> (value: <code>machine.sapcloud.io/machine-controller</code>) to the list of <code>secret.finalizers</code> for all secrets that are referenced by machine classes within the same namespace.</p>
-<pre class="mermaid">%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
-
-flowchart td
-
-a[ns, name = cache.splitmetanamespacekey]
-b[&quot;sec=secretlister.secrets(ns).get(name)&quot;]
-c[&quot;machineclasses=findmachineclassforsecret(name)&quot;]
-d{machineclasses empty?}
-e[&quot;updatesecretfinalizers(sec)&quot;] 
-f[&quot;secretq.addafter(key,10min)&quot;]
-z((&quot;end&quot;))
-a--&gt;b
-b--&gt;c
-c--&gt;d
-d--yes--&gt;z
-d--no--&gt;e
-e--err--&gt;f
-e--success--&gt;z
-f--&gt;z
-</pre>
 <h5 id="42--reconcileclustermachineclasskey"><a class="header" href="#42--reconcileclustermachineclasskey">4.2  reconcileclustermachineclasskey</a></h5>
 <p><code>reconcileclustermachineclasskey</code> re-queues after 10seconds on failure and 10mins on success. ie the machine class key is regularly re-queued.  bad: we are not using the <code>machineutils.longretry|shortretry</code> constants here.</p>
-<pre class="mermaid">%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
+<pre class="mermaid">
+%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
 
 flowchart td
 
@@ -2250,6 +2228,46 @@ createflow--&gt;enqm
 <p>tbd</p>
 <h5 id="45--reconcileclustermachinesafetyapiserver"><a class="header" href="#45--reconcileclustermachinesafetyapiserver">4.5  reconcileclustermachinesafetyapiserver</a></h5>
 <p>tbd</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="reconcile-cluster-secret"><a class="header" href="#reconcile-cluster-secret">Reconcile Cluster Secret</a></h1>
+<p><code>reconcileClusterSecretKey</code> reconciles an secret due to controller resync
+or an event on the secret</p>
+<pre><code class="language-go">func (c *controller) reconcileClusterSecretKey(key string) error 
+// which looks up secret and delegates to
+func (c *controller) reconcileClusterSecret(ctx context.Context, secret *corev1.Secret) error 
+</code></pre>
+<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
+<p>Worker go-routines are created for this as below</p>
+<pre><code class="language-go">createWorker(c.secretQueue, 
+    &quot;ClusterSecret&quot;, 
+    maxRetries, 
+    true, 
+    c.reconcileClusterSecretKey,
+     stopCh, 
+     &amp;waitGroup)
+</code></pre>
+<h2 id="flow"><a class="header" href="#flow">Flow</a></h2>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/secret.go#L37">controller.reconcileClusterSecretkey</a>
+basically adds the <a href="machine-controller/../mcm_facilities.html#finalizers">MCFinalizerName</a>  (value: <code>machine.sapcloud.io/machine-controller</code>) to the list of <code>secret.finalizers</code> for all secrets that are referenced by machine classes within the same namespace.</p>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TD
+
+a[ns, name = cache.splitmetanamespacekey]
+b[&quot;sec=secretlister.secrets(ns).get(name)&quot;]
+c[&quot;machineclasses=findmachineclassforsecret(name)&quot;]
+d{machineclasses empty?}
+e[&quot;updatesecretfinalizers(sec)&quot;] 
+f[&quot;secretq.addafter(key,10min)&quot;]
+z((&quot;end&quot;))
+a--&gt;b
+b--&gt;c
+c--&gt;d
+d--yes--&gt;z
+d--no--&gt;e
+e--err--&gt;f
+e--success--&gt;z
+f--&gt;z
+</pre>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="machine-controller/cluster_machine_reconcile.html#cluster-machine-reconcile">Cluster Machine Reconcile</a>
 <ul>

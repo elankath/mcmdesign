@@ -20,7 +20,6 @@
       - [3. create controller worker go-routines applying reconciliations](#3-create-controller-worker-go-routines-applying-reconciliations)
         - [3.1 createworker](#31-createworker)
       - [4. reconciliation functions executed by worker](#4-reconciliation-functions-executed-by-worker)
-        - [4.1  reconcileclustersecretkey](#41--reconcileclustersecretkey)
         - [4.2  reconcileclustermachineclasskey](#42--reconcileclustermachineclasskey)
         - [4.3  reconcileclustermachinekey](#43--reconcileclustermachinekey)
           - [4.3.1 controller.triggercreationflow](#431-controllertriggercreationflow)
@@ -562,37 +561,13 @@ func worker(queue workqueue.ratelimitinginterface, resourcetype string, maxretri
 
 the controller starts worker go-routines that pop out keys from the relevant workqueue and execute the reconcile function.
 
-##### 4.1  reconcileclustersecretkey
-
-`reconcileclustersecretkey` basically adds the `mcfinalizer` (value: `machine.sapcloud.io/machine-controller`) to the list of `secret.finalizers` for all secrets that are referenced by machine classes within the same namespace.
-
-```mermaid
-%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
-
-flowchart td
-
-a[ns, name = cache.splitmetanamespacekey]
-b["sec=secretlister.secrets(ns).get(name)"]
-c["machineclasses=findmachineclassforsecret(name)"]
-d{machineclasses empty?}
-e["updatesecretfinalizers(sec)"] 
-f["secretq.addafter(key,10min)"]
-z(("end"))
-a-->b
-b-->c
-c-->d
-d--yes-->z
-d--no-->e
-e--err-->f
-e--success-->z
-f-->z
-```
 
 ##### 4.2  reconcileclustermachineclasskey 
 
 `reconcileclustermachineclasskey` re-queues after 10seconds on failure and 10mins on success. ie the machine class key is regularly re-queued.  bad: we are not using the `machineutils.longretry|shortretry` constants here.
 
 ```mermaid
+
 %%{init: {'themevariables': { 'fontsize': '10px'}}}%%
 
 flowchart td
@@ -685,7 +660,6 @@ createflow-->enqm
 ###### 4.3.1 controller.triggercreationflow
 
 the creation flow adds policy and delegates to the `driver.createmachine`.
-
 
 
 ##### 4.4  reconcileclustermachinesafetyorphanvms
