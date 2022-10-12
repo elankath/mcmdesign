@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html" class="active"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html" class="active"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.1.</strong> Cluster Machine Reconciliation</a></li></ol></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -610,6 +610,7 @@ type AttachedVolume struct {
 	Status PodStatus
 }
 </code></pre>
+<p>See <a href="https://pkg.go.dev/k8s.io/api/core/v1#PodSpec">k8s.io/api/core/v1.PodSpec</a>. Each <code>PodSpec</code> has a priority value where the higher the value, the higher the priority of the Pod.</p>
 <h4 id="pod-eviction"><a class="header" href="#pod-eviction">Pod Eviction</a></h4>
 <p>A <a href="k8s.io/api@v0.25.2/policy/v1#Eviction">k8s.io/api/policy/v1.Eviction</a> can be used to evict a <a href="#pod">Pod</a> from its <a href="#node">Node</a> - eviction is the <em>graceful</em> terimation of Pods on nodes.See <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/">API Eviction</a></p>
 <pre><code class="language-go">type Eviction struct {
@@ -829,7 +830,7 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
   reconcile(key.(string))
 }
 &quot;]
-Z((&quot;End&quot;))
+--&gt;Z((&quot;End&quot;))
 </pre>
 <p>A more elaborate example of basic client-go controller flow is demonstrated in the <a href="https://github.com/kubernetes/client-go/blob/master/examples/workqueue/main.go">clien-go workqueue example</a></p>
 <h3 id="client-go-utilities"><a class="header" href="#client-go-utilities">client-go utilities</a></h3>

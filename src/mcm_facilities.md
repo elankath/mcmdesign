@@ -18,6 +18,10 @@
 		- [MachineUtils](#machineutils)
 			- [Operation Descriptions](#operation-descriptions)
 			- [Retry Periods](#retry-periods)
+		- [Misc](#misc)
+			- [permits.PermitGiver](#permitspermitgiver)
+				- [permits.NewPermitGiver](#permitsnewpermitgiver)
+				- [permits.RegisterPermits](#permitsregisterpermits)
 	- [Main Server Structs](#main-server-structs)
 		- [MCServer](#mcserver)
 			- [MCServer Usage](#mcserver-usage)
@@ -444,7 +448,74 @@ const (
 
 ```
 
+###  Misc
 
+#### permits.PermitGiver
+
+[github.com/gardener/machine-controller-manager/pkg/util/permits.PermitGiver](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/permits/permits.go#L29) maintains a sync map of keys whose values can be deleted if not accessed for a configured time
+
+`permits.PermitGiver` provides different operations regarding permit for a given key. All operations are concurrent safe.
+```go 
+type PermitGiver interface {
+	RegisterPermits(key string, numPermits int)
+	TryPermit(key string, timeout time.Duration) bool
+	ReleasePermit(key string)
+	DeletePermits(key string)
+	Close()
+}
+type permit struct {
+	// lastAcquiredPermitTime is time since last successful TryPermit or new RegisterPermits
+	lastAcquiredPermitTime time.Time
+	// c is initialized with buffer size N representing num permits
+	c                      chan struct{} 
+}
+type permitGiver struct {
+	keyPermitsMap sync.Map // map of string keys to permit struct values
+	stopC         chan struct{}
+}
+
+```
+NOTES
+- `RegisterPermits(key, numPermits)` registers `numPermits` for the given `key`. A `permit` struct is initialized with `permit.c` buffer size as `numPermits`.
+- `TryPermit(key, timeout)` attempts to get a permit for the given key by sending a `struct{}{}` instance to the buffered `permit.c` channel. If `numPermits` is exceeded
+
+##### permits.NewPermitGiver
+`permits.NewPermitGiver` returns a new `PermitGiver`
+```go
+func NewPermitGiver(stalePermitKeyTimeout time.Duration, janitorFrequency time.Duration) PermitGiver
+```
+
+```mermaid
+
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+
+flowchart TB
+	Begin((" "))
+	-->InitStopCh["stopC := make(chan struct{})"]
+	-->InitPG["
+		pg := permitGiver{
+		keyPermitsMap: sync.Map{},
+		stopC:         stopC,
+	}"]
+	-->LaunchCleanUpGoroutine["go cleanup()"]
+	LaunchCleanUpGoroutine-->Return(("return &pg"))
+	LaunchCleanUpGoroutine--->InitTicker
+	subgraph cleanup
+	InitTicker["ticker := time.NewTicker(janitorFrequency)"]
+	-->caseReadStopCh{"<-stopC ?"}
+	caseReadStopCh--Yes-->End(("End"))
+	caseReadStopCh--No
+		-->ReadTickerCh{"<-ticker.C ?"}
+	ReadTickerCh--Yes-->CleanupStale["
+	pg.cleanupStalePermitEntries(stalePermitKeyTimeout)
+	(Iterates keyPermitsMap, remove entries whose 
+	lastAcquiredPermitTime exceeds stalePermitKeyTimeout)
+	"]
+	ReadTickerCh--No-->caseReadStopCh
+	end
+```
+
+##### permits.RegisterPermits 
 
 
 ## Main Server Structs

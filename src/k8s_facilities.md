@@ -781,7 +781,7 @@ AddEventHandler["machineInformer.Informer().AddEventHandler(cache.ResourceEventH
   reconcile(key.(string))
 }
 "]
-Z(("End"))
+-->Z(("End"))
 ```
 
 A more elaborate example of basic client-go controller flow is demonstrated in the [clien-go workqueue example](https://github.com/kubernetes/client-go/blob/master/examples/workqueue/main.go)

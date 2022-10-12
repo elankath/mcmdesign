@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="node_drain.html" class="active"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.1.</strong> Cluster Machine Reconciliation</a></li></ol></li><li class="chapter-item expanded "><a href="node_drain.html" class="active"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -154,10 +154,20 @@
 <ul>
 <li><a href="#drain-constants">Drain Constants</a></li>
 <li><a href="#drainoptions">drain.Options</a></li>
-<li><a href="#drainoptionsrundrain">drain.Options.RunDrain</a></li>
+<li><a href="#drainoptionsrundrain">drain.Options.RunDrain</a>
+<ul>
+<li><a href="#drainfilterpodswithpv">drain.filterPodsWithPv</a></li>
+</ul>
+</li>
 <li><a href="#drainoptionsevictpodswithoutpv">drain.Options.evictPodsWithoutPv</a>
 <ul>
+<li><a href="#drainoptionsevictpodwithoutpvinternal">drain.Options.evictPodWithoutPVInternal</a></li>
 <li><a href="#ismisconfiguredpdb">isMisconfiguredPdb</a></li>
+</ul>
+</li>
+<li><a href="#drainoptionsevictpodswithpv">drain.Options.evictPodsWithPv</a>
+<ul>
+<li><a href="#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></li>
 </ul>
 </li>
 <li><a href="#drainoptionswaitfordelete">drain.Options.waitForDelete</a></li>
@@ -331,8 +341,14 @@ EvictPodsWithoutPV--&gt;CreateAggregateError[&quot;
 </li>
 <li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict boolean</a> usage is confusing.</li>
 </ol>
+<h4 id="drainfilterpodswithpv"><a class="header" href="#drainfilterpodswithpv">drain.filterPodsWithPv</a></h4>
+<p>NOTE: should have been named <code>partitionPodsWithPVC</code></p>
+<p>Utility function that iterates through given <code>pods</code> and for each <code>pod</code>, iterates through its <code>pod.Spec.Volumes</code>. For each such pod <code>volume</code> checks <code>volume.PersistentVolumeClaim</code>. If not nil, adds <code>pod</code> to slice <code>podsWithPV</code> else adds <code>pod</code> to slice <code>podsWithoutPV</code></p>
+<pre><code class="language-go">func filterPodsWithPv(pods []corev1.Pod) 
+    (podsWithPV []*corev1.Pod, podsWithoutPV []*corev1.Pod) 
+</code></pre>
 <h3 id="drainoptionsevictpodswithoutpv"><a class="header" href="#drainoptionsevictpodswithoutpv">drain.Options.evictPodsWithoutPv</a></h3>
-<p>method that iterates through each given pod and launchews a go-routine that performs either pod eviction or pod deletion followed by a wait accompanied with error and retry handling for each pod in an independent go-routine for every pod. </p>
+<p>drain method that iterates through each given pod and for each pod launches a go-routine that simply delegates to <code>Options.evictPodsWithoutPv</code>.</p>
 <pre><code class="language-go">func (o *Options) evictPodsWithoutPv(ctx context.Context, 
     pods []*corev1.Pod,
 	policyGroupVersion string, //eviction API's GV
@@ -346,8 +362,19 @@ EvictPodsWithoutPV--&gt;CreateAggregateError[&quot;
 </code></pre>
 <p>NOTE:</p>
 <ul>
-<li>Both <code>evictPodsWithoutPv</code> and its helper <code>evictPodWithoutPVInternal</code> should ideally NOT return an <code>error</code> as they are go-routine launch methods that communicate errors or success (nil) via a <code>returnCh</code>.</li>
+<li><code>attemptEvict</code> parameter is very badly named. It is more meant to be a <code>retryEvict</code></li>
 </ul>
+<h4 id="drainoptionsevictpodwithoutpvinternal"><a class="header" href="#drainoptionsevictpodwithoutpvinternal">drain.Options.evictPodWithoutPVInternal</a></h4>
+<p>drian method that  that either evicts or deletes a Pod with retry handling until <code>Options.MaxEvictRetries</code> is reached.</p>
+<pre><code class="language-go">func (o *Options) evictPodWithoutPVInternal(
+    ctx context.Context, 
+    attemptEvict bool, 
+    pod *corev1.Pod, 
+    policyGroupVersion string, 
+    getPodFn func(namespace, name string) (*corev1.Pod, error), 
+    returnCh chan error) 
+
+</code></pre>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
@@ -407,12 +434,12 @@ end
 
 SendNilChannel[&quot;returnCh &lt;- nil&quot;]
 SendErrChannel[&quot;returnCh &lt;- err&quot;]
-NilReturn((&quot;return nil&quot;))
+NilReturn((&quot;return&quot;))
 
 
 </pre>
 <h4 id="ismisconfiguredpdb"><a class="header" href="#ismisconfiguredpdb">isMisconfiguredPdb</a></h4>
-<p>TODO: Discuss/Elaborate on this.</p>
+<p>TODO: Discuss/Elaborate on why this is considered misconfigured.</p>
 <pre><code class="language-go">func isMisconfiguredPdbV1(pdb *policyv1.PodDisruptionBudget) bool {
 	if pdb.ObjectMeta.Generation != pdb.Status.ObservedGeneration {
 		return false
@@ -422,6 +449,29 @@ NilReturn((&quot;return nil&quot;))
         pdb.Status.CurrentHealthy &gt;= pdb.Status.ExpectedPods
         &amp;&amp; pdb.Status.DisruptionsAllowed == 0
 }
+</code></pre>
+<h3 id="drainoptionsevictpodswithpv"><a class="header" href="#drainoptionsevictpodswithpv">drain.Options.evictPodsWithPv</a></h3>
+<pre><code class="language-go">func (o *Options) evictPodsWithPv(ctx context.Context, 
+    attemptEvict bool, 
+    pods []*corev1.Pod,
+	policyGroupVersion string,
+	getPodFn func(namespace, name string) (*corev1.Pod, error),
+	returnCh chan error)
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+NilReturn((&quot;return&quot;))
+</pre>
+<h4 id="drainoptionsevictpodswithpvinternal"><a class="header" href="#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646">drain.Options.evictPodsWithPVInternal</a> is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a <code>remainingPods</code> slice and a <code>fastTrace</code> boolean meant to abort the pod eviction and the calling go-routine. (TODO: WHY? This doesn't seem right)</p>
+<pre><code class="language-go">func (o *DrainOptions) evictPodsWithPVInternal(ctx context.Context,
+    attemptEvict bool, 
+    pods []*corev1.Pod, 
+    volMap map[string][]string,
+	policyGroupVersion string,
+	returnCh chan error
+    ) (remainingPods []*api.Pod, fastTrack bool) 
 </code></pre>
 <h3 id="drainoptionswaitfordelete"><a class="header" href="#drainoptionswaitfordelete">drain.Options.waitForDelete</a></h3>
 <p>NOTE: Ideally should have been named <code>waitForPodDisappearance</code></p>
@@ -437,7 +487,7 @@ NilReturn((&quot;return nil&quot;))
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="cluster_machine_reconcile.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="machine-controller/cluster_machine_reconcile.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
@@ -451,7 +501,7 @@ NilReturn((&quot;return nil&quot;))
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="cluster_machine_reconcile.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="machine-controller/cluster_machine_reconcile.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 

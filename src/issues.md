@@ -1,3 +1,4 @@
+🚧 WIP at the moment. Please do not read.
 - [Issues](#issues)
 	- [Design Issues](#design-issues)
 		- [LastOperation is actually Next Operation](#lastoperation-is-actually-next-operation)
@@ -10,9 +11,13 @@
 	- [drainNode Handling](#drainnode-handling)
 	- [Node Conditions](#node-conditions)
 	- [VolumeAttachment](#volumeattachment)
+			- [Dead? reconcileClusterNodeKey](#dead-reconcileclusternodekey)
+		- [Dead? machine.go | triggerUpdationFlow](#dead-machinego--triggerupdationflow)
+	- [Duplicate Initialization of EventRecorder in MC](#duplicate-initialization-of-eventrecorder-in-mc)
+		- [Q? Internal to External Scheme Conversion](#q-internal-to-external-scheme-conversion)
 # Issues
 
-This section is WIP atm. Please check after this warning has been removed. Lots more to be added.
+This section is very basic WIP atm. Please check after this warning has been removed. Lots more to be added here from notes and appropriately structured.
 
 ## Design Issues
 
@@ -93,4 +98,49 @@ volumeAttachment := obj.(*storagev1.VolumeAttachment)
 		// Should return here.
 	}
 //...
+```
+
+#### Dead? reconcileClusterNodeKey 
+
+This just delegates to `reconcileClusterNode` which does nothing..
+```go
+func (c *controller) reconcileClusterNode(node *v1.Node) error {
+	return nil
+}
+
+```
+
+### Dead? machine.go | triggerUpdationFlow
+Can't find usages
+
+## Duplicate Initialization of EventRecorder in MC
+
+`pkg/util/provider/app.createRecorder` already dones this below.
+```go
+func createRecorder(kubeClient *kubernetes.Clientset) record.EventRecorder {
+eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(klog.Infof)
+	eventBroadcaster.StartRecordingToSink(&v1core.EventSinkImpl{Interface: v1core.New(kubeClient.CoreV1().RESTClient()).Events("")})
+	return eventBroadcaster.NewRecorder(kubescheme.Scheme, v1.EventSource{Component: controllerManagerAgentName})
+}
+```
+
+
+We get the recorder from this eventBroadcaster and then pass it to the `pkg/util/provider/machinecontroller/controller.NewController` method which again does:
+```go
+	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(klog.Infof)
+	eventBroadcaster.StartRecordingToSink(&typedcorev1.EventSinkImpl{Interface: typedcorev1.New(controlCoreClient.CoreV1().RESTClient()).Events(namespace)})
+```
+The above is useless.
+
+### Q? Internal to External Scheme Conversion
+
+Why do we do this ?
+```go
+internalClass := &machine.MachineClass{}
+	err := c.internalExternalScheme.Convert(class, internalClass, nil)
+	if err != nil {
+		return err
+	}
 ```

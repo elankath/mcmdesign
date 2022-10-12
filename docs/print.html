@@ -82,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.1.</strong> Cluster Machine Reconciliation</a></li></ol></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -645,6 +645,7 @@ type AttachedVolume struct {
 	Status PodStatus
 }
 </code></pre>
+<p>See <a href="https://pkg.go.dev/k8s.io/api/core/v1#PodSpec">k8s.io/api/core/v1.PodSpec</a>. Each <code>PodSpec</code> has a priority value where the higher the value, the higher the priority of the Pod.</p>
 <h4 id="pod-eviction"><a class="header" href="#pod-eviction">Pod Eviction</a></h4>
 <p>A <a href="k8s.io/api@v0.25.2/policy/v1#Eviction">k8s.io/api/policy/v1.Eviction</a> can be used to evict a <a href="k8s_facilities.html#pod">Pod</a> from its <a href="k8s_facilities.html#node">Node</a> - eviction is the <em>graceful</em> terimation of Pods on nodes.See <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/">API Eviction</a></p>
 <pre><code class="language-go">type Eviction struct {
@@ -864,7 +865,7 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
   reconcile(key.(string))
 }
 &quot;]
-Z((&quot;End&quot;))
+--&gt;Z((&quot;End&quot;))
 </pre>
 <p>A more elaborate example of basic client-go controller flow is demonstrated in the <a href="https://github.com/kubernetes/client-go/blob/master/examples/workqueue/main.go">clien-go workqueue example</a></p>
 <h3 id="client-go-utilities"><a class="header" href="#client-go-utilities">client-go utilities</a></h3>
@@ -928,6 +929,16 @@ Z((&quot;End&quot;))
 <ul>
 <li><a href="mcm_facilities.html#operation-descriptions">Operation Descriptions</a></li>
 <li><a href="mcm_facilities.html#retry-periods">Retry Periods</a></li>
+</ul>
+</li>
+<li><a href="mcm_facilities.html#misc">Misc</a>
+<ul>
+<li><a href="mcm_facilities.html#permitspermitgiver">permits.PermitGiver</a>
+<ul>
+<li><a href="mcm_facilities.html#permitsnewpermitgiver">permits.NewPermitGiver</a></li>
+<li><a href="mcm_facilities.html#permitsregisterpermits">permits.RegisterPermits</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -1312,6 +1323,67 @@ const (
 )
 
 </code></pre>
+<h3 id="misc"><a class="header" href="#misc">Misc</a></h3>
+<h4 id="permitspermitgiver"><a class="header" href="#permitspermitgiver">permits.PermitGiver</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/permits/permits.go#L29">github.com/gardener/machine-controller-manager/pkg/util/permits.PermitGiver</a> maintains a sync map of keys whose values can be deleted if not accessed for a configured time</p>
+<p><code>permits.PermitGiver</code> provides different operations regarding permit for a given key. All operations are concurrent safe.</p>
+<pre><code class="language-go">type PermitGiver interface {
+	RegisterPermits(key string, numPermits int)
+	TryPermit(key string, timeout time.Duration) bool
+	ReleasePermit(key string)
+	DeletePermits(key string)
+	Close()
+}
+type permit struct {
+	// lastAcquiredPermitTime is time since last successful TryPermit or new RegisterPermits
+	lastAcquiredPermitTime time.Time
+	// c is initialized with buffer size N representing num permits
+	c                      chan struct{} 
+}
+type permitGiver struct {
+	keyPermitsMap sync.Map // map of string keys to permit struct values
+	stopC         chan struct{}
+}
+
+</code></pre>
+<p>NOTES</p>
+<ul>
+<li><code>RegisterPermits(key, numPermits)</code> registers <code>numPermits</code> for the given <code>key</code>. A <code>permit</code> struct is initialized with <code>permit.c</code> buffer size as <code>numPermits</code>.</li>
+<li><code>TryPermit(key, timeout)</code> attempts to get a permit for the given key by sending a <code>struct{}{}</code> instance to the buffered <code>permit.c</code> channel. If <code>numPermits</code> is exceeded</li>
+</ul>
+<h5 id="permitsnewpermitgiver"><a class="header" href="#permitsnewpermitgiver">permits.NewPermitGiver</a></h5>
+<p><code>permits.NewPermitGiver</code> returns a new <code>PermitGiver</code></p>
+<pre><code class="language-go">func NewPermitGiver(stalePermitKeyTimeout time.Duration, janitorFrequency time.Duration) PermitGiver
+</code></pre>
+<pre class="mermaid">
+%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TB
+	Begin((&quot; &quot;))
+	--&gt;InitStopCh[&quot;stopC := make(chan struct{})&quot;]
+	--&gt;InitPG[&quot;
+		pg := permitGiver{
+		keyPermitsMap: sync.Map{},
+		stopC:         stopC,
+	}&quot;]
+	--&gt;LaunchCleanUpGoroutine[&quot;go cleanup()&quot;]
+	LaunchCleanUpGoroutine--&gt;Return((&quot;return &amp;pg&quot;))
+	LaunchCleanUpGoroutine---&gt;InitTicker
+	subgraph cleanup
+	InitTicker[&quot;ticker := time.NewTicker(janitorFrequency)&quot;]
+	--&gt;caseReadStopCh{&quot;&lt;-stopC ?&quot;}
+	caseReadStopCh--Yes--&gt;End((&quot;End&quot;))
+	caseReadStopCh--No
+		--&gt;ReadTickerCh{&quot;&lt;-ticker.C ?&quot;}
+	ReadTickerCh--Yes--&gt;CleanupStale[&quot;
+	pg.cleanupStalePermitEntries(stalePermitKeyTimeout)
+	(Iterates keyPermitsMap, remove entries whose 
+	lastAcquiredPermitTime exceeds stalePermitKeyTimeout)
+	&quot;]
+	ReadTickerCh--No--&gt;caseReadStopCh
+	end
+</pre>
+<h5 id="permitsregisterpermits"><a class="header" href="#permitsregisterpermits">permits.RegisterPermits</a></h5>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40">machine-controller-manager/pkg/util/provider/app/options.MCServer</a>
@@ -1516,20 +1588,695 @@ func New(code codes.Code, msg string) *Status {
 </code></pre>
 <p>NOTE: No ideally why we are doing such hard work as shown in <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecodes/status/status.go#L84">status.FromError</a> which involves time-consuming regex parsing of an error string into a status. This is actually being used to parse error strings of errors returned by Driver methods. Not good - should be better designed.</p>
 <div style="break-before: page; page-break-before: always;"></div><ul>
-<li><a href="cluster_machine_reconcile.html#cluster-machine-reconcile">Cluster Machine Reconcile</a>
+<li><a href="machine-controller/index.html#machine-controller">Machine Controller</a>
 <ul>
-<li><a href="cluster_machine_reconcile.html#triggerdeletionflow">triggerDeletionFlow</a>
+<li><a href="machine-controller/index.html#mc-launch">MC Launch</a></li>
+<li><a href="machine-controller/index.html#machine-controller-loop">machine controller loop</a>
 <ul>
-<li><a href="cluster_machine_reconcile.html#controllergetvmstatus">controller.getVMStatus</a></li>
-<li><a href="cluster_machine_reconcile.html#controllerdrainnode">controller.drainNode</a></li>
+<li><a href="machine-controller/index.html#apprun">app.run</a></li>
+<li><a href="machine-controller/index.html#appstartcontrollers">app.startcontrollers</a></li>
+<li><a href="machine-controller/index.html#controller-initialization">controller initialization</a>
+<ul>
+<li><a href="machine-controller/index.html#1-newcontroller-factory-func">1. newcontroller factory func</a></li>
+<li><a href="machine-controller/index.html#11-create-controller-struct">1.1 create controller struct</a></li>
+<li><a href="machine-controller/index.html#12-assign-listers-and-hassynced-funcs-to-controller-struct">1.2 assign listers and hassynced funcs to controller struct</a></li>
+<li><a href="machine-controller/index.html#13-register-controller-event-handlers-on-informers">1.3 register controller event handlers on informers.</a></li>
+<li><a href="machine-controller/index.html#14-event-handler-functions">1.4 event handler functions</a>
+<ul>
+<li><a href="machine-controller/index.html#141-adding-secrets-keys-to-secretsqueue">1.4.1 adding secrets keys to secretsqueue</a></li>
+<li><a href="machine-controller/index.html#142-adding-machine-class-names-and-keys-to-machineclassqueue">1.4.2 adding machine class names and keys to machineclassqueue</a></li>
+<li><a href="machine-controller/index.html#143-adding-machine-keys-to-machinequeue">1.4.3 adding machine keys to machinequeue</a></li>
 </ul>
 </li>
-<li><a href="cluster_machine_reconcile.html#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
-<li><a href="cluster_machine_reconcile.html#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></li>
+</ul>
+</li>
+<li><a href="machine-controller/index.html#machinecontrollerrun">machinecontroller.run</a>
+<ul>
+<li><a href="machine-controller/index.html#1-wait-for-informer-caches-to-sync">1. wait for informer caches to sync</a></li>
+<li><a href="machine-controller/index.html#2-register-metrics">2. register metrics</a>
+<ul>
+<li><a href="machine-controller/index.html#21-controllerdescribe">2.1 controller.describe</a></li>
+<li><a href="machine-controller/index.html#21-controllercollect">2.1 controller.collect</a></li>
+</ul>
+</li>
+<li><a href="machine-controller/index.html#3-create-controller-worker-go-routines-applying-reconciliations">3. create controller worker go-routines applying reconciliations</a>
+<ul>
+<li><a href="machine-controller/index.html#31-createworker">3.1 createworker</a></li>
+</ul>
+</li>
+<li><a href="machine-controller/index.html#4-reconciliation-functions-executed-by-worker">4. reconciliation functions executed by worker</a>
+<ul>
+<li><a href="machine-controller/index.html#41--reconcileclustersecretkey">4.1  reconcileclustersecretkey</a></li>
+<li><a href="machine-controller/index.html#42--reconcileclustermachineclasskey">4.2  reconcileclustermachineclasskey</a></li>
+<li><a href="machine-controller/index.html#43--reconcileclustermachinekey">4.3  reconcileclustermachinekey</a>
+<ul>
+<li><a href="machine-controller/index.html#431-controllertriggercreationflow">4.3.1 controller.triggercreationflow</a></li>
+</ul>
+</li>
+<li><a href="machine-controller/index.html#44--reconcileclustermachinesafetyorphanvms">4.4  reconcileclustermachinesafetyorphanvms</a></li>
+<li><a href="machine-controller/index.html#45--reconcileclustermachinesafetyapiserver">4.5  reconcileclustermachinesafetyapiserver</a></li>
 </ul>
 </li>
 </ul>
-<p>While perusing the below, you might need to reference <a href="./mc_helper_funcs.html">Machine Controller Helper Functions</a>  as several reconcile functions delegate to helper methods defined on the machine controller struct.</p>
+</li>
+</ul>
+</li>
+<li><a href="machine-controller/index.html#mcm-local-provider">MCM Local Provider</a></li>
+<li><a href="machine-controller/index.html#doubts">Doubts.</a>
+<ul>
+<li><a href="machine-controller/index.html#dead-code">Dead Code</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h1 id="machine-controller"><a class="header" href="#machine-controller">Machine Controller</a></h1>
+<h2 id="mc-launch"><a class="header" href="#mc-launch">MC Launch</a></h2>
+<p>most of these timeout flags are redundant since exact same values are 
+given in <code>machine-controller-manager/pkg/util/provider/app/options.newmcserver</code></p>
+<pre><code>go run -mod=vendor cmd/machine-controller/main.go \
+			--control-kubeconfig=$(control_kubeconfig) \
+			--target-kubeconfig=$(target_kubeconfig) \
+			--namespace=$(control_namespace) \
+			--machine-creation-timeout=20m \
+			--machine-drain-timeout=5m \
+			--machine-health-timeout=10m \
+			--machine-pv-detach-timeout=2m \
+			--machine-safety-apiserver-statuscheck-timeout=30s \
+			--machine-safety-apiserver-statuscheck-period=1m \
+			--machine-safety-orphan-vms-period=30m \
+			--leader-elect=$(leader_elect) \
+			--v=3
+
+</code></pre>
+<p>entrypoint: 
+<code>cmd/machine-controller/main.go</code></p>
+<ul>
+<li>
+<p>creates <code>machine-controller-manager/pkg/util/provider/app/options.mcserver</code> using <code>options.newmcserver</code> which is the main context object for the machinecontroller that embeds a
+<code>machineconfig.machinecontrollerconfiguration</code>,   the <code>options.newmcserver</code> initializes <code>options.mcserver</code> with default values for <code>port: 10258</code>, <code>namespace: default</code>, <code>concurrentnodesyncs: 50</code>, <code>nodeconditions: &quot;kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable&quot;</code>, <code>minresyncperiod: 12 hours</code>, <code>kubeapiqps: 20</code>, <code>kubeapiburst:30</code> </p>
+</li>
+<li>
+<p>calls <code>mcserver.addflags</code> which defines all parsing flags for the machine controller into fields of <code>mcserver</code> instance created in the last step.</p>
+</li>
+<li>
+<p>calls <code>k8s.io/component-base/logs.newoptions</code> and then <code>options.addflags</code> for logging options. probably get rid of this when moving to <code>logr</code>. see <a href="https://github.com/gardener/gardener/blob/master/docs/development/logging.md">logging in gardener components</a>. then use the <a href="https://github.com/gardener/gardener/tree/master/hack/tools/logcheck">logcheck</a>tool.</p>
+</li>
+<li>
+<p>calls <code>newdriver</code> with control kube config that creates a controller runtime client (<code>sigs.k8s.io/controller-runtime/pkg/client</code>) which then calls <code>pkg/local/driver.newdriver</code> passing the controlloer-runtime client which constructs a <code>localdriver</code> encapsulating the passed in client.</p>
+<ul>
+<li>the <code>localdriver</code> implements <a href="https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/driver/driver.go#l28">driver</a> is the facade for creation/deletion of vm's</li>
+</ul>
+</li>
+<li>
+<p>calls <a href="https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l77">app.run</a> passing in the previously created <code>mcserver</code> and <code>driver</code> instances.</p>
+</li>
+<li></li>
+</ul>
+<h2 id="machine-controller-loop"><a class="header" href="#machine-controller-loop">machine controller loop</a></h2>
+<h3 id="apprun"><a class="header" href="#apprun">app.run</a></h3>
+<p><code>app.run</code> is the function that setups the main control loop of the machine controller server. </p>
+<ul>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l77">app.run(s *options.mcserver, driver driver.driger)</a> is the common run loop for all machine controllers</li>
+<li>creates <code>targetkubeconfig</code> and <code>controlkubeconfig</code> of type <code>k8s.io/client-go/rest.config</code> from the target kube config path using <code>clientcmd.buildconfigfromflags</code></li>
+<li>set fields such as <code>config.qps</code> and <code>config.burst</code>  in both <code>targetkubeconfig</code> and <code>controlkubeconfig</code> from the <code>options.newmcserver</code></li>
+<li>create <code>kubeclientcontrol</code> from the <code>controlkubeconfig</code> using the standard client-go client factory metohd: <code>kubernetes.newforconfig</code> that returns a <code>client-go/kubernetes.clientset</code></li>
+<li>similarly create another <code>clientset</code> named <code>leaderelectionclient</code> using <code>controlkubeconfig</code></li>
+<li>start a go routine using the function <code>starthttp</code> that registers a bunch of http handlers for the go profiler, prometheus metrics and the health check.</li>
+<li>call <code>createrecorder</code> passing the <code>kubeclientcontrol</code> client set instance that returns a <a href="https://github.com/kubernetes/client-go/blob/master/tools/record/event.go#l91">client-go/tools/record.eventrecorder</a>
+<ul>
+<li>creates a new <code>eventbroadcaster</code> of type <a href="https://github.com/kubernetes/client-go/blob/master/tools/record/event.go#l113">event.eventbroadcaster</a></li>
+<li>set the logging function of the broadcaster to <code>klog.infof</code>.</li>
+<li>sets the event slink using <code>startrecordingtoslink</code> passing the event interface as <code>kubeclient.corev1().restclient()).events(&quot;&quot;)</code>. effectively events will be published remotely.</li>
+<li>returns the <code>record.eventrecorder</code> associated with the <code>eventbroadcaster</code> using <code>eventbroadcaster.newrecorder</code></li>
+<li>constructs the <code>run</code> anonmous function assigned to <code>run</code> variable which does the following:
+<ul>
+<li>initializes a <code>stop</code> receive channel.</li>
+<li>creates a <code>controlmachineclientbuilder</code> using <code>machineclientbuilder.simpleclientbuilder</code> using the <code>controlkubeconfig</code>.</li>
+<li>creates a <code>controlcoreclientbuidler</code> using <code>coreclientbuilder.simplecontrollerclientbuilder</code> wrapping <code>controlkubeconfig</code>.</li>
+<li>creates <code>targetcoreclientbuilder</code> using <code>coreclientbuilder.simplecontrollerclientbuilder</code> wrapping <code>controlkubeconfig</code>.</li>
+<li>// imho far too many clients created</li>
+<li>call the <code>startcontrollers</code> function passing the <code>mcserver</code>, <code>driver</code>, <code>controlkubeconfig</code>, <code>targetkubeconfig</code>, <code>controlmachineclientbuilder</code>, <code>controlcoreclientbuilder</code>, <code>targetcoreclientbuilder</code>, <code>recorder</code> and <code>stop</code> channel.
+<ul>
+<li>// ?: if you are going to pass the controlkubeconfig and targetkubeconfig - why not create the client builders inside the startcontrollers ?</li>
+<li>if <code>startcontrollers</code> return an error panic and exit <code>run</code>.</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>use <a href="https://github.com/kubernetes/client-go/blob/master/tools/leaderelection/leaderelection.go#l218">leaderelection.runordie</a> to start a leader election and pass the previously created <code>run</code> function to the leader callbacks for <code>onstartedleading</code>. <code>onstartedleading</code> is called when a leaderelector client starts leading.</li>
+</ul>
+</li>
+</ul>
+<h3 id="appstartcontrollers"><a class="header" href="#appstartcontrollers">app.startcontrollers</a></h3>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l202">app.startcontrollers</a> starts all controllers which are part fo machine controller. currently there is only one controller: the machine controller started.</p>
+<ul>
+<li>calls <code>getavailableresources</code> using the <code>controlcoreclientbuilder</code> that returns a <code>map[schema.groupversionresource]bool]</code> assigned to <code>availableresources</code>
+<ul>
+<li><code>getavailableresources</code> waits till the api server is running by checking its <code>/healthz</code> using <code>wait.pollimmediate</code>. keeps re-creating the client using <code>clientbuilder.client</code> method. </li>
+<li>then uses <code>clientset.interface.discovery.serverresources</code> to get a <code>[]*metav1.apiresourcelist</code> (which encapsulates a <code>[]apiresources</code>) and then converts that to a <code>map[schema.groupversionresource]bool]</code> `</li>
+</ul>
+</li>
+<li>creates a <code>controlmachineclient</code> which is a client for the controller crd types (type: <code>versioned.interface</code>) using <code>controlmachineclientbuilder.clientordie</code> using <code>machine-controller</code> as client name. this client targets the control cluster - ie the cluster holding the machine cr's.</li>
+<li>creates a <code>controlcoreclient</code> (of type: <code>kubernetes.clientset</code>) which is the standard k8s client-go client for accessing the k8s control cluster.</li>
+<li>creates a <code>targetcoreclient</code> (of type: <code>kubernetes.clientset</code>) which is the standard k8s client-go client for accessing the k8s target cluster. </li>
+<li>obtain the target cluster k8s version using the discovery interface and preserve it in <code>targetkubernetesversion</code></li>
+<li>if the <code>availableresources</code> does not contain the <code>machinegvr</code> exit this loop with error.</li>
+<li>creates the following informer factories:
+<ul>
+<li><code>controlmachineinformerfactory</code> using the generated <code>client/informers/externalversions.newfilteredsharedinformerfactory</code> passing the conrol machine client, the configured min resync period and control namespace obtained from mcserver.</li>
+<li><code>controlcoreinformerfactory</code> using the standard k8s client-go <code>k8s.io/client-go/informers.newfilteredsharedinformerfactory</code> method passing in the k8s client for the , the control cluster, configured min resync period and control namespace obtained from mcserver.</li>
+<li><code>targetcoreinformerfactory</code> using the standard k8s client-go <code>k8s.io/client-go/informers.newfilteredsharedinformerfactory</code> method passing in the k8s core client for the target cluster, the configured min resync period and control namespace obtained from mcserver.</li>
+<li>get the controller's informer access facade <code>v1alpha1.interface</code> using <code>controlmachineinformerfactory.machine().v1alpha1()</code> and assign to <code>machinesharedinformers</code></li>
+<li>now create the <code>machinecontroller</code> using <code>pkg/util/provider/machinecontroller/controller.newcontroller</code> factory function, passing the below:
+<ul>
+<li>control namespace from <code>mcserver.namespace</code></li>
+<li><code>safetyoptions</code> from <code>mcserver.safetyoptions</code></li>
+<li><code>nodeconditions</code> from <code>mcserver.nodeconditions</code>. (by default these would be : &quot;kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable&quot;)</li>
+<li>clients: <code>controlmachineclient</code>, <code>controlcoreclient</code>, <code>targetcoreclient</code></li>
+<li>the <code>driver</code> </li>
+<li>target cluster informers: <code>nodeinformer</code>, <code>persistentvolumeclaimsinformer</code>, <code>persistentvolumeinformer</code>, <code>volumeattachmentinformer</code> and <code>poddisruptionbudgetinformer</code> obtained from <code>targetcoreinformerfactory</code></li>
+<li>control cluster informers: 
+<ul>
+<li><code>secretinformer</code> from <code>controlcoreinformerfactory</code></li>
+<li><code>machineclassinformer</code>, <code>machineinformer</code> from <code>machinesharedinformers</code></li>
+</ul>
+</li>
+<li>event recorder</li>
+<li><code>targetkubernetesversion</code></li>
+</ul>
+</li>
+<li>start all informers by calling <code>sharedinformerfactory.start(stopch &lt;-chan struct{})</code> for <code>controlmachineinformerfactory</code>, <code>controlcoreinformerfactory</code> and <code>targetcoreinformerfactory</code> passing teh <code>stop</code> channel</li>
+<li>launches the <code>machinecontroller</code> in new go-routine by invoking: <code>go machinecontroller.run(mcserver.concurrentnodesyncs, stop)</code></li>
+</ul>
+</li>
+</ul>
+<h3 id="controller-initialization"><a class="header" href="#controller-initialization">controller initialization</a></h3>
+<p>the machine controller is constructed using
+<code>machine-controller-manager/pkg/util/provider/machinecontroller/controller.newcontroller</code> factory function which initializes the <code>controller</code> struct.</p>
+<h4 id="1-newcontroller-factory-func"><a class="header" href="#1-newcontroller-factory-func">1. newcontroller factory func</a></h4>
+<p>mc is constructed using the factory function below:</p>
+<pre><code class="language-go">func newcontroller(
+	namespace string,
+	controlmachineclient machineapi.machinev1alpha1interface,
+	controlcoreclient kubernetes.interface,
+	targetcoreclient kubernetes.interface,
+	driver driver.driver,
+	pvcinformer coreinformers.persistentvolumeclaiminformer,
+	pvinformer coreinformers.persistentvolumeinformer,
+	secretinformer coreinformers.secretinformer,
+	nodeinformer coreinformers.nodeinformer,
+	pdbinformer policyinformers.poddisruptionbudgetinformer,
+	volumeattachmentinformer storageinformers.volumeattachmentinformer,
+	machineclassinformer machineinformers.machineclassinformer,
+	machineinformer machineinformers.machineinformer,
+	recorder record.eventrecorder,
+	safetyoptions options.safetyoptions,
+	nodeconditions string,
+	bootstraptokenauthextragroups string,
+) (controller, error) {
+	// etc
+
+}
+</code></pre>
+<h4 id="11-create-controller-struct"><a class="header" href="#11-create-controller-struct">1.1 create controller struct</a></h4>
+<p>create the controller struct initializing rate-limiting work queues for all relevant resources</p>
+<pre><code class="language-go">	controller := &amp;controller{
+		namespace:                     namespace,
+		controlmachineclient:          controlmachineclient,
+		controlcoreclient:             controlcoreclient,
+		targetcoreclient:              targetcoreclient,
+		recorder:                      recorder,
+		secretqueue:                   workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;secret&quot;),
+		nodequeue:                     workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;node&quot;),
+		machineclassqueue:             workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;machineclass&quot;),
+		machinequeue:                  workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;machine&quot;),
+		machinesafetyorphanvmsqueue:   workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;machinesafetyorphanvms&quot;),
+		machinesafetyapiserverqueue:   workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;machinesafetyapiserver&quot;),
+		safetyoptions:                 safetyoptions,
+		nodeconditions:                nodeconditions,
+		driver:                        driver,
+		bootstraptokenauthextragroups: bootstraptokenauthextragroups,
+		volumeattachmenthandler:       nil,
+		permitgiver:                   permits.newpermitgiver(permitgiverstaleentrytimeout, janitorfreq),
+	}
+
+
+</code></pre>
+<h4 id="12-assign-listers-and-hassynced-funcs-to-controller-struct"><a class="header" href="#12-assign-listers-and-hassynced-funcs-to-controller-struct">1.2 assign listers and hassynced funcs to controller struct</a></h4>
+<pre><code class="language-go">	// initialize controller listers from the passed-in shared informers (8 listers)
+	controller.pvclister = pvcinformer
+	controller.pvlister = pvinformer.lister()
+    controller.machinelister = machineinformer.lister()
+	// etc
+	// assign the hassynced function from the passed-in shared informers
+	controller.pvcsynced = pvcinformer.informer().hassynced
+	controller.pvsynced = pvinformer.informer().hassynced
+    controller.machinesynced = machineinformer.informer().hassynced
+</code></pre>
+<h4 id="13-register-controller-event-handlers-on-informers"><a class="header" href="#13-register-controller-event-handlers-on-informers">1.3 register controller event handlers on informers.</a></h4>
+<p>an informer invokes registered event handler when a k8s object changes. event handlers are registered using <code>&lt;type&gt;informer().addeventhandler(resourceeventhandler)</code> function. the controller initialization registers event handlers: on control-cluster <code>secretinformer</code>, control-cluster <code>machineclassinformer</code>, control-cluster <code>machineinformer</code> and target-cluster <code>nodeinformer</code>.</p>
+<pre><code class="language-go">   // event handlers added for control-cluster secret add/delete
+	secretinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
+		addfunc:    controller.secretadd,
+		deletefunc: controller.secretdelete,
+	})
+
+   // 2 event handlers added for controlcluster machineclass add/update/delete
+	machineclassinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
+		addfunc:    controller.machineclasstosecretadd,
+		updatefunc: controller.machineclasstosecretupdate,
+		deletefunc: controller.machineclasstosecretdelete,
+	})
+
+	machineclassinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
+		addfunc:    controller.machineclassadd,
+		updatefunc: controller.machineclassupdate,
+		deletefunc: controller.machineclassdelete,
+	})
+
+   // 3 event handlers added for control-cluster machine add/update/delete
+	machineinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
+		addfunc:    controller.machinetomachineclassadd,
+		updatefunc: controller.machinetomachineclassupdate,
+		deletefunc: controller.machinetomachineclassdelete,
+	})
+	machineinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
+		addfunc:    controller.addmachine,
+		updatefunc: controller.updatemachine,
+		deletefunc: controller.deletemachine,
+	})
+
+	machineinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
+		// updatemachinetosafety makes sure that orphan vm handler is invoked on some specific machine obj updates
+		updatefunc: controller.updatemachinetosafety,
+		// deletemachinetosafety makes sure that orphan vm handler is invoked on any machine deletion
+		deletefunc: controller.deletemachinetosafety,
+	})
+
+    // event handler registered for target-cluster node add/update/delete
+	nodeinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
+		addfunc:    controller.addnodetomachine,
+		updatefunc: controller.updatenodetomachine,
+		deletefunc: controller.deletenodetomachine,
+	}		
+
+	// event handler added for target-cluster volume attachments is handled by
+	// utility volumeattachmenthandler that can distribute incoming volueattachment 
+	// add/updates to a bunch of workers.
+	controller.volumeattachmenthandler = drain.newvolumeattachmenthandler()
+	volumeattachmentinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
+		addfunc:    controller.volumeattachmenthandler.addvolumeattachment,
+		updatefunc: controller.volumeattachmenthandler.updatevolumeattachment,
+	})
+</code></pre>
+<h4 id="14-event-handler-functions"><a class="header" href="#14-event-handler-functions">1.4 event handler functions</a></h4>
+<p>controller informer event handlers generally add the object keys to the appropriate work queues which are later picked up and reconciled in processing in <code>controller.run</code>.</p>
+<p>the work queue is used to separate the delivery of the object from its processing. resource event handler functions extract the key of the delivered object and add it to the relevant work queue for future processing. (in <code>controller.run</code>) </p>
+<h5 id="141-adding-secrets-keys-to-secretsqueue"><a class="header" href="#141-adding-secrets-keys-to-secretsqueue">1.4.1 adding secrets keys to secretsqueue</a></h5>
+<p><code>controller.secretadd(obj interfade{})</code> which is the <code>addfunc</code> callback registered for the <code>secretinformer</code> extracts the secret <code>key</code> using <code>cache.deletionhandlingmetanamespacekeyfunc(obj)</code> and then adds this <code>key</code> to the <code>secretqueue</code>.</p>
+<pre><code class="language-go">func (c *controller) secretadd(obj interface{}) {
+// confusing. should just use metanamespacekeyfunc(obj)
+	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj) 
+	if err != nil {
+		c.secretqueue.add(key)
+	}
+}
+func (c *controller) secretdelete(obj interface{}) {
+	c.secretadd(obj) // dont like this delegation
+}
+</code></pre>
+<p>in the case of <code>controller.secretdelete</code>, we must check for the <a href="https://pkg.go.dev/k8s.io/client-go/tools/cache#deletedfinalstateunknown">deletedfinalstateunknown</a> state of that secret in the cache before enqueuing its key. the <code>deletedfinalstateunknown</code> state means that the object has been deleted but that the watch deletion event was missed while disconnected from apiserver and the controller didn't react accordingly, hence we need to add to the secretqueue for processing.</p>
+<p><code>controller.machineclasstosecretadd</code>  is the <code>addfunc</code> callback registered for the <code>machineclassinformer</code> adds the key (namespace/name) of the secret obtained from the newly added <code>machineclass</code> object.</p>
+<pre><code class="language-go">func (c *controller) machineclasstosecretadd(obj interface{}) {
+	machineclass, ok := obj.(*v1alpha1.machineclass)
+	// if error or nil ref return
+	secretrefs := []*corev1.secretreference{machineclass.secretref, machineclass.credentialssecretref}
+	for _, secretref := range secretrefs {
+		if secretref != nil {
+			queue.add(secretref.namespace + &quot;/&quot; + secretref.name)
+		}
+	}
+}
+</code></pre>
+<p><code>controller.machineclasstosecretupdate</code> is the <code>updatefunc</code> callback registered for the <code>machine classinformer</code> which adds the key (namespace/name) of the secret obtained from the old/new machine class if its <code>secretref</code> is not nil.</p>
+<pre><code class="language-go">func (c *controller) machineclasstosecretupdate(oldobj interface{}, newobj interface{}) {
+	oldmachineclass, ok := oldobj.(*v1alpha1.machineclass)
+	newmachineclass, ok := newobj.(*v1alpha1.machineclass)
+	// if error or nil refs return
+	secretqueue.add(oldmachineclass.secretref.namespace + &quot;/&quot; + oldmachineclass.secretref.name)
+	secretqueue.add(newmachineclass.secretref.namespace + &quot;/&quot; + newmachineclass.secretref.name)
+}
+</code></pre>
+<h5 id="142-adding-machine-class-names-and-keys-to-machineclassqueue"><a class="header" href="#142-adding-machine-class-names-and-keys-to-machineclassqueue">1.4.2 adding machine class names and keys to machineclassqueue</a></h5>
+<p><code>controller.machineclassadd</code>is specified as both the <code>addfunc</code> and <code>deletefunc</code> callback registered on the <code>machineclassinformer</code>. it gets the object key <code>namespace/name</code> for the machine class <code>obj</code> and adds the key to the <code>machineclassqueue</code></p>
+<p><code>controller.machineclassupdate</code> just delegates to <code>controller.machineclassadd(newobj)</code>.</p>
+<pre><code class="language-go">func (c *controller) machineclassadd(obj interface{}) {
+	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj)
+	// log &amp; return on err != nil
+	c.machineclassqueue.add(key)
+}
+func (c *controller) machineclassupdate(oldobj, newobj interface{}) {
+	old, ok := oldobj.(*v1alpha1.machineclass)
+	if old == nil || !ok {
+		return
+	}
+	new, ok := newobj.(*v1alpha1.machineclass)
+	if new == nil || !ok {
+		return
+	}
+
+	c.machineclassadd(newobj)
+}
+</code></pre>
+<p><code>controller.machinetomachineclassadd</code> is both an <code>addfunc</code> and <code>deletefunc</code> callback registered on the <code>machineinfomer</code> . this simply adds the machine spec class name to the <code>machineclassqueue</code>. </p>
+<pre><code class="language-go">
+func (c *controller) machinetomachineclassadd(obj interface{}) {
+	c.machineclassqueue.add(machine.spec.class.name)
+}
+</code></pre>
+<p><code>controller.machinetomachineclassupdate</code> is the <code>updatefunc</code> callback registered on the <code>machineinformer</code>.  it enqueues the <code>newmacine</code> spec class name if there are no changes in the machine class name, otherwise it adds both the old and new machine classnames to the `machineclassqueue'.</p>
+<pre><code class="language-go">func (c *controller) machinetomachineclassupdate(oldobj, newobj interface{}) {
+	oldmachine, ok := oldobj.(*v1alpha1.machine)
+	newmachine, ok := newobj.(*v1alpha1.machine)
+	// return if nil or not ok
+	if oldmachine.spec.class.kind == newmachine.spec.class.kind {
+		c.machineclassqueue.add(newmachine.spec.class.name)
+	} else {
+		c.machineclassqueue.add(oldmachine.spec.class.name)
+		c.machineclassqueue.add(newmachine.spec.class.name)
+	}
+}
+</code></pre>
+<p>so, the <code>machineclassqueue</code> effectively holds machine-class keys (ns/name) and plain class names (name)
+for added/updated/delete machine classes.</p>
+<h5 id="143-adding-machine-keys-to-machinequeue"><a class="header" href="#143-adding-machine-keys-to-machinequeue">1.4.3 adding machine keys to machinequeue</a></h5>
+<p><code>controller.addmachine</code>, <code>controller.updatemachine</code> and <code>controller.deletemachine</code> all just deletgate the newly added/newly updated and newly delete machine obj to <code>controller.enqueuemachine</code> which simpy gets the object key for the machine and adds it to the <code>machinequeue</code>.</p>
+<pre><code class="language-go">func (c *controller) enqueuemachine(obj interface{}) {
+	key, err := cache.metanamespacekeyfunc(obj)
+	// return if err
+	c.machinequeue.add(key)
+}
+</code></pre>
+<p><code>controller.addnodetomachine</code> is specified as the <code>addfunc</code> registered for the <code>nodeinformer</code>.  basically, when a new node is created, the corresponding <code>machine</code> obj is obtained for the <code>node</code> and if the <code>machine.status.conditions</code>  does not match the <code>nodestatusconditions</code> then the machine <code>key</code> is added to the <code>machinequeue</code> for reconciliation.</p>
+<p>snippet shown be below with error handling+logging omitted.</p>
+<pre><code class="language-go">func (c *controller) addnodetomachine(obj interface{}) {
+	// if err != nil log err and return
+	node := obj.(*corev1.node)
+	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj)
+	machine, err := c.getmachinefromnode(key) // leverages machinelister and gets machine whose 'node' label matches key
+	if machine.status.currentstatus.phase != v1alpha1.machinecrashloopbackoff &amp;&amp; nodeconditionshavechanged(machine.status.conditions, node.status.conditions) {
+		macinekey, err = cache.metanamespacekeyfunc(obj)
+		c.machinequeue.add(key)
+	}
+}
+
+</code></pre>
+<p><code>controller.updatenodetomachine</code> is specified as <code>updatefunc</code> registered for the <code>nodeinformer</code>. in a nutshell, it simply delegates to <code>addnodetomachine(newobj)</code> except if the node has the annotation <code>machineutils.triggerdeletionbymcm</code> (value: <code>node.machine.sapcloud.io/trigger-deletion-by-mcm</code>), in which case get the <code>machine</code> obj corresponding to the node and then leverages the <code>controlmachineclient</code> to delete the machine object.</p>
+<p>todo: who sets this annotation ?? can't find the guy.</p>
+<p>snippet shown be below without error handling+logging omitted.</p>
+<pre><code class="language-go">func (c *controller) updatenodetomachine(oldobj, newobj interface{}) {
+	node := newobj.(*corev1.node)
+	// check for the triggerdeletionbymcm annotation on the node object
+	// if it is present then mark the machine object for deletion
+	if value, ok := node.annotations[machineutils.triggerdeletionbymcm]; ok &amp;&amp; value == &quot;true&quot; {
+		machine, err := c.getmachinefromnode(node.name)
+		if machine.deletiontimestamp == nil {
+			c.controlmachineclient
+			.machines(c.namespace)
+			.delete(context.background(), machine.name, metav1.deleteoptions{});		
+		} 
+	}  else {
+		c.addnodetomachine(newobj)
+	}
+}
+</code></pre>
+<p><code>controller.deletenodetomachine</code> is specified as <code>deletefunc</code> registered for the <code>nodeinformer</code> and is quite simple. it just finds the corresponding machine object and adds its key to the <code>machinequeue</code></p>
+<p>snippet shown be below without error handling+logging omitted.</p>
+<pre><code class="language-go">func (c *controller) deletenodetomachine(obj interface{}) {
+	// if err != nil log error and return for statements below
+	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj)
+	machine, err := c.getmachinefromnode(key) // leverages machinelister and gets machine whose 'node' label matches key
+	macinekey, err = cache.metanamespacekeyfunc(obj)
+	c.machinequeue.add(key)
+}
+
+</code></pre>
+<h3 id="machinecontrollerrun"><a class="header" href="#machinecontrollerrun">machinecontroller.run</a></h3>
+<pre><code class="language-go">func (c *controller) run(workers int, stopch &lt;-chan struct{}) {
+	// ...
+}
+
+</code></pre>
+<h4 id="1-wait-for-informer-caches-to-sync"><a class="header" href="#1-wait-for-informer-caches-to-sync">1. wait for informer caches to sync</a></h4>
+<p>when an informer starts, it will build a cache of all resources it currently watches which is lost when the application
+restarts. this means that on startup, each of your handler functions will be invoked as the initial state is built. if this
+is not desirable for your use case, you can wait until the caches are synced before performing any updates using the
+<code>cache.waitforcachesync</code> function:</p>
+<pre><code class="language-go">if !cache.waitforcachesync(stopch, c.secretsynced, c.pvcsynced, c.pvsynced, c.pdbsynced, c.volumeattachementsynced, c.nodesynced, c.machineclasssynced, c.machinesynced) {
+		runtimeutil.handleerror(fmt.errorf(&quot;timed out waiting for caches to sync&quot;))
+		return
+}
+</code></pre>
+<h4 id="2-register-metrics"><a class="header" href="#2-register-metrics">2. register metrics</a></h4>
+<p>the controller struct implements the <a href="https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#collector">prometheus.collector</a> interface and can therefore
+be registered on prometheus metrics registry. </p>
+<p>collectors which are added to the registry will collect metrics to expose them via the metrics endpoint of the mcm every time when the endpoint is called.</p>
+<pre><code class="language-go">prometheus.mustregister(c)
+</code></pre>
+<h5 id="21-controllerdescribe"><a class="header" href="#21-controllerdescribe">2.1 controller.describe</a></h5>
+<p>all <a href="https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#metric">promethueus.metric</a> that are collected must first be described using a <a href="https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#desc">prometheus.desc</a> which is the <em>meta-data</em> about a metric.</p>
+<p>as can be seen below the machine controller sends a description of <code>metrics.machinecountdesc</code> to prometheus. this is <code>mcm_machine_items_total</code> which is the count of machines managed by controller. doubt: we currently appear to have  only have one metric for the mc ?</p>
+<pre><code class="language-go">var machinecountdesc = prometheus.newdesc(&quot;mcm_machine_items_total&quot;, &quot;count of machines currently managed by the mcm.&quot;, nil, nil)
+
+func (c *controller) describe(ch chan&lt;- *prometheus.desc) {
+	ch &lt;- metrics.machinecountdesc
+}
+</code></pre>
+<h5 id="21-controllercollect"><a class="header" href="#21-controllercollect">2.1 controller.collect</a></h5>
+<p><code>collect</code> is called by the prometheus registry when collecting
+metrics. the implementation sends each collected metric via the
+provided channel and returns once the last metric has been sent. the
+descriptor of each sent metric is one of those returned by <code>describe</code></p>
+<p>todo: describe each of the collect methods.</p>
+<pre><code class="language-go">// collect is method required to implement the prometheus.collect interface.
+func (c *controller) collect(ch chan&lt;- prometheus.metric) {
+	c.collectmachinemetrics(ch)
+	//c.collectmachinesetmetrics(ch)
+	//c.collectmachinedeploymentmetrics(ch)
+	c.collectmachinecontrollerfrozenstatus(ch)
+}
+</code></pre>
+<h4 id="3-create-controller-worker-go-routines-applying-reconciliations"><a class="header" href="#3-create-controller-worker-go-routines-applying-reconciliations">3. create controller worker go-routines applying reconciliations</a></h4>
+<pre><code class="language-go">func (c *controller) run(workers int, stopch &lt;-chan struct{}) {
+	//.. 3
+	waitgroup sync.waitgroup
+	for i := 0; i &lt; workers; i++ {
+		createworker(c.secretqueue, &quot;clustersecret&quot;, maxretries, true, c.reconcileclustersecretkey, stopch, &amp;waitgroup)
+		createworker(c.machineclassqueue, &quot;clustermachineclass&quot;, maxretries, true, c.reconcileclustermachineclasskey, stopch, &amp;waitgroup)
+		createworker(c.nodequeue, &quot;clusternode&quot;, maxretries, true, c.reconcileclusternodekey, stopch, &amp;waitgroup)
+		createworker(c.machinequeue, &quot;clustermachine&quot;, maxretries, true, c.reconcileclustermachinekey, stopch, &amp;waitgroup
+		createworker(c.machinesafetyorphanvmsqueue, &quot;clustermachinesafetyorphanvms&quot;, maxretries, true, c.reconcileclustermachinesafetyorphanvms, stopch, &amp;waitgroup)
+		createworker(c.machinesafetyapiserverqueue, &quot;clustermachineapiserver&quot;, maxretries, true, c.reconcileclustermachinesafetyapiserver, stopch, &amp;waitgroup)
+	}
+	&lt;-stopch
+	waitgroup.wait()
+}
+
+</code></pre>
+<h5 id="31-createworker"><a class="header" href="#31-createworker">3.1 createworker</a></h5>
+<p><code>createworker</code> creates and runs a go-routine that just processes items in the
+specified <code>queue</code>. the worker will run until <code>stopch</code> is closed. the worker will be
+added to the wait group when started and marked done when finished.</p>
+<pre><code class="language-go">func createworker(queue workqueue.ratelimitinginterface, resourcetype string, maxretries int, forgetaftersuccess bool, reconciler func(key string) error, stopch &lt;-chan struct{}, waitgroup *sync.waitgroup) {
+	waitgroup.add(1)
+	go func() {
+		wait.until(worker(queue, resourcetype, maxretries, forgetaftersuccess, reconciler), time.second, stopch)
+		waitgroup.done()
+	}()
+}
+</code></pre>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/controller.go#l369">worker</a> returns a function that </p>
+<ol>
+<li>de-queues items (keys) from the work <code>queue</code>. the <code>key</code>s that are obtained using work <code>queue.get</code> to be strings of the form <code>namespace/name</code> of the resource. </li>
+<li>processes them by invoking the <code>reconciler(key)</code> function 
+<ol>
+<li>the purpose of the <code>reconciler</code> is to compares the actual state with the desired state, and attempts to converge the two. it should then update the <code>status</code> block of the resource.</li>
+<li>if <code>reconciler</code> returns an error, requeue the item up to <code>maxretries</code> before giving up.</li>
+</ol>
+</li>
+<li>marks items as done.</li>
+</ol>
+<p>then we execute the <code>reconciler</code>. </p>
+<pre><code class="language-go">func worker(queue workqueue.ratelimitinginterface, resourcetype string, maxretries int, forgetaftersuccess bool, reconciler func(key string) error) func() {
+	return func() {
+		exit := false
+		for !exit {
+			exit = func() bool {
+				key, quit := queue.get()
+				if quit {
+					return true
+				}
+				defer queue.done(key)
+
+				err := reconciler(key.(string))
+				if err == nil {
+					if forgetaftersuccess { // always true for mc
+						queue.forget(key)
+					}
+					return false
+				}
+
+				if queue.numrequeues(key) &lt; maxretries {
+					queue.addratelimited(key)
+					return false
+				}
+
+				queue.forget(key)
+				return false
+			}()
+		}
+	}
+}
+</code></pre>
+<h4 id="4-reconciliation-functions-executed-by-worker"><a class="header" href="#4-reconciliation-functions-executed-by-worker">4. reconciliation functions executed by worker</a></h4>
+<p>the controller starts worker go-routines that pop out keys from the relevant workqueue and execute the reconcile function.</p>
+<h5 id="41--reconcileclustersecretkey"><a class="header" href="#41--reconcileclustersecretkey">4.1  reconcileclustersecretkey</a></h5>
+<p><code>reconcileclustersecretkey</code> basically adds the <code>mcfinalizer</code> (value: <code>machine.sapcloud.io/machine-controller</code>) to the list of <code>secret.finalizers</code> for all secrets that are referenced by machine classes within the same namespace.</p>
+<pre class="mermaid">%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
+
+flowchart td
+
+a[ns, name = cache.splitmetanamespacekey]
+b[&quot;sec=secretlister.secrets(ns).get(name)&quot;]
+c[&quot;machineclasses=findmachineclassforsecret(name)&quot;]
+d{machineclasses empty?}
+e[&quot;updatesecretfinalizers(sec)&quot;] 
+f[&quot;secretq.addafter(key,10min)&quot;]
+z((&quot;end&quot;))
+a--&gt;b
+b--&gt;c
+c--&gt;d
+d--yes--&gt;z
+d--no--&gt;e
+e--err--&gt;f
+e--success--&gt;z
+f--&gt;z
+</pre>
+<h5 id="42--reconcileclustermachineclasskey"><a class="header" href="#42--reconcileclustermachineclasskey">4.2  reconcileclustermachineclasskey</a></h5>
+<p><code>reconcileclustermachineclasskey</code> re-queues after 10seconds on failure and 10mins on success. ie the machine class key is regularly re-queued.  bad: we are not using the <code>machineutils.longretry|shortretry</code> constants here.</p>
+<pre class="mermaid">%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
+
+flowchart td
+
+rok[&quot;machineclassqueue.addafter(clzkey, 10m)&quot;]
+rerr[&quot;machineclassqueue.addafter(clzkey, 10s)&quot;]
+a[&quot;ns,name=cache.splitmetanamespacekey(clzkey)&quot;]
+gmc[&quot;clz=machineclasslister.machineclasses(ns).get(name)&quot;]
+fm[&quot;machines=findmachinesforclass(clz)&quot;]
+checknildel{&quot;clz.deletiontimestamp==nil?&quot;}
+checklen{&quot;len(machines)&gt;0&quot;}
+hasfin{&quot;clz.hasfinalizer&quot;}
+addfin[&quot;addmachineclassfinalizers(clz)&quot;]
+delfin[&quot;deletemachineclassfinalizers(clz)&quot;]
+eqm1[&quot;machinequeue.add(machinekeys)&quot;]
+eqm2[&quot;machinequeue.add(machinekeys)&quot;]
+z((&quot;end&quot;))
+
+rok--&gt;z
+rerr--&gt;z
+a--&gt;gmc
+gmc--&gt;fm
+fm--succ--&gt;checklen
+fm--err--&gt;rerr
+checklen--yes--&gt;checknildel
+checklen--no--&gt;delfin
+checknildel--yes--&gt;hasfin
+checknildel--no--&gt;eqm2
+hasfin--no--&gt;addfin
+hasfin--yes--&gt;rok
+addfin--&gt;eqm1
+eqm1--&gt;rok
+eqm2--&gt;rerr
+delfin--&gt;rok
+</pre>
+<h5 id="43--reconcileclustermachinekey"><a class="header" href="#43--reconcileclustermachinekey">4.3  reconcileclustermachinekey</a></h5>
+<pre class="mermaid">%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
+
+flowchart td
+
+
+a[&quot;ns,name=cache.splitmetanamespacekey(mkey)&quot;]
+getm[&quot;machine=machinelister.machines(ns).get(name)&quot;]
+valm[&quot;validation.validatemachine(machine)&quot;]
+valmc[&quot;machineclz,secretdata,err=validation.validatemachineclass(machine)&quot;]
+longr[&quot;retryperiod=machineutils.longretry&quot;]
+shortr[&quot;retryperiod=machineutils.shortretry&quot;]
+enqm[&quot;machinequeue.addafter(mkey, retryperiod)&quot;]
+checkmdel{&quot;is\nmachine.deletiontimestamp\nset?&quot;}
+newdelreq[&quot;req=&amp;driver.deletemachinerequest{machine,machineclz,secretdata}&quot;]
+delflow[&quot;retryperiod=controller.triggerdeletionflow(req)&quot;]
+createflow[&quot;retryperiod=controller.triggercreationflow(req)&quot;]
+hasfin{&quot;hasfinalizer(machine)&quot;}
+addfin[&quot;addmachinefinalizers(machine)&quot;]
+checkmachinenodeexists{&quot;machine.status.node\nexists?&quot;}
+reconcilemachinehealth[&quot;controller.reconcilemachinehealth(machine)&quot;]
+syncnodetemplates[&quot;controller.syncnodetemplates(machine)&quot;]
+newcreatereq[&quot;req=&amp;driver.createmachinerequest{machine,machineclz,secretdata}&quot;]
+z((&quot;end&quot;))
+
+a--&gt;getm
+enqm--&gt;z
+longr--&gt;enqm
+shortr--&gt;enqm
+getm--&gt;valm
+valm--&gt;ok--&gt;valmc
+valm--err--&gt;longr
+valmc--err--&gt;longr
+valmc--ok--&gt;checkmdel
+checkmdel--yes--&gt;newdelreq
+checkmdel--no--&gt;hasfin
+newdelreq--&gt;delflow
+hasfin--no--&gt;addfin
+hasfin--yes--&gt;shortr
+addfin--&gt;checkmachinenodeexists
+checkmachinenodeexists--yes--&gt;reconcilemachinehealth
+checkmachinenodeexists--no--&gt;newcreatereq
+reconcilemachinehealth--ok--&gt;syncnodetemplates
+syncnodetemplates--ok--&gt;longr
+syncnodetemplates--err--&gt;shortr
+delflow--&gt;enqm
+newcreatereq--&gt;createflow
+createflow--&gt;enqm
+
+</pre>
+<h6 id="431-controllertriggercreationflow"><a class="header" href="#431-controllertriggercreationflow">4.3.1 controller.triggercreationflow</a></h6>
+<p>the creation flow adds policy and delegates to the <code>driver.createmachine</code>.</p>
+<h5 id="44--reconcileclustermachinesafetyorphanvms"><a class="header" href="#44--reconcileclustermachinesafetyorphanvms">4.4  reconcileclustermachinesafetyorphanvms</a></h5>
+<p>tbd</p>
+<h5 id="45--reconcileclustermachinesafetyapiserver"><a class="header" href="#45--reconcileclustermachinesafetyapiserver">4.5  reconcileclustermachinesafetyapiserver</a></h5>
+<p>tbd</p>
+<h2 id="mcm-local-provider"><a class="header" href="#mcm-local-provider">MCM Local Provider</a></h2>
+<p><code>cmd/machine-controller/main.go</code>
+Creates <code>pkg/util/provider/app/options.MCServer</code></p>
+<p>TODO: Driver CM/DM Diagrams</p>
+<h2 id="doubts"><a class="header" href="#doubts">Doubts.</a></h2>
+<h3 id="dead-code"><a class="header" href="#dead-code">Dead Code</a></h3>
+<div style="break-before: page; page-break-before: always;"></div><ul>
+<li><a href="machine-controller/cluster_machine_reconcile.html#cluster-machine-reconcile">Cluster Machine Reconcile</a>
+<ul>
+<li><a href="machine-controller/cluster_machine_reconcile.html#triggerdeletionflow">triggerDeletionFlow</a>
+<ul>
+<li><a href="machine-controller/cluster_machine_reconcile.html#controllergetvmstatus">controller.getVMStatus</a></li>
+<li><a href="machine-controller/cluster_machine_reconcile.html#controllerdrainnode">controller.drainNode</a></li>
+</ul>
+</li>
+<li><a href="machine-controller/cluster_machine_reconcile.html#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
+<li><a href="machine-controller/cluster_machine_reconcile.html#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></li>
+</ul>
+</li>
+</ul>
+<p>While perusing the below, you might need to reference <a href="machine-controller/./mc_helper_funcs.html">Machine Controller Helper Functions</a>  as several reconcile functions delegate to helper methods defined on the machine controller struct.</p>
 <h1 id="cluster-machine-reconcile"><a class="header" href="#cluster-machine-reconcile">Cluster Machine Reconcile</a></h1>
 <pre><code class="language-go">func (c *controller) reconcileClusterMachineKey(key string) error
 </code></pre>
@@ -1797,7 +2544,7 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </ol>
 </li>
 <li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?/</li>
-<li>See <a href="./node_drain.html#run-drain">Run Drain</a></li>
+<li>See <a href="machine-controller/./node_drain.html#run-drain">Run Drain</a></li>
 </ol>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
@@ -1819,10 +2566,20 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 <ul>
 <li><a href="node_drain.html#drain-constants">Drain Constants</a></li>
 <li><a href="node_drain.html#drainoptions">drain.Options</a></li>
-<li><a href="node_drain.html#drainoptionsrundrain">drain.Options.RunDrain</a></li>
+<li><a href="node_drain.html#drainoptionsrundrain">drain.Options.RunDrain</a>
+<ul>
+<li><a href="node_drain.html#drainfilterpodswithpv">drain.filterPodsWithPv</a></li>
+</ul>
+</li>
 <li><a href="node_drain.html#drainoptionsevictpodswithoutpv">drain.Options.evictPodsWithoutPv</a>
 <ul>
+<li><a href="node_drain.html#drainoptionsevictpodwithoutpvinternal">drain.Options.evictPodWithoutPVInternal</a></li>
 <li><a href="node_drain.html#ismisconfiguredpdb">isMisconfiguredPdb</a></li>
+</ul>
+</li>
+<li><a href="node_drain.html#drainoptionsevictpodswithpv">drain.Options.evictPodsWithPv</a>
+<ul>
+<li><a href="node_drain.html#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></li>
 </ul>
 </li>
 <li><a href="node_drain.html#drainoptionswaitfordelete">drain.Options.waitForDelete</a></li>
@@ -1996,8 +2753,14 @@ EvictPodsWithoutPV--&gt;CreateAggregateError[&quot;
 </li>
 <li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict boolean</a> usage is confusing.</li>
 </ol>
+<h4 id="drainfilterpodswithpv"><a class="header" href="#drainfilterpodswithpv">drain.filterPodsWithPv</a></h4>
+<p>NOTE: should have been named <code>partitionPodsWithPVC</code></p>
+<p>Utility function that iterates through given <code>pods</code> and for each <code>pod</code>, iterates through its <code>pod.Spec.Volumes</code>. For each such pod <code>volume</code> checks <code>volume.PersistentVolumeClaim</code>. If not nil, adds <code>pod</code> to slice <code>podsWithPV</code> else adds <code>pod</code> to slice <code>podsWithoutPV</code></p>
+<pre><code class="language-go">func filterPodsWithPv(pods []corev1.Pod) 
+    (podsWithPV []*corev1.Pod, podsWithoutPV []*corev1.Pod) 
+</code></pre>
 <h3 id="drainoptionsevictpodswithoutpv"><a class="header" href="#drainoptionsevictpodswithoutpv">drain.Options.evictPodsWithoutPv</a></h3>
-<p>method that iterates through each given pod and launchews a go-routine that performs either pod eviction or pod deletion followed by a wait accompanied with error and retry handling for each pod in an independent go-routine for every pod. </p>
+<p>drain method that iterates through each given pod and for each pod launches a go-routine that simply delegates to <code>Options.evictPodsWithoutPv</code>.</p>
 <pre><code class="language-go">func (o *Options) evictPodsWithoutPv(ctx context.Context, 
     pods []*corev1.Pod,
 	policyGroupVersion string, //eviction API's GV
@@ -2011,8 +2774,19 @@ EvictPodsWithoutPV--&gt;CreateAggregateError[&quot;
 </code></pre>
 <p>NOTE:</p>
 <ul>
-<li>Both <code>evictPodsWithoutPv</code> and its helper <code>evictPodWithoutPVInternal</code> should ideally NOT return an <code>error</code> as they are go-routine launch methods that communicate errors or success (nil) via a <code>returnCh</code>.</li>
+<li><code>attemptEvict</code> parameter is very badly named. It is more meant to be a <code>retryEvict</code></li>
 </ul>
+<h4 id="drainoptionsevictpodwithoutpvinternal"><a class="header" href="#drainoptionsevictpodwithoutpvinternal">drain.Options.evictPodWithoutPVInternal</a></h4>
+<p>drian method that  that either evicts or deletes a Pod with retry handling until <code>Options.MaxEvictRetries</code> is reached.</p>
+<pre><code class="language-go">func (o *Options) evictPodWithoutPVInternal(
+    ctx context.Context, 
+    attemptEvict bool, 
+    pod *corev1.Pod, 
+    policyGroupVersion string, 
+    getPodFn func(namespace, name string) (*corev1.Pod, error), 
+    returnCh chan error) 
+
+</code></pre>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
@@ -2072,12 +2846,12 @@ end
 
 SendNilChannel[&quot;returnCh &lt;- nil&quot;]
 SendErrChannel[&quot;returnCh &lt;- err&quot;]
-NilReturn((&quot;return nil&quot;))
+NilReturn((&quot;return&quot;))
 
 
 </pre>
 <h4 id="ismisconfiguredpdb"><a class="header" href="#ismisconfiguredpdb">isMisconfiguredPdb</a></h4>
-<p>TODO: Discuss/Elaborate on this.</p>
+<p>TODO: Discuss/Elaborate on why this is considered misconfigured.</p>
 <pre><code class="language-go">func isMisconfiguredPdbV1(pdb *policyv1.PodDisruptionBudget) bool {
 	if pdb.ObjectMeta.Generation != pdb.Status.ObservedGeneration {
 		return false
@@ -2087,6 +2861,29 @@ NilReturn((&quot;return nil&quot;))
         pdb.Status.CurrentHealthy &gt;= pdb.Status.ExpectedPods
         &amp;&amp; pdb.Status.DisruptionsAllowed == 0
 }
+</code></pre>
+<h3 id="drainoptionsevictpodswithpv"><a class="header" href="#drainoptionsevictpodswithpv">drain.Options.evictPodsWithPv</a></h3>
+<pre><code class="language-go">func (o *Options) evictPodsWithPv(ctx context.Context, 
+    attemptEvict bool, 
+    pods []*corev1.Pod,
+	policyGroupVersion string,
+	getPodFn func(namespace, name string) (*corev1.Pod, error),
+	returnCh chan error)
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+NilReturn((&quot;return&quot;))
+</pre>
+<h4 id="drainoptionsevictpodswithpvinternal"><a class="header" href="#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646">drain.Options.evictPodsWithPVInternal</a> is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a <code>remainingPods</code> slice and a <code>fastTrace</code> boolean meant to abort the pod eviction and the calling go-routine. (TODO: WHY? This doesn't seem right)</p>
+<pre><code class="language-go">func (o *DrainOptions) evictPodsWithPVInternal(ctx context.Context,
+    attemptEvict bool, 
+    pods []*corev1.Pod, 
+    volMap map[string][]string,
+	policyGroupVersion string,
+	returnCh chan error
+    ) (remainingPods []*api.Pod, fastTrack bool) 
 </code></pre>
 <h3 id="drainoptionswaitfordelete"><a class="header" href="#drainoptionswaitfordelete">drain.Options.waitForDelete</a></h3>
 <p>NOTE: Ideally should have been named <code>waitForPodDisappearance</code></p>
@@ -2224,7 +3021,8 @@ CopyTermReasonAndMessage--&gt;UpdateCondOnNode
 
 UpdateCondOnNode--&gt;ChkNotFound
 </pre>
-<div style="break-before: page; page-break-before: always;"></div><ul>
+<div style="break-before: page; page-break-before: always;"></div><p>🚧 WIP at the moment. Please do not read.</p>
+<ul>
 <li><a href="issues.html#issues">Issues</a>
 <ul>
 <li><a href="issues.html#design-issues">Design Issues</a>
@@ -2249,12 +3047,22 @@ UpdateCondOnNode--&gt;ChkNotFound
 </li>
 <li><a href="issues.html#drainnode-handling">drainNode Handling</a></li>
 <li><a href="issues.html#node-conditions">Node Conditions</a></li>
-<li><a href="issues.html#volumeattachment">VolumeAttachment</a></li>
+<li><a href="issues.html#volumeattachment">VolumeAttachment</a>
+- <a href="issues.html#dead-reconcileclusternodekey">Dead? reconcileClusterNodeKey</a>
+<ul>
+<li><a href="issues.html#dead-machinego--triggerupdationflow">Dead? machine.go | triggerUpdationFlow</a></li>
+</ul>
+</li>
+<li><a href="issues.html#duplicate-initialization-of-eventrecorder-in-mc">Duplicate Initialization of EventRecorder in MC</a>
+<ul>
+<li><a href="issues.html#q-internal-to-external-scheme-conversion">Q? Internal to External Scheme Conversion</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
 <h1 id="issues"><a class="header" href="#issues">Issues</a></h1>
-<p>This section is WIP atm. Please check after this warning has been removed. Lots more to be added.</p>
+<p>This section is very basic WIP atm. Please check after this warning has been removed. Lots more to be added here from notes and appropriately structured.</p>
 <h2 id="design-issues"><a class="header" href="#design-issues">Design Issues</a></h2>
 <h3 id="lastoperation-is-actually-next-operation"><a class="header" href="#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></h3>
 <p>Badly named. TODO: Describe more.</p>
@@ -2310,7 +3118,7 @@ machine-drain-timeout=5m
 <ol>
 <li>Does not set err when <code>c.machineStatusUpdate</code> is called</li>
 <li><code>o.RunCordonOrUncordon</code> should use <code>apierrors.NotFound</code> while checking error returned by a get node op</li>
-<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict bool usage</a> is confusing. Better design needed. For example what is point of passing <code>attemptEvict</code> to <code>evictPodsWithoutPv</code> ??? It is anyways overridden.</li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict bool usage</a> is confusing. Better design needed. <code>attemptEvict</code> is overridden in  <code>evictPodsWithoutPv</code>.</li>
 </ol>
 <h2 id="node-conditions"><a class="header" href="#node-conditions">Node Conditions</a></h2>
 <ul>
@@ -2325,6 +3133,38 @@ volumeAttachment := obj.(*storagev1.VolumeAttachment)
 		// Should return here.
 	}
 //...
+</code></pre>
+<h4 id="dead-reconcileclusternodekey"><a class="header" href="#dead-reconcileclusternodekey">Dead? reconcileClusterNodeKey</a></h4>
+<p>This just delegates to <code>reconcileClusterNode</code> which does nothing..</p>
+<pre><code class="language-go">func (c *controller) reconcileClusterNode(node *v1.Node) error {
+	return nil
+}
+
+</code></pre>
+<h3 id="dead-machinego--triggerupdationflow"><a class="header" href="#dead-machinego--triggerupdationflow">Dead? machine.go | triggerUpdationFlow</a></h3>
+<p>Can't find usages</p>
+<h2 id="duplicate-initialization-of-eventrecorder-in-mc"><a class="header" href="#duplicate-initialization-of-eventrecorder-in-mc">Duplicate Initialization of EventRecorder in MC</a></h2>
+<p><code>pkg/util/provider/app.createRecorder</code> already dones this below.</p>
+<pre><code class="language-go">func createRecorder(kubeClient *kubernetes.Clientset) record.EventRecorder {
+eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(klog.Infof)
+	eventBroadcaster.StartRecordingToSink(&amp;v1core.EventSinkImpl{Interface: v1core.New(kubeClient.CoreV1().RESTClient()).Events(&quot;&quot;)})
+	return eventBroadcaster.NewRecorder(kubescheme.Scheme, v1.EventSource{Component: controllerManagerAgentName})
+}
+</code></pre>
+<p>We get the recorder from this eventBroadcaster and then pass it to the <code>pkg/util/provider/machinecontroller/controller.NewController</code> method which again does:</p>
+<pre><code class="language-go">	eventBroadcaster := record.NewBroadcaster()
+	eventBroadcaster.StartLogging(klog.Infof)
+	eventBroadcaster.StartRecordingToSink(&amp;typedcorev1.EventSinkImpl{Interface: typedcorev1.New(controlCoreClient.CoreV1().RESTClient()).Events(namespace)})
+</code></pre>
+<p>The above is useless.</p>
+<h3 id="q-internal-to-external-scheme-conversion"><a class="header" href="#q-internal-to-external-scheme-conversion">Q? Internal to External Scheme Conversion</a></h3>
+<p>Why do we do this ?</p>
+<pre><code class="language-go">internalClass := &amp;machine.MachineClass{}
+	err := c.internalExternalScheme.Convert(class, internalClass, nil)
+	if err != nil {
+		return err
+	}
 </code></pre>
 
                     </main>

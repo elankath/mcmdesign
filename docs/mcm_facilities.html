@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html" class="active"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="cluster_machine_reconcile.html"><strong aria-hidden="true">3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html" class="active"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.1.</strong> Cluster Machine Reconciliation</a></li></ol></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -180,6 +180,16 @@
 <ul>
 <li><a href="#operation-descriptions">Operation Descriptions</a></li>
 <li><a href="#retry-periods">Retry Periods</a></li>
+</ul>
+</li>
+<li><a href="#misc">Misc</a>
+<ul>
+<li><a href="#permitspermitgiver">permits.PermitGiver</a>
+<ul>
+<li><a href="#permitsnewpermitgiver">permits.NewPermitGiver</a></li>
+<li><a href="#permitsregisterpermits">permits.RegisterPermits</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -564,6 +574,67 @@ const (
 )
 
 </code></pre>
+<h3 id="misc"><a class="header" href="#misc">Misc</a></h3>
+<h4 id="permitspermitgiver"><a class="header" href="#permitspermitgiver">permits.PermitGiver</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/permits/permits.go#L29">github.com/gardener/machine-controller-manager/pkg/util/permits.PermitGiver</a> maintains a sync map of keys whose values can be deleted if not accessed for a configured time</p>
+<p><code>permits.PermitGiver</code> provides different operations regarding permit for a given key. All operations are concurrent safe.</p>
+<pre><code class="language-go">type PermitGiver interface {
+	RegisterPermits(key string, numPermits int)
+	TryPermit(key string, timeout time.Duration) bool
+	ReleasePermit(key string)
+	DeletePermits(key string)
+	Close()
+}
+type permit struct {
+	// lastAcquiredPermitTime is time since last successful TryPermit or new RegisterPermits
+	lastAcquiredPermitTime time.Time
+	// c is initialized with buffer size N representing num permits
+	c                      chan struct{} 
+}
+type permitGiver struct {
+	keyPermitsMap sync.Map // map of string keys to permit struct values
+	stopC         chan struct{}
+}
+
+</code></pre>
+<p>NOTES</p>
+<ul>
+<li><code>RegisterPermits(key, numPermits)</code> registers <code>numPermits</code> for the given <code>key</code>. A <code>permit</code> struct is initialized with <code>permit.c</code> buffer size as <code>numPermits</code>.</li>
+<li><code>TryPermit(key, timeout)</code> attempts to get a permit for the given key by sending a <code>struct{}{}</code> instance to the buffered <code>permit.c</code> channel. If <code>numPermits</code> is exceeded</li>
+</ul>
+<h5 id="permitsnewpermitgiver"><a class="header" href="#permitsnewpermitgiver">permits.NewPermitGiver</a></h5>
+<p><code>permits.NewPermitGiver</code> returns a new <code>PermitGiver</code></p>
+<pre><code class="language-go">func NewPermitGiver(stalePermitKeyTimeout time.Duration, janitorFrequency time.Duration) PermitGiver
+</code></pre>
+<pre class="mermaid">
+%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TB
+	Begin((&quot; &quot;))
+	--&gt;InitStopCh[&quot;stopC := make(chan struct{})&quot;]
+	--&gt;InitPG[&quot;
+		pg := permitGiver{
+		keyPermitsMap: sync.Map{},
+		stopC:         stopC,
+	}&quot;]
+	--&gt;LaunchCleanUpGoroutine[&quot;go cleanup()&quot;]
+	LaunchCleanUpGoroutine--&gt;Return((&quot;return &amp;pg&quot;))
+	LaunchCleanUpGoroutine---&gt;InitTicker
+	subgraph cleanup
+	InitTicker[&quot;ticker := time.NewTicker(janitorFrequency)&quot;]
+	--&gt;caseReadStopCh{&quot;&lt;-stopC ?&quot;}
+	caseReadStopCh--Yes--&gt;End((&quot;End&quot;))
+	caseReadStopCh--No
+		--&gt;ReadTickerCh{&quot;&lt;-ticker.C ?&quot;}
+	ReadTickerCh--Yes--&gt;CleanupStale[&quot;
+	pg.cleanupStalePermitEntries(stalePermitKeyTimeout)
+	(Iterates keyPermitsMap, remove entries whose 
+	lastAcquiredPermitTime exceeds stalePermitKeyTimeout)
+	&quot;]
+	ReadTickerCh--No--&gt;caseReadStopCh
+	end
+</pre>
+<h5 id="permitsregisterpermits"><a class="header" href="#permitsregisterpermits">permits.RegisterPermits</a></h5>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40">machine-controller-manager/pkg/util/provider/app/options.MCServer</a>
@@ -776,7 +847,7 @@ func New(code codes.Code, msg string) *Status {
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="cluster_machine_reconcile.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="machine-controller/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -790,7 +861,7 @@ func New(code codes.Code, msg string) *Status {
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="cluster_machine_reconcile.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="machine-controller/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
