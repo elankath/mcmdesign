@@ -1,6 +1,6 @@
 - [Introduction](#introduction)
 
-🚧 WIP: MCM Design Book is work-in-progress at the moment. Please check back in a few days for the first release. Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/))
+🚧 WIP: MCM Design Book is work-in-progress at the moment. Please check back in a few days for the first release - several check-ins pending. Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/))
 
 # Introduction
 
