@@ -5,8 +5,12 @@
     - [Drain Constants](#drain-constants)
     - [drain.Options](#drainoptions)
     - [drain.Options.RunDrain](#drainoptionsrundrain)
+      - [drain.filterPodsWithPv](#drainfilterpodswithpv)
     - [drain.Options.evictPodsWithoutPv](#drainoptionsevictpodswithoutpv)
+      - [drain.Options.evictPodWithoutPVInternal](#drainoptionsevictpodwithoutpvinternal)
       - [isMisconfiguredPdb](#ismisconfiguredpdb)
+    - [drain.Options.evictPodsWithPv](#drainoptionsevictpodswithpv)
+      - [drain.Options.evictPodsWithPVInternal](#drainoptionsevictpodswithpvinternal)
     - [drain.Options.waitForDelete](#drainoptionswaitfordelete)
 # Node Drain
 
@@ -192,9 +196,20 @@ Notes:
    1. [k8s.io/kubectl/pkg/drain.CheckEvictionSupport](https://pkg.go.dev/k8s.io/kubectl/pkg/drain#CheckEvictionSupport) already does this.
 2. [attemptEvict boolean](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400) usage is confusing.
 
+#### drain.filterPodsWithPv
+
+NOTE: should have been named `partitionPodsWithPVC`
+
+Utility function that iterates through given `pods` and for each `pod`, iterates through its `pod.Spec.Volumes`. For each such pod `volume` checks `volume.PersistentVolumeClaim`. If not nil, adds `pod` to slice `podsWithPV` else adds `pod` to slice `podsWithoutPV`
+
+```go
+func filterPodsWithPv(pods []corev1.Pod) 
+    (podsWithPV []*corev1.Pod, podsWithoutPV []*corev1.Pod) 
+```
+
 ### drain.Options.evictPodsWithoutPv
 
-method that iterates through each given pod and launchews a go-routine that performs either pod eviction or pod deletion followed by a wait accompanied with error and retry handling for each pod in an independent go-routine for every pod. 
+drain method that iterates through each given pod and for each pod launches a go-routine that simply delegates to `Options.evictPodsWithoutPv`.
 
 ```go
 func (o *Options) evictPodsWithoutPv(ctx context.Context, 
@@ -209,8 +224,25 @@ func (o *Options) evictPodsWithoutPv(ctx context.Context,
 }
 ```
 NOTE:
-- Both `evictPodsWithoutPv` and its helper `evictPodWithoutPVInternal` should ideally NOT return an `error` as they are go-routine launch methods that communicate errors or success (nil) via a `returnCh`.
+- `attemptEvict` parameter is very badly named. It is more meant to be a `retryEvict`
 
+
+
+
+#### drain.Options.evictPodWithoutPVInternal
+
+drian method that  that either evicts or deletes a Pod with retry handling until `Options.MaxEvictRetries` is reached.
+
+```go
+func (o *Options) evictPodWithoutPVInternal(
+    ctx context.Context, 
+    attemptEvict bool, 
+    pod *corev1.Pod, 
+    policyGroupVersion string, 
+    getPodFn func(namespace, name string) (*corev1.Pod, error), 
+    returnCh chan error) 
+
+```
 
 ```mermaid
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
@@ -272,14 +304,14 @@ end
 
 SendNilChannel["returnCh <- nil"]
 SendErrChannel["returnCh <- err"]
-NilReturn(("return nil"))
+NilReturn(("return"))
 
 
 ```
 
 #### isMisconfiguredPdb
 
-TODO: Discuss/Elaborate on this.
+TODO: Discuss/Elaborate on why this is considered misconfigured.
 ```go
 func isMisconfiguredPdbV1(pdb *policyv1.PodDisruptionBudget) bool {
 	if pdb.ObjectMeta.Generation != pdb.Status.ObservedGeneration {
@@ -291,6 +323,41 @@ func isMisconfiguredPdbV1(pdb *policyv1.PodDisruptionBudget) bool {
         && pdb.Status.DisruptionsAllowed == 0
 }
 ```
+
+### drain.Options.evictPodsWithPv
+
+```go
+func (o *Options) evictPodsWithPv(ctx context.Context, 
+    attemptEvict bool, 
+    pods []*corev1.Pod,
+	policyGroupVersion string,
+	getPodFn func(namespace, name string) (*corev1.Pod, error),
+	returnCh chan error)
+```
+
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+NilReturn(("return"))
+```
+
+
+#### drain.Options.evictPodsWithPVInternal
+
+[drain.Options.evictPodsWithPVInternal](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646) is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a `remainingPods` slice and a `fastTrace` boolean meant to abort the pod eviction and the calling go-routine. (TODO: WHY? This doesn't seem right)
+
+```go
+func (o *DrainOptions) evictPodsWithPVInternal(ctx context.Context,
+    attemptEvict bool, 
+    pods []*corev1.Pod, 
+    volMap map[string][]string,
+	policyGroupVersion string,
+	returnCh chan error
+    ) (remainingPods []*api.Pod, fastTrack bool) 
+```
+
 
 ### drain.Options.waitForDelete
 

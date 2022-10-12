@@ -510,6 +510,8 @@ type Pod struct {
 }
 ```
 
+See [k8s.io/api/core/v1.PodSpec](https://pkg.go.dev/k8s.io/api/core/v1#PodSpec). Each `PodSpec` has a priority value where the higher the value, the higher the priority of the Pod.
+
 #### Pod Eviction
 A [k8s.io/api/policy/v1.Eviction](k8s.io/api@v0.25.2/policy/v1#Eviction) can be used to evict a [Pod](#pod) from its [Node](#node) - eviction is the _graceful_ terimation of Pods on nodes.See [API Eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/)
 
