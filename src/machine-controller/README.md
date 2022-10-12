@@ -26,9 +26,6 @@
           - [4.3.1 controller.triggercreationflow](#431-controllertriggercreationflow)
         - [4.4  reconcileclustermachinesafetyorphanvms](#44--reconcileclustermachinesafetyorphanvms)
         - [4.5  reconcileclustermachinesafetyapiserver](#45--reconcileclustermachinesafetyapiserver)
-  - [MCM Local Provider](#mcm-local-provider)
-  - [Doubts.](#doubts)
-    - [Dead Code](#dead-code)
 # Machine Controller
 
 ## MC Launch
@@ -696,18 +693,6 @@ tbd
 
 ##### 4.5  reconcileclustermachinesafetyapiserver 
 tbd
-
-## MCM Local Provider 
-
-`cmd/machine-controller/main.go`
-Creates `pkg/util/provider/app/options.MCServer`
-
-TODO: Driver CM/DM Diagrams
-
-## Doubts.
-
-### Dead Code
-
 
 
 
