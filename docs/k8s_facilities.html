@@ -198,6 +198,8 @@
 <li><a href="#attached-volumes">Attached Volumes</a></li>
 </ul>
 </li>
+<li><a href="#volumeattachment">VolumeAttachment</a></li>
+<li><a href="#volumeattachmentspec">VolumeAttachmentSpec</a></li>
 </ul>
 </li>
 <li><a href="#pod">Pod</a>
@@ -209,11 +211,12 @@
 <li><a href="#poddisruptionbudgetstatus">PodDisruptionBudgetStatus</a></li>
 </ul>
 </li>
+<li><a href="#pod-volumes">Pod Volumes</a></li>
 </ul>
 </li>
-<li><a href="#volumeattachment">VolumeAttachment</a>
+<li><a href="#persistentvolume">PersistentVolume</a>
 <ul>
-<li><a href="#volumeattachmentspec">VolumeAttachmentSpec</a></li>
+<li><a href="#persistentvolumeclaim">PersistentVolumeClaim</a></li>
 </ul>
 </li>
 </ul>
@@ -595,7 +598,37 @@ type AttachedVolume struct {
 	DevicePath string 
 }
 </code></pre>
-<p>TODO: add another section with Node class diagram</p>
+<h4 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h4>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
+<pre><code class="language-go">type VolumeAttachment struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+
+	// Specification of the desired attach/detach volume behavior.
+	// Populated by the Kubernetes system.
+	Spec VolumeAttachmentSpec 
+
+	// Status of the VolumeAttachment request.
+	// Populated by the entity completing the attach or detach
+	// operation, i.e. the external-attacher.
+	Status VolumeAttachmentStatus 
+}
+</code></pre>
+<h4 id="volumeattachmentspec"><a class="header" href="#volumeattachmentspec">VolumeAttachmentSpec</a></h4>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec">k8s.ip/api/storage/v1.VolumeAttachmentSpec</a>is the specification of a VolumeAttachment request.</p>
+<pre><code class="language-go">type VolumeAttachmentSpec struct {
+	// Attacher indicates the name of the volume driver that MUST handle this
+	// request. Same as CSI Plugin name
+	Attacher string 
+
+	// Source represents the volume that should be attached.
+	Source VolumeAttachmentSource 
+
+	// The node that the volume should be attached to.
+	NodeName string
+}
+</code></pre>
+<p>See <a href="https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1">Storage V1 Docs</a> for further elaboration. </p>
 <h3 id="pod"><a class="header" href="#pod">Pod</a></h3>
 <p><a href="k8s.io/api/core/v1#Pod">k8s.io/api/core/v1.Pod</a> struct represents a k8s <a href="https://kubernetes.io/docs/concepts/workloads/pods/">Pod</a> which a collection of containers that can run on a host. This resource is created by clients and scheduled onto hosts.</p>
 <pre><code class="language-go">type Pod struct {
@@ -611,6 +644,12 @@ type AttachedVolume struct {
 }
 </code></pre>
 <p>See <a href="https://pkg.go.dev/k8s.io/api/core/v1#PodSpec">k8s.io/api/core/v1.PodSpec</a>. Each <code>PodSpec</code> has a priority value where the higher the value, the higher the priority of the Pod.</p>
+<p><code>PodSpec.Volumes</code> slice is List of volumes that can be mounted by containers belonging to the pod and is relevant to MC code that attaches/detaches volumes .</p>
+<pre><code class="language-go">type PodSpec struct {
+	 Volumes []Volume 
+	 //TODO: describe other PodSpec fields used by MC
+}
+</code></pre>
 <h4 id="pod-eviction"><a class="header" href="#pod-eviction">Pod Eviction</a></h4>
 <p>A <a href="k8s.io/api@v0.25.2/policy/v1#Eviction">k8s.io/api/policy/v1.Eviction</a> can be used to evict a <a href="#pod">Pod</a> from its <a href="#node">Node</a> - eviction is the <em>graceful</em> terimation of Pods on nodes.See <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/">API Eviction</a></p>
 <pre><code class="language-go">type Eviction struct {
@@ -655,37 +694,42 @@ type AttachedVolume struct {
 </ul>
 <h5 id="poddisruptionbudgetstatus"><a class="header" href="#poddisruptionbudgetstatus">PodDisruptionBudgetStatus</a></h5>
 <p>See godoc for <a href="https://pkg.go.dev/k8s.io/api@v0.25.2/policy/v1#PodDisruptionBudgetStatus">k8s.io/api/policy/v1.PodDisruptionBudgetStatus</a></p>
-<h3 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h3>
-<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
-<pre><code class="language-go">type VolumeAttachment struct {
+<h4 id="pod-volumes"><a class="header" href="#pod-volumes">Pod Volumes</a></h4>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/core/v1#Volume">k8s.io/api/core/v1.Volume</a> represents a named volume in a pod - which is a directory that may be accessed by any container in the pod. See <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Pod Volumes</a></p>
+<p>A <code>Volume</code> has a <code>Name</code> and embeds a <code>VolumeSource</code> as shown below. A <code>VolumeSource</code> represents the location and type of the mounted volume.</p>
+<pre><code class="language-go">type Volume struct {
+	Name string 
+	VolumeSource
+}
+</code></pre>
+<p><code>VolumeSource</code> which represents the source of a volume to mount should only have ONE of its fields popularted. The MC uses <code>PersistentVolumeClaim</code> field which is pointer to a <code>PersistentVolumeClaimVolumeSource</code> which represents a reference to a <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeClaim">PersistentVolumeClaim</a> in the same namespace.</p>
+<pre><code class="language-go">type VolumeSource struct {
+	PersistentVolumeClaim *PersistentVolumeClaimVolumeSource
+}
+type PersistentVolumeClaimVolumeSource struct  {
+	ClaimName string
+	ReadOnly bool
+}
+</code></pre>
+<h3 id="persistentvolume"><a class="header" href="#persistentvolume">PersistentVolume</a></h3>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolume">k8s.io/api/core/v1.PersistentVolume</a> (PV) represents a piece of storage in the cluster.
+See <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">K8s Persistent Volumes</a></p>
+<h4 id="persistentvolumeclaim"><a class="header" href="#persistentvolumeclaim">PersistentVolumeClaim</a></h4>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeClaim">k8s.io/api/core/v1.PersistentVolumeClaim</a> represents a user's request for and claim to a persistent volume. </p>
+<pre><code class="language-go">type PersistentVolumeClaim struct {
 	metav1.TypeMeta 
-	metav1.ObjectMeta 
-
-	// Specification of the desired attach/detach volume behavior.
-	// Populated by the Kubernetes system.
-	Spec VolumeAttachmentSpec 
-
-	// Status of the VolumeAttachment request.
-	// Populated by the entity completing the attach or detach
-	// operation, i.e. the external-attacher.
-	Status VolumeAttachmentStatus 
+	metav1.ObjectMeta
+	Spec PersistentVolumeClaimSpec
+	Status PersistentVolumeClaimStatus
+}
+type PersistentVolumeClaimSpec struct {
+	StorageClassName *string 
+	//...
+	VolumeName string
+	//...
 }
 </code></pre>
-<h4 id="volumeattachmentspec"><a class="header" href="#volumeattachmentspec">VolumeAttachmentSpec</a></h4>
-<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec">k8s.ip/api/storage/v1.VolumeAttachmentSpec</a>is the specification of a VolumeAttachment request.</p>
-<pre><code class="language-go">type VolumeAttachmentSpec struct {
-	// Attacher indicates the name of the volume driver that MUST handle this
-	// request. Same as CSI Plugin name
-	Attacher string 
-
-	// Source represents the volume that should be attached.
-	Source VolumeAttachmentSource 
-
-	// The node that the volume should be attached to.
-	NodeName string
-}
-</code></pre>
-<p>See <a href="https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1">Storage V1 Docs</a> for further elaboration. </p>
+<p>Note that <code>PersistentVolumeClaimSpec.VolumeName</code> is of interest to the MC which represents the binding reference to the <code>PersistentVolume</code> backing this claim. Please note that this is different from <code>Pod.Spec.Volumes[*].Name</code> which is more like a label for the volume directory.</p>
 <h2 id="client-go"><a class="header" href="#client-go">client-go</a></h2>
 <p>k8s clients have the type  <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset">k8s.io/client-go/kubernetes.ClientSet</a> which is actually a high-level client set facade encapsulating clients for the  <code>core</code>, <code>appsv1</code>, <code>discoveryv1</code>, <code>eventsv1</code>, <code>networkingv1</code>, <code>nodev1</code>, <code>policyv1</code>, <code>storagev1</code> api groups. These individual clients are available via accessor methods. ie use <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset.AppsV1">clientset.AppsV1()</a> to get the the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/apps/v1#AppsV1Interface">AppsV1</a> client.</p>
 <pre><code class="language-go">// Clientset contains the clients for groups. Each group has exactly one

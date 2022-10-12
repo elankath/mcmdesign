@@ -237,6 +237,8 @@
 <li><a href="k8s_facilities.html#attached-volumes">Attached Volumes</a></li>
 </ul>
 </li>
+<li><a href="k8s_facilities.html#volumeattachment">VolumeAttachment</a></li>
+<li><a href="k8s_facilities.html#volumeattachmentspec">VolumeAttachmentSpec</a></li>
 </ul>
 </li>
 <li><a href="k8s_facilities.html#pod">Pod</a>
@@ -248,11 +250,12 @@
 <li><a href="k8s_facilities.html#poddisruptionbudgetstatus">PodDisruptionBudgetStatus</a></li>
 </ul>
 </li>
+<li><a href="k8s_facilities.html#pod-volumes">Pod Volumes</a></li>
 </ul>
 </li>
-<li><a href="k8s_facilities.html#volumeattachment">VolumeAttachment</a>
+<li><a href="k8s_facilities.html#persistentvolume">PersistentVolume</a>
 <ul>
-<li><a href="k8s_facilities.html#volumeattachmentspec">VolumeAttachmentSpec</a></li>
+<li><a href="k8s_facilities.html#persistentvolumeclaim">PersistentVolumeClaim</a></li>
 </ul>
 </li>
 </ul>
@@ -634,7 +637,37 @@ type AttachedVolume struct {
 	DevicePath string 
 }
 </code></pre>
-<p>TODO: add another section with Node class diagram</p>
+<h4 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h4>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
+<pre><code class="language-go">type VolumeAttachment struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+
+	// Specification of the desired attach/detach volume behavior.
+	// Populated by the Kubernetes system.
+	Spec VolumeAttachmentSpec 
+
+	// Status of the VolumeAttachment request.
+	// Populated by the entity completing the attach or detach
+	// operation, i.e. the external-attacher.
+	Status VolumeAttachmentStatus 
+}
+</code></pre>
+<h4 id="volumeattachmentspec"><a class="header" href="#volumeattachmentspec">VolumeAttachmentSpec</a></h4>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec">k8s.ip/api/storage/v1.VolumeAttachmentSpec</a>is the specification of a VolumeAttachment request.</p>
+<pre><code class="language-go">type VolumeAttachmentSpec struct {
+	// Attacher indicates the name of the volume driver that MUST handle this
+	// request. Same as CSI Plugin name
+	Attacher string 
+
+	// Source represents the volume that should be attached.
+	Source VolumeAttachmentSource 
+
+	// The node that the volume should be attached to.
+	NodeName string
+}
+</code></pre>
+<p>See <a href="https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1">Storage V1 Docs</a> for further elaboration. </p>
 <h3 id="pod"><a class="header" href="#pod">Pod</a></h3>
 <p><a href="k8s.io/api/core/v1#Pod">k8s.io/api/core/v1.Pod</a> struct represents a k8s <a href="https://kubernetes.io/docs/concepts/workloads/pods/">Pod</a> which a collection of containers that can run on a host. This resource is created by clients and scheduled onto hosts.</p>
 <pre><code class="language-go">type Pod struct {
@@ -650,6 +683,12 @@ type AttachedVolume struct {
 }
 </code></pre>
 <p>See <a href="https://pkg.go.dev/k8s.io/api/core/v1#PodSpec">k8s.io/api/core/v1.PodSpec</a>. Each <code>PodSpec</code> has a priority value where the higher the value, the higher the priority of the Pod.</p>
+<p><code>PodSpec.Volumes</code> slice is List of volumes that can be mounted by containers belonging to the pod and is relevant to MC code that attaches/detaches volumes .</p>
+<pre><code class="language-go">type PodSpec struct {
+	 Volumes []Volume 
+	 //TODO: describe other PodSpec fields used by MC
+}
+</code></pre>
 <h4 id="pod-eviction"><a class="header" href="#pod-eviction">Pod Eviction</a></h4>
 <p>A <a href="k8s.io/api@v0.25.2/policy/v1#Eviction">k8s.io/api/policy/v1.Eviction</a> can be used to evict a <a href="k8s_facilities.html#pod">Pod</a> from its <a href="k8s_facilities.html#node">Node</a> - eviction is the <em>graceful</em> terimation of Pods on nodes.See <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/">API Eviction</a></p>
 <pre><code class="language-go">type Eviction struct {
@@ -694,37 +733,42 @@ type AttachedVolume struct {
 </ul>
 <h5 id="poddisruptionbudgetstatus"><a class="header" href="#poddisruptionbudgetstatus">PodDisruptionBudgetStatus</a></h5>
 <p>See godoc for <a href="https://pkg.go.dev/k8s.io/api@v0.25.2/policy/v1#PodDisruptionBudgetStatus">k8s.io/api/policy/v1.PodDisruptionBudgetStatus</a></p>
-<h3 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h3>
-<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
-<pre><code class="language-go">type VolumeAttachment struct {
+<h4 id="pod-volumes"><a class="header" href="#pod-volumes">Pod Volumes</a></h4>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/core/v1#Volume">k8s.io/api/core/v1.Volume</a> represents a named volume in a pod - which is a directory that may be accessed by any container in the pod. See <a href="https://kubernetes.io/docs/concepts/storage/volumes/">Pod Volumes</a></p>
+<p>A <code>Volume</code> has a <code>Name</code> and embeds a <code>VolumeSource</code> as shown below. A <code>VolumeSource</code> represents the location and type of the mounted volume.</p>
+<pre><code class="language-go">type Volume struct {
+	Name string 
+	VolumeSource
+}
+</code></pre>
+<p><code>VolumeSource</code> which represents the source of a volume to mount should only have ONE of its fields popularted. The MC uses <code>PersistentVolumeClaim</code> field which is pointer to a <code>PersistentVolumeClaimVolumeSource</code> which represents a reference to a <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeClaim">PersistentVolumeClaim</a> in the same namespace.</p>
+<pre><code class="language-go">type VolumeSource struct {
+	PersistentVolumeClaim *PersistentVolumeClaimVolumeSource
+}
+type PersistentVolumeClaimVolumeSource struct  {
+	ClaimName string
+	ReadOnly bool
+}
+</code></pre>
+<h3 id="persistentvolume"><a class="header" href="#persistentvolume">PersistentVolume</a></h3>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolume">k8s.io/api/core/v1.PersistentVolume</a> (PV) represents a piece of storage in the cluster.
+See <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">K8s Persistent Volumes</a></p>
+<h4 id="persistentvolumeclaim"><a class="header" href="#persistentvolumeclaim">PersistentVolumeClaim</a></h4>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeClaim">k8s.io/api/core/v1.PersistentVolumeClaim</a> represents a user's request for and claim to a persistent volume. </p>
+<pre><code class="language-go">type PersistentVolumeClaim struct {
 	metav1.TypeMeta 
-	metav1.ObjectMeta 
-
-	// Specification of the desired attach/detach volume behavior.
-	// Populated by the Kubernetes system.
-	Spec VolumeAttachmentSpec 
-
-	// Status of the VolumeAttachment request.
-	// Populated by the entity completing the attach or detach
-	// operation, i.e. the external-attacher.
-	Status VolumeAttachmentStatus 
+	metav1.ObjectMeta
+	Spec PersistentVolumeClaimSpec
+	Status PersistentVolumeClaimStatus
+}
+type PersistentVolumeClaimSpec struct {
+	StorageClassName *string 
+	//...
+	VolumeName string
+	//...
 }
 </code></pre>
-<h4 id="volumeattachmentspec"><a class="header" href="#volumeattachmentspec">VolumeAttachmentSpec</a></h4>
-<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec">k8s.ip/api/storage/v1.VolumeAttachmentSpec</a>is the specification of a VolumeAttachment request.</p>
-<pre><code class="language-go">type VolumeAttachmentSpec struct {
-	// Attacher indicates the name of the volume driver that MUST handle this
-	// request. Same as CSI Plugin name
-	Attacher string 
-
-	// Source represents the volume that should be attached.
-	Source VolumeAttachmentSource 
-
-	// The node that the volume should be attached to.
-	NodeName string
-}
-</code></pre>
-<p>See <a href="https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1">Storage V1 Docs</a> for further elaboration. </p>
+<p>Note that <code>PersistentVolumeClaimSpec.VolumeName</code> is of interest to the MC which represents the binding reference to the <code>PersistentVolume</code> backing this claim. Please note that this is different from <code>Pod.Spec.Volumes[*].Name</code> which is more like a label for the volume directory.</p>
 <h2 id="client-go"><a class="header" href="#client-go">client-go</a></h2>
 <p>k8s clients have the type  <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset">k8s.io/client-go/kubernetes.ClientSet</a> which is actually a high-level client set facade encapsulating clients for the  <code>core</code>, <code>appsv1</code>, <code>discoveryv1</code>, <code>eventsv1</code>, <code>networkingv1</code>, <code>nodev1</code>, <code>policyv1</code>, <code>storagev1</code> api groups. These individual clients are available via accessor methods. ie use <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset.AppsV1">clientset.AppsV1()</a> to get the the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/apps/v1#AppsV1Interface">AppsV1</a> client.</p>
 <pre><code class="language-go">// Clientset contains the clients for groups. Each group has exactly one
@@ -2251,16 +2295,18 @@ func (c *controller) reconcileClusterSecret(ctx context.Context, secret *corev1.
 </code></pre>
 <h2 id="flow"><a class="header" href="#flow">Flow</a></h2>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/secret.go#L37">controller.reconcileClusterSecretkey</a>
-basically adds the <a href="machine-controller/../mcm_facilities.html#finalizers">MCFinalizerName</a>  (value: <code>machine.sapcloud.io/machine-controller</code>) to the list of <code>secret.finalizers</code> for all secrets that are referenced by machine classes within the same namespace.</p>
+basically adds the <a href="machine-controller/../mcm_facilities.html#finalizers">MCFinalizerName</a>  (value: <code>machine.sapcloud.io/machine-controller</code>) to the list of finalizers for all secrets that are referenced by machine classes within the same namespace.</p>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 
 flowchart TD
 
 a[ns, name = cache.splitmetanamespacekey]
-b[&quot;sec=secretlister.secrets(ns).get(name)&quot;]
-c[&quot;machineclasses=findmachineclassforsecret(name)&quot;]
+b[&quot;sec=secretLister.secrets(ns).get(name)&quot;]
+c[&quot;machineclasses=findMachineClassForsecret(name)
+// gets the set of MachineClasses referring to the passed secret
+&quot;]
 d{machineclasses empty?}
-e[&quot;updatesecretfinalizers(sec)&quot;] 
+e[&quot;updateSecretFinalizers(sec)&quot;] 
 f[&quot;secretq.addafter(key,10min)&quot;]
 z((&quot;end&quot;))
 a--&gt;b
@@ -2272,6 +2318,9 @@ e--err--&gt;f
 e--success--&gt;z
 f--&gt;z
 </pre>
+<h3 id="updatesecretfinalizers"><a class="header" href="#updatesecretfinalizers">updateSecretFinalizers</a></h3>
+<pre><code class="language-go">func (c *controller) updateSecretFinalizers(ctx context.Context, secret *corev1.Secret, finalizers []string) error 
+</code></pre>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="machine-controller/cluster_machine_reconcile.html#cluster-machine-reconcile">Cluster Machine Reconcile</a>
 <ul>
@@ -2574,8 +2623,13 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </li>
 <li><a href="node_drain.html#drain">Drain</a>
 <ul>
+<li><a href="node_drain.html#drain-types">Drain Types</a>
+<ul>
 <li><a href="node_drain.html#drain-constants">Drain Constants</a></li>
 <li><a href="node_drain.html#drainoptions">drain.Options</a></li>
+</ul>
+</li>
+<li><a href="node_drain.html#drainpodvolumeinfotype">drain.PodVolumeInfotype</a></li>
 <li><a href="node_drain.html#drainoptionsrundrain">drain.Options.RunDrain</a>
 <ul>
 <li><a href="node_drain.html#drainfilterpodswithpv">drain.filterPodsWithPv</a></li>
@@ -2589,6 +2643,7 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </li>
 <li><a href="node_drain.html#drainoptionsevictpodswithpv">drain.Options.evictPodsWithPv</a>
 <ul>
+<li><a href="node_drain.html#drainoptionsgetpvlist">drain.Options.getPVList</a></li>
 <li><a href="node_drain.html#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></li>
 </ul>
 </li>
@@ -2648,15 +2703,20 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 }
 </code></pre>
 <h2 id="drain"><a class="header" href="#drain">Drain</a></h2>
-<h3 id="drain-constants"><a class="header" href="#drain-constants">Drain Constants</a></h3>
+<h3 id="drain-types"><a class="header" href="#drain-types">Drain Types</a></h3>
+<h4 id="drain-constants"><a class="header" href="#drain-constants">Drain Constants</a></h4>
 <ul>
 <li><code>PodEvictionRetryInterval</code> is the interval in which to retry eviction for pods</li>
+<li><code>GetPvDetailsMaxRetries</code> is the number of max retries to get PV details</li>
+<li><code>GetPvDetailsRetryInterval</code> is the interval in which to retry getting PV details</li>
 </ul>
 <pre><code class="language-go">const (
     PodEvictionRetryInterval = time.Second * 20
+	GetPvDetailsMaxRetries = 3
+	GetPvDetailsRetryInterval = time.Second * 5
 )
 </code></pre>
-<h3 id="drainoptions"><a class="header" href="#drainoptions">drain.Options</a></h3>
+<h4 id="drainoptions"><a class="header" href="#drainoptions">drain.Options</a></h4>
 <p><code>drain.Options</code> are configurable options while draining a node before deletion</p>
 <p>NOTE: Unused fields/Fields with constant defaults omitted for brevity</p>
 <pre><code class="language-go">type Options struct {
@@ -2680,6 +2740,13 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 	Timeout                      time.Duration
 }
 
+</code></pre>
+<h3 id="drainpodvolumeinfotype"><a class="header" href="#drainpodvolumeinfotype">drain.PodVolumeInfotype</a></h3>
+<p><code>drain.PodVolumeInfo</code> is the struct used to hold the PersistentVolumeID and volumeID for all the <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">PVs</a> attached to the pod</p>
+<pre><code class="language-go">PodVolumeInfo struct {
+	persistentVolumeList []string
+	volumeList           []string
+}
 </code></pre>
 <h3 id="drainoptionsrundrain"><a class="header" href="#drainoptionsrundrain">drain.Options.RunDrain</a></h3>
 <pre><code class="language-go">func (o *Options) RunDrain(ctx context.Context) error
@@ -2883,10 +2950,33 @@ NilReturn((&quot;return&quot;))
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
+Begin((&quot; &quot;))
+--&gt;SortPods[&quot;
+    sortPodsByPriority(pods)
+    //Desc priority pods[i].Spec.Priority &gt; *pods[j].Spec.Priority
+&quot;]
 NilReturn((&quot;return&quot;))
 </pre>
+<h4 id="drainoptionsgetpvlist"><a class="header" href="#drainoptionsgetpvlist">drain.Options.getPVList</a></h4>
+<p>NOTE: Should be called <code>getPVNames</code>.  Gets a slice of the persistent volume names bound to the given <code>pod</code>. </p>
+<pre><code class="language-go">func (o *Options) getPVList(pod *corev1.Pod) (pvNames []string, err error) 
+</code></pre>
+<ol>
+<li>Iterate over <code>pod.Spec.Volumes</code>.</li>
+<li>If <code>volume.PersistentVolumeClaim</code> reference is not nil, gets the <code>PersistentVolumeClaim</code> using <code>o.pvcLister</code> using <code>vol.PersistentVolumeClaim.ClaimName</code>.
+<ol>
+<li>Implements error handling and retry till <code>GetPvDetailsMaxRetries</code> is reached with interval <code>GetPvDetailsRetryInterval</code> for the above.</li>
+</ol>
+</li>
+<li>Adds <code>pvc.Spec.VolumeName</code> to <code>pvNames</code></li>
+<li>Return <code>pvNames</code></li>
+</ol>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+</pre>
 <h4 id="drainoptionsevictpodswithpvinternal"><a class="header" href="#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></h4>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646">drain.Options.evictPodsWithPVInternal</a> is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a <code>remainingPods</code> slice and a <code>fastTrace</code> boolean meant to abort the pod eviction and the calling go-routine. (TODO: WHY? This doesn't seem right)</p>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646">drain.Options.evictPodsWithPVInternal</a> is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a <code>remainingPods</code> slice and a <code>fastTrack</code> boolean is meant to abort the pod eviction and exit the calling go-routine. (TODO: should be called <code>abort</code> or even better should use custom error here)</p>
 <pre><code class="language-go">func (o *DrainOptions) evictPodsWithPVInternal(ctx context.Context,
     attemptEvict bool, 
     pods []*corev1.Pod, 

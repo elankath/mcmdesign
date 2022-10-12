@@ -1,17 +1,20 @@
 - [Node Drain](#node-drain)
-  - [Drain Utilities](#drain-utilities)
-    - [VolumeAttachmentHandler](#volumeattachmenthandler)
-  - [Drain](#drain)
-    - [Drain Constants](#drain-constants)
-    - [drain.Options](#drainoptions)
-    - [drain.Options.RunDrain](#drainoptionsrundrain)
-      - [drain.filterPodsWithPv](#drainfilterpodswithpv)
-    - [drain.Options.evictPodsWithoutPv](#drainoptionsevictpodswithoutpv)
-      - [drain.Options.evictPodWithoutPVInternal](#drainoptionsevictpodwithoutpvinternal)
-      - [isMisconfiguredPdb](#ismisconfiguredpdb)
-    - [drain.Options.evictPodsWithPv](#drainoptionsevictpodswithpv)
-      - [drain.Options.evictPodsWithPVInternal](#drainoptionsevictpodswithpvinternal)
-    - [drain.Options.waitForDelete](#drainoptionswaitfordelete)
+	- [Drain Utilities](#drain-utilities)
+		- [VolumeAttachmentHandler](#volumeattachmenthandler)
+	- [Drain](#drain)
+		- [Drain Types](#drain-types)
+			- [Drain Constants](#drain-constants)
+			- [drain.Options](#drainoptions)
+		- [drain.PodVolumeInfotype](#drainpodvolumeinfotype)
+		- [drain.Options.RunDrain](#drainoptionsrundrain)
+			- [drain.filterPodsWithPv](#drainfilterpodswithpv)
+		- [drain.Options.evictPodsWithoutPv](#drainoptionsevictpodswithoutpv)
+			- [drain.Options.evictPodWithoutPVInternal](#drainoptionsevictpodwithoutpvinternal)
+			- [isMisconfiguredPdb](#ismisconfiguredpdb)
+		- [drain.Options.evictPodsWithPv](#drainoptionsevictpodswithpv)
+			- [drain.Options.getPVList](#drainoptionsgetpvlist)
+			- [drain.Options.evictPodsWithPVInternal](#drainoptionsevictpodswithpvinternal)
+		- [drain.Options.waitForDelete](#drainoptionswaitfordelete)
 # Node Drain
 
 Node Drain code is in [github.com/gardener/machine-controller-manager/pkg/util/provider/drain/drain.go](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go)
@@ -75,16 +78,22 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 
 ## Drain 
 
-### Drain Constants
+### Drain Types
+
+#### Drain Constants
 
 - `PodEvictionRetryInterval` is the interval in which to retry eviction for pods
+- `GetPvDetailsMaxRetries` is the number of max retries to get PV details
+- `GetPvDetailsRetryInterval` is the interval in which to retry getting PV details
 ```go
 const (
     PodEvictionRetryInterval = time.Second * 20
+	GetPvDetailsMaxRetries = 3
+	GetPvDetailsRetryInterval = time.Second * 5
 )
 ```
 
-### drain.Options
+#### drain.Options
 
 `drain.Options` are configurable options while draining a node before deletion
 
@@ -112,6 +121,17 @@ type Options struct {
 }
 
 ```
+
+### drain.PodVolumeInfotype 
+
+`drain.PodVolumeInfo` is the struct used to hold the PersistentVolumeID and volumeID for all the [PVs](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) attached to the pod
+```go
+PodVolumeInfo struct {
+	persistentVolumeList []string
+	volumeList           []string
+}
+```
+
 
 ### drain.Options.RunDrain
 
@@ -340,13 +360,36 @@ func (o *Options) evictPodsWithPv(ctx context.Context,
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
 
+Begin((" "))
+-->SortPods["
+    sortPodsByPriority(pods)
+    //Desc priority pods[i].Spec.Priority > *pods[j].Spec.Priority
+"]
 NilReturn(("return"))
+```
+
+#### drain.Options.getPVList
+
+NOTE: Should be called `getPVNames`.  Gets a slice of the persistent volume names bound to the given `pod`. 
+```go
+func (o *Options) getPVList(pod *corev1.Pod) (pvNames []string, err error) 
+```
+1. Iterate over `pod.Spec.Volumes`.
+2. If `volume.PersistentVolumeClaim` reference is not nil, gets the `PersistentVolumeClaim` using `o.pvcLister` using `vol.PersistentVolumeClaim.ClaimName`.
+   1. Implements error handling and retry till `GetPvDetailsMaxRetries` is reached with interval `GetPvDetailsRetryInterval` for the above.
+3. Adds `pvc.Spec.VolumeName` to `pvNames`
+4. Return `pvNames`
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
 ```
 
 
 #### drain.Options.evictPodsWithPVInternal
 
-[drain.Options.evictPodsWithPVInternal](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646) is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a `remainingPods` slice and a `fastTrace` boolean meant to abort the pod eviction and the calling go-routine. (TODO: WHY? This doesn't seem right)
+[drain.Options.evictPodsWithPVInternal](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646) is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a `remainingPods` slice and a `fastTrack` boolean is meant to abort the pod eviction and exit the calling go-routine. (TODO: should be called `abort` or even better should use custom error here)
 
 ```go
 func (o *DrainOptions) evictPodsWithPVInternal(ctx context.Context,

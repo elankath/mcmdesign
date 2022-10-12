@@ -26,13 +26,16 @@
 				- [NodeSystemInfo](#nodesysteminfo)
 				- [Images](#images)
 				- [Attached Volumes](#attached-volumes)
+			- [VolumeAttachment](#volumeattachment)
+			- [VolumeAttachmentSpec](#volumeattachmentspec)
 		- [Pod](#pod)
 			- [Pod Eviction](#pod-eviction)
 			- [Pod Disruption Budget](#pod-disruption-budget)
 				- [PodDisruptionBudgetSpec](#poddisruptionbudgetspec)
 				- [PodDisruptionBudgetStatus](#poddisruptionbudgetstatus)
-		- [VolumeAttachment](#volumeattachment)
-			- [VolumeAttachmentSpec](#volumeattachmentspec)
+			- [Pod Volumes](#pod-volumes)
+		- [PersistentVolume](#persistentvolume)
+			- [PersistentVolumeClaim](#persistentvolumeclaim)
 	- [client-go](#client-go)
 		- [client-go Shared Informers.](#client-go-shared-informers)
 		- [client-go workqueues](#client-go-workqueues)
@@ -490,7 +493,44 @@ type AttachedVolume struct {
 }
 ```
 
-TODO: add another section with Node class diagram
+#### VolumeAttachment
+
+A [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.
+
+```go
+type VolumeAttachment struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+
+	// Specification of the desired attach/detach volume behavior.
+	// Populated by the Kubernetes system.
+	Spec VolumeAttachmentSpec 
+
+	// Status of the VolumeAttachment request.
+	// Populated by the entity completing the attach or detach
+	// operation, i.e. the external-attacher.
+	Status VolumeAttachmentStatus 
+}
+```
+ 
+####  VolumeAttachmentSpec
+
+A [k8s.ip/api/storage/v1.VolumeAttachmentSpec](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec)is the specification of a VolumeAttachment request.
+```go
+type VolumeAttachmentSpec struct {
+	// Attacher indicates the name of the volume driver that MUST handle this
+	// request. Same as CSI Plugin name
+	Attacher string 
+
+	// Source represents the volume that should be attached.
+	Source VolumeAttachmentSource 
+
+	// The node that the volume should be attached to.
+	NodeName string
+}
+```
+See [Storage V1 Docs](https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1) for further elaboration. 
+
 
 ### Pod 
 
@@ -511,6 +551,14 @@ type Pod struct {
 ```
 
 See [k8s.io/api/core/v1.PodSpec](https://pkg.go.dev/k8s.io/api/core/v1#PodSpec). Each `PodSpec` has a priority value where the higher the value, the higher the priority of the Pod.
+
+`PodSpec.Volumes` slice is List of volumes that can be mounted by containers belonging to the pod and is relevant to MC code that attaches/detaches volumes .
+```go
+type PodSpec struct {
+	 Volumes []Volume 
+	 //TODO: describe other PodSpec fields used by MC
+}
+```
 
 #### Pod Eviction
 A [k8s.io/api/policy/v1.Eviction](k8s.io/api@v0.25.2/policy/v1#Eviction) can be used to evict a [Pod](#pod) from its [Node](#node) - eviction is the _graceful_ terimation of Pods on nodes.See [API Eviction](https://kubernetes.io/docs/concepts/scheduling-eviction/api-eviction/)
@@ -567,43 +615,54 @@ type PodDisruptionBudgetSpec struct {
 See godoc for [k8s.io/api/policy/v1.PodDisruptionBudgetStatus](https://pkg.go.dev/k8s.io/api@v0.25.2/policy/v1#PodDisruptionBudgetStatus)
 
 
-### VolumeAttachment
+#### Pod Volumes
 
-A [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.
+A [k8s.io/api/core/v1.Volume](https://pkg.go.dev/k8s.io/api/core/v1#Volume) represents a named volume in a pod - which is a directory that may be accessed by any container in the pod. See [Pod Volumes](https://kubernetes.io/docs/concepts/storage/volumes/)
+
+A `Volume` has a `Name` and embeds a `VolumeSource` as shown below. A `VolumeSource` represents the location and type of the mounted volume.
 
 ```go
-type VolumeAttachment struct {
+type Volume struct {
+	Name string 
+	VolumeSource
+}
+```
+`VolumeSource` which represents the source of a volume to mount should only have ONE of its fields popularted. The MC uses `PersistentVolumeClaim` field which is pointer to a `PersistentVolumeClaimVolumeSource` which represents a reference to a [PersistentVolumeClaim](https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeClaim) in the same namespace.
+```go
+type VolumeSource struct {
+	PersistentVolumeClaim *PersistentVolumeClaimVolumeSource
+}
+type PersistentVolumeClaimVolumeSource struct  {
+	ClaimName string
+	ReadOnly bool
+}
+```
+
+### PersistentVolume
+
+A [k8s.io/api/core/v1.PersistentVolume](https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolume) (PV) represents a piece of storage in the cluster.
+See [K8s Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/)
+
+#### PersistentVolumeClaim
+
+A [k8s.io/api/core/v1.PersistentVolumeClaim](https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeClaim) represents a user's request for and claim to a persistent volume. 
+
+```go
+type PersistentVolumeClaim struct {
 	metav1.TypeMeta 
-	metav1.ObjectMeta 
-
-	// Specification of the desired attach/detach volume behavior.
-	// Populated by the Kubernetes system.
-	Spec VolumeAttachmentSpec 
-
-	// Status of the VolumeAttachment request.
-	// Populated by the entity completing the attach or detach
-	// operation, i.e. the external-attacher.
-	Status VolumeAttachmentStatus 
+	metav1.ObjectMeta
+	Spec PersistentVolumeClaimSpec
+	Status PersistentVolumeClaimStatus
+}
+type PersistentVolumeClaimSpec struct {
+	StorageClassName *string 
+	//...
+	VolumeName string
+	//...
 }
 ```
- 
-####  VolumeAttachmentSpec
+Note that `PersistentVolumeClaimSpec.VolumeName` is of interest to the MC which represents the binding reference to the `PersistentVolume` backing this claim. Please note that this is different from `Pod.Spec.Volumes[*].Name` which is more like a label for the volume directory.
 
-A [k8s.ip/api/storage/v1.VolumeAttachmentSpec](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec)is the specification of a VolumeAttachment request.
-```go
-type VolumeAttachmentSpec struct {
-	// Attacher indicates the name of the volume driver that MUST handle this
-	// request. Same as CSI Plugin name
-	Attacher string 
-
-	// Source represents the volume that should be attached.
-	Source VolumeAttachmentSource 
-
-	// The node that the volume should be attached to.
-	NodeName string
-}
-```
-See [Storage V1 Docs](https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1) for further elaboration. 
 
 ## client-go
 
