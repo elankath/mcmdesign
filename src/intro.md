@@ -1,3 +1,7 @@
+- [Introduction](#introduction)
+
+🚧 WIP: MCM Design Book is work-in-progress at the moment. Please check back in a few days for the first release. Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/))
+
 # Introduction
 
 A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more _reconcile_ functions in response. A _reconcile function_ is called with the _Namespace_ and _Name_ of an object corresponding to the resource and its job is to make the object _Status_ match the declared state in the object _Spec_. 

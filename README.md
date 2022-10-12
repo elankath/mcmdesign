@@ -1,4 +1,4 @@
-NOTE: This README.md is deprecated
+NOTE: This README.md is DEPRECATED
 
 🚧 WIP: MCM Design Book in work at: [MCM Design Book](https://elankath.github.io/mcmdesign/))
 
