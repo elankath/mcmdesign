@@ -736,6 +736,7 @@ type Driver interface {
 ```
 - `GetVolumeIDs` returns a list volumeIDs for the given list of [PVSpecs](https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeSpec)
   - Example: the AWS driver checks if `spec.AWSElasticBlockStore.VolumeID` is not nil and coverts the k8s `spec.AWSElasticBlockStore.VolumeID` to the EBS volume ID. Or if storage is provided by CSI `spec.CSI.Driver="ebs.csi.aws.com"` just gets `spec.CSI.VolumeHandle`
+ - `GetMachineStatus` gets the status of the VM backing the machine object on the provider
 
 ## Codes and (error) Status
 

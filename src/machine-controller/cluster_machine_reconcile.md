@@ -69,6 +69,8 @@ CreateFlow-->EnqM
 ## controller.triggerCreationFlow
 
 [Controller Method](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine.go#L326) that orchestraes the call to the [Driver.CreateMachine](../mcm_facilities.md#driver)
+
+This method badly requires to be split into several functions. It is too long.
 ```go
 func (c *controller) triggerCreationFlow(ctx context.Context, cmr *driver.CreateMachineRequest) (machineutils.RetryPeriod, error) 
 ```
@@ -77,15 +79,153 @@ func (c *controller) triggerCreationFlow(ctx context.Context, cmr *driver.Create
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
 
+ShortP["retryPeriod=machineutils.ShortRetry"]
+MediumP["retryPeriod=machineutils.MediumRetry"]
+Return(("return retryPeriod, err"))
+
+
 Begin((" "))-->Init["
-  machine     = createMachineRequest.Machine
-	machineName = createMachineRequest.Machine.Name
-  secretCopy := createMachineRequest.Secret.DeepCopy() //NOTE: Un-necessary
+  machine     = cmr.Machine
+	machineName = cmr.Machine.Name
+  secretCopy := cmr.Secret.DeepCopy() //NOTE: seems Un-necessary?
 "]
 -->AddBootStrapToken["
- c.addBootstrapTokenToUserData(ctx, machine.Name, secretCopy)
-//  Add Bootstrap token to machine secret user data
+ err = c.addBootstrapTokenToUserData(ctx, machine.Name, secretCopy)
+//  get/create bootstrap token and populate inside secretCopy['userData']
 "]
+-->ChkErr{err != nil?}
+
+ChkErr--Yes-->ShortP-->Return
+
+ChkErr--No-->CreateMachineStatusReq["
+  statusReq = & driver.GetMachineStatusRequest{
+			Machine:      machine,
+			MachineClass: cmr.MachineClass,
+			Secret:       cmr.Secret,
+		},
+"]-->GetMachineStatus["
+  statusResp, err := c.driver.GetMachineStatus(ctx, statusReq)
+  //check if VM already exists
+"]-->ChkStatusErr{err!=nil}
+
+ChkStatusErr--No-->InitNodeNameFromStatusResp["
+   nodeName = statusResp.NodeName
+  providerID = statusResp.ProviderID
+"]
+
+ChkStatusErr--Yes-->DecodeErrorStatus["
+  errStatus,decodeOk= status.FromError(err)
+"]
+DecodeErrorStatus-->CheckDecodeOk{"decodeOk ?"}
+
+CheckDecodeOk--No-->MediumP-->Return
+CheckDecodeOk--Yes-->AnalyzeCode{status.Code?}
+
+
+AnalyzeCode--NotFound,Unimplemented-->ChkNodeLabel{"machine.Labels['node']?"}
+
+ChkNodeLabel--No-->CreateMachine["
+// node label is not present -> no machine
+ resp, err := c.driver.CreateMachine(ctx, cmr)
+"]-->ChkCreateError{err!=nil?}
+
+ChkNodeLabel--Yes-->InitNodeNameFromMachine["
+  nodeName = machine.Labels['node']
+"]
+
+
+AnalyzeCode--Unknown,DeadlineExceeded,Aborted,Unavailable-->ShortRetry["
+retryPeriod=machineutils.ShortRetry
+"]-->GetLastKnownState["
+  lastKnownState := machine.Status.LastKnownState
+"]-->InitFailedOp["
+ lastOp := LastOperation{
+    Description: err.Error(),
+    State: MachineStateFailed,
+    Type: MachineOperationCreatea,
+    LastUpdateTime: Now(),
+ };
+ currStatus := CurrentStatus {
+    Phase: MachineCrashLoopBackOff || MachineFailed (on create timeout)
+    LastUpdateTime: Now()
+ }
+"]-->UpdateMachineStatus["
+c.machineStatusUpdate(ctx,machine,lastOp,currStatus,lastKnownState)
+"]-->Return
+
+
+ChkCreateError--Yes-->SetLastKnownState["
+  	lastKnownState = resp.LastKnownState
+"]-->InitFailedOp
+
+ChkCreateError--No-->InitNodeNameFromCreateResponse["
+  nodeName = resp.NodeName
+  providerID = resp.ProviderID
+"]-->ChkStaleNode{"
+// check stale node
+nodeName != machineName 
+&& nodeLister.Get(nodeName) exists"}
+
+
+InitNodeNameFromStatusResp-->ChkNodeLabelAnnotPresent{"
+cmr.Machine.Labels['node']
+&& cmr.Machine.Annotations[MachinePriority] ?
+"}
+InitNodeNameFromMachine-->ChkNodeLabelAnnotPresent
+
+ChkNodeLabelAnnotPresent--No-->CloneMachine["
+  clone := machine.DeepCopy;
+  clone.Labels['node'] = nodeName
+  clone.Annotations[machineutils.MachinePriority] = '3'
+  clone.Spec.ProviderID = providerID
+"]-->UpdateMachine["
+  _, err := c.controlMachineClient.Machines(clone.Namespace).Update(ctx, clone, UpdateOptions{})
+"]-->ShortP
+
+
+
+
+ChkStaleNode--No-->CloneMachine
+ChkStaleNode--Yes-->CreateDMR["
+  dmr := &driver.DeleteMachineRequest{
+						Machine: &Machine{
+							ObjectMeta: machine.ObjectMeta,
+							Spec: MachineSpec{
+								ProviderID: providerID,
+							},
+						},
+						MachineClass: createMachineRequest.MachineClass,
+						Secret:       secretCopy,
+					}
+"]-->DeleteMachine["
+  _, err := c.driver.DeleteMachine(ctx, deleteMachineRequest)
+  // discuss stale node case
+"]-->ShortRetry["retryPeriod=machineutils.ShortRetry"]
+
+ChkNodeLabelAnnotPresent--Yes-->ChkMachineStatus{"machine.Status.Node != nodeName
+  || machine.Status.CurrentStatus.Phase == ''"}
+
+ChkMachineStatus--No-->LongP["retryPeriod = machineutils.LongRetry"]-->Return
+
+ChkMachineStatus--Yes-->CloneMachine1["
+  clone := machine.DeepCopy()
+  clone.Status.Node = nodeName
+"]-->SetLastOp["
+ lastOp := LastOperation{
+    Description: 'Creating Machine on Provider',
+    State: MachineStateProcessing,
+    Type: MachineOperationCreate,
+    LastUpdateTime: Now(),
+ };
+ currStatus := CurrentStatus {
+    Phase: MachinePending,
+    TimeoutActive:  true,
+    LastUpdateTime: Now()
+ }
+ lastKnownState = clone.Status.LastKnownState
+"]-->UpdateMachineStatus
+
+style InitFailedOp text-align:left
 
 ```
 

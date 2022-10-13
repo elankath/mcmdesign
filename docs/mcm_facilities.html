@@ -829,6 +829,7 @@ type controller struct {
 <li>Example: the AWS driver checks if <code>spec.AWSElasticBlockStore.VolumeID</code> is not nil and coverts the k8s <code>spec.AWSElasticBlockStore.VolumeID</code> to the EBS volume ID. Or if storage is provided by CSI <code>spec.CSI.Driver=&quot;ebs.csi.aws.com&quot;</code> just gets <code>spec.CSI.VolumeHandle</code></li>
 </ul>
 </li>
+<li><code>GetMachineStatus</code> gets the status of the VM backing the machine object on the provider</li>
 </ul>
 <h2 id="codes-and-error-status"><a class="header" href="#codes-and-error-status">Codes and (error) Status</a></h2>
 <h3 id="code"><a class="header" href="#code">Code</a></h3>

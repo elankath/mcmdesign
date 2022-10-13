@@ -1640,6 +1640,7 @@ type controller struct {
 <li>Example: the AWS driver checks if <code>spec.AWSElasticBlockStore.VolumeID</code> is not nil and coverts the k8s <code>spec.AWSElasticBlockStore.VolumeID</code> to the EBS volume ID. Or if storage is provided by CSI <code>spec.CSI.Driver=&quot;ebs.csi.aws.com&quot;</code> just gets <code>spec.CSI.VolumeHandle</code></li>
 </ul>
 </li>
+<li><code>GetMachineStatus</code> gets the status of the VM backing the machine object on the provider</li>
 </ul>
 <h2 id="codes-and-error-status"><a class="header" href="#codes-and-error-status">Codes and (error) Status</a></h2>
 <h3 id="code"><a class="header" href="#code">Code</a></h3>
@@ -2436,20 +2437,159 @@ CreateFlow--&gt;EnqM
 </pre>
 <h2 id="controllertriggercreationflow"><a class="header" href="#controllertriggercreationflow">controller.triggerCreationFlow</a></h2>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine.go#L326">Controller Method</a> that orchestraes the call to the <a href="machine-controller/../mcm_facilities.html#driver">Driver.CreateMachine</a></p>
+<p>This method badly requires to be split into several functions. It is too long.</p>
 <pre><code class="language-go">func (c *controller) triggerCreationFlow(ctx context.Context, cmr *driver.CreateMachineRequest) (machineutils.RetryPeriod, error) 
 </code></pre>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
+ShortP[&quot;retryPeriod=machineutils.ShortRetry&quot;]
+MediumP[&quot;retryPeriod=machineutils.MediumRetry&quot;]
+Return((&quot;return retryPeriod, err&quot;))
+
+
 Begin((&quot; &quot;))--&gt;Init[&quot;
-  machine     = createMachineRequest.Machine
-	machineName = createMachineRequest.Machine.Name
-  secretCopy := createMachineRequest.Secret.DeepCopy() //NOTE: Un-necessary
+  machine     = cmr.Machine
+	machineName = cmr.Machine.Name
+  secretCopy := cmr.Secret.DeepCopy() //NOTE: seems Un-necessary?
 &quot;]
 --&gt;AddBootStrapToken[&quot;
- c.addBootstrapTokenToUserData(ctx, machine.Name, secretCopy)
-//  Add Bootstrap token to machine secret user data
+ err = c.addBootstrapTokenToUserData(ctx, machine.Name, secretCopy)
+//  get/create bootstrap token and populate inside secretCopy['userData']
 &quot;]
+--&gt;ChkErr{err != nil?}
+
+ChkErr--Yes--&gt;ShortP--&gt;Return
+
+ChkErr--No--&gt;CreateMachineStatusReq[&quot;
+  statusReq = &amp; driver.GetMachineStatusRequest{
+			Machine:      machine,
+			MachineClass: cmr.MachineClass,
+			Secret:       cmr.Secret,
+		},
+&quot;]--&gt;GetMachineStatus[&quot;
+  statusResp, err := c.driver.GetMachineStatus(ctx, statusReq)
+  //check if VM already exists
+&quot;]--&gt;ChkStatusErr{err!=nil}
+
+ChkStatusErr--No--&gt;InitNodeNameFromStatusResp[&quot;
+   nodeName = statusResp.NodeName
+  providerID = statusResp.ProviderID
+&quot;]
+
+ChkStatusErr--Yes--&gt;DecodeErrorStatus[&quot;
+  errStatus,decodeOk= status.FromError(err)
+&quot;]
+DecodeErrorStatus--&gt;CheckDecodeOk{&quot;decodeOk ?&quot;}
+
+CheckDecodeOk--No--&gt;MediumP--&gt;Return
+CheckDecodeOk--Yes--&gt;AnalyzeCode{status.Code?}
+
+
+AnalyzeCode--NotFound,Unimplemented--&gt;ChkNodeLabel{&quot;machine.Labels['node']?&quot;}
+
+ChkNodeLabel--No--&gt;CreateMachine[&quot;
+// node label is not present -&gt; no machine
+ resp, err := c.driver.CreateMachine(ctx, cmr)
+&quot;]--&gt;ChkCreateError{err!=nil?}
+
+ChkNodeLabel--Yes--&gt;InitNodeNameFromMachine[&quot;
+  nodeName = machine.Labels['node']
+&quot;]
+
+
+AnalyzeCode--Unknown,DeadlineExceeded,Aborted,Unavailable--&gt;ShortRetry[&quot;
+retryPeriod=machineutils.ShortRetry
+&quot;]--&gt;GetLastKnownState[&quot;
+  lastKnownState := machine.Status.LastKnownState
+&quot;]--&gt;InitFailedOp[&quot;
+ lastOp := LastOperation{
+    Description: err.Error(),
+    State: MachineStateFailed,
+    Type: MachineOperationCreatea,
+    LastUpdateTime: Now(),
+ };
+ currStatus := CurrentStatus {
+    Phase: MachineCrashLoopBackOff || MachineFailed (on create timeout)
+    LastUpdateTime: Now()
+ }
+&quot;]--&gt;UpdateMachineStatus[&quot;
+c.machineStatusUpdate(ctx,machine,lastOp,currStatus,lastKnownState)
+&quot;]--&gt;Return
+
+
+ChkCreateError--Yes--&gt;SetLastKnownState[&quot;
+  	lastKnownState = resp.LastKnownState
+&quot;]--&gt;InitFailedOp
+
+ChkCreateError--No--&gt;InitNodeNameFromCreateResponse[&quot;
+  nodeName = resp.NodeName
+  providerID = resp.ProviderID
+&quot;]--&gt;ChkStaleNode{&quot;
+// check stale node
+nodeName != machineName 
+&amp;&amp; nodeLister.Get(nodeName) exists&quot;}
+
+
+InitNodeNameFromStatusResp--&gt;ChkNodeLabelAnnotPresent{&quot;
+cmr.Machine.Labels['node']
+&amp;&amp; cmr.Machine.Annotations[MachinePriority] ?
+&quot;}
+InitNodeNameFromMachine--&gt;ChkNodeLabelAnnotPresent
+
+ChkNodeLabelAnnotPresent--No--&gt;CloneMachine[&quot;
+  clone := machine.DeepCopy;
+  clone.Labels['node'] = nodeName
+  clone.Annotations[machineutils.MachinePriority] = '3'
+  clone.Spec.ProviderID = providerID
+&quot;]--&gt;UpdateMachine[&quot;
+  _, err := c.controlMachineClient.Machines(clone.Namespace).Update(ctx, clone, UpdateOptions{})
+&quot;]--&gt;ShortP
+
+
+
+
+ChkStaleNode--No--&gt;CloneMachine
+ChkStaleNode--Yes--&gt;CreateDMR[&quot;
+  dmr := &amp;driver.DeleteMachineRequest{
+						Machine: &amp;Machine{
+							ObjectMeta: machine.ObjectMeta,
+							Spec: MachineSpec{
+								ProviderID: providerID,
+							},
+						},
+						MachineClass: createMachineRequest.MachineClass,
+						Secret:       secretCopy,
+					}
+&quot;]--&gt;DeleteMachine[&quot;
+  _, err := c.driver.DeleteMachine(ctx, deleteMachineRequest)
+  // discuss stale node case
+&quot;]--&gt;ShortRetry[&quot;retryPeriod=machineutils.ShortRetry&quot;]
+
+ChkNodeLabelAnnotPresent--Yes--&gt;ChkMachineStatus{&quot;machine.Status.Node != nodeName
+  || machine.Status.CurrentStatus.Phase == ''&quot;}
+
+ChkMachineStatus--No--&gt;LongP[&quot;retryPeriod = machineutils.LongRetry&quot;]--&gt;Return
+
+ChkMachineStatus--Yes--&gt;CloneMachine1[&quot;
+  clone := machine.DeepCopy()
+  clone.Status.Node = nodeName
+&quot;]--&gt;SetLastOp[&quot;
+ lastOp := LastOperation{
+    Description: 'Creating Machine on Provider',
+    State: MachineStateProcessing,
+    Type: MachineOperationCreate,
+    LastUpdateTime: Now(),
+ };
+ currStatus := CurrentStatus {
+    Phase: MachinePending,
+    TimeoutActive:  true,
+    LastUpdateTime: Now()
+ }
+ lastKnownState = clone.Status.LastKnownState
+&quot;]--&gt;UpdateMachineStatus
+
+style InitFailedOp text-align:left
 
 </pre>
 <h3 id="controlleraddbootstraptokentouserdata"><a class="header" href="#controlleraddbootstraptokentouserdata">controller.addBootstrapTokenToUserData</a></h3>
