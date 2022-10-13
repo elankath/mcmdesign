@@ -533,7 +533,19 @@ Note on above
 
 ## controller.reconcileMachineHealth
 
+[controller.reconcileMachineHealth] reconciles the machine object with any change in node conditions or VM health.
 ```go
-func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
+func (c *controller) reconcileMachineHealth(ctx context.Context, machine *Machine) 
+  (machineutils.RetryPeriod, error)
 ```
-TODO: illustrate me
+
+```mermaid
+
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+Begin((" "))-->GetNode["
+  node, err := c.nodeLister.Get(machine.Status.Node)
+"]
+
+```

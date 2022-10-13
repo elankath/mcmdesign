@@ -1,1 +1,0 @@
-# Machine Controller Helper Functions

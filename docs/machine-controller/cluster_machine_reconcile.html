@@ -657,9 +657,19 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 <li>See <a href="./node_drain.html#run-drain">Run Drain</a></li>
 </ol>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
-<pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
+<p>[controller.reconcileMachineHealth] reconciles the machine object with any change in node conditions or VM health.</p>
+<pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *Machine) 
+  (machineutils.RetryPeriod, error)
 </code></pre>
-<p>TODO: illustrate me</p>
+<pre class="mermaid">
+%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Begin((&quot; &quot;))--&gt;GetNode[&quot;
+  node, err := c.nodeLister.Get(machine.Status.Node)
+&quot;]
+
+</pre>
 
                     </main>
 

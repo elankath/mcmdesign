@@ -200,6 +200,7 @@ UpdateStatus--&gt;ShortR
 ShortR--&gt;Z
 </pre>
 <h2 id="controllermachinestatusupdate"><a class="header" href="#controllermachinestatusupdate">controller.machineStatusUpdate</a></h2>
+<p>Updates <code>machine.Status.LastOperation</code>, <code>machine.Status.CurrentStatus</code> and <code>machine.Status.LastKnownState</code></p>
 <pre><code class="language-go">func (c *controller) machineStatusUpdate(
 	ctx context.Context,
 	machine *v1alpha1.Machine,
@@ -269,6 +270,44 @@ CopyTermReasonAndMessage--&gt;UpdateCondOnNode
 
 UpdateCondOnNode--&gt;ChkNotFound
 </pre>
+<h2 id="controllerishealthy"><a class="header" href="#controllerishealthy">controller.isHealthy</a></h2>
+<p>Checks if machine is healty by checking its conditions.</p>
+<pre><code class="language-go">func (c *controller) isHealthy(machine *.Machine) bool 
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Begin((&quot; &quot;))
+--&gt;Init[&quot;
+	conditions = machine.Status.Conditions
+	badTypes = strings.Split(
+	 'KernelDeadlock,ReadonlyFilesystem,DiskPressure,NetworkUnavailable', 
+		',')
+&quot;]--&gt;ChkCondLen{&quot;len(conditions)==0?&quot;}
+
+ChkCondLen--Yes--&gt;ReturnF((&quot;return false&quot;))
+ChkCondLen--No--&gt;IterCond[&quot;c:= range conditions&quot;]
+IterCond--&gt;ChkNodeReady{&quot;c.Type=='Ready'
+&amp;&amp; c.Status != 'True' ?&quot;}--Yes--&gt;ReturnF
+ChkNodeReady
+--Yes--&gt;IterBadConditions[&quot;badType := range badTypes&quot;]
+--&gt;ChkType{&quot;badType == c.Type
+&amp;&amp;
+c.Status != 'False' ?&quot;}
+--Yes--&gt;ReturnF
+
+IterBadConditions--loop--&gt;IterCond
+ChkType--loop--&gt;IterBadConditions
+
+
+
+
+style Init text-align:left
+</pre>
+<p>NOTE</p>
+<ol>
+<li>controller.NodeConditions should be called controller.BadConditionTypes</li>
+</ol>
 
                     </main>
 

@@ -69,6 +69,8 @@ ShortR-->Z
 
 ## controller.machineStatusUpdate
 
+Updates `machine.Status.LastOperation`, `machine.Status.CurrentStatus` and `machine.Status.LastKnownState`
+
 ```go
 func (c *controller) machineStatusUpdate(
 	ctx context.Context,
@@ -150,4 +152,43 @@ UpdateCondOnNode-->ChkNotFound
 ```
 
 
+## controller.isHealthy
 
+Checks if machine is healty by checking its conditions.
+```go
+func (c *controller) isHealthy(machine *.Machine) bool 
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+Begin((" "))
+-->Init["
+	conditions = machine.Status.Conditions
+	badTypes = strings.Split(
+	 'KernelDeadlock,ReadonlyFilesystem,DiskPressure,NetworkUnavailable', 
+		',')
+"]-->ChkCondLen{"len(conditions)==0?"}
+
+ChkCondLen--Yes-->ReturnF(("return false"))
+ChkCondLen--No-->IterCond["c:= range conditions"]
+IterCond-->ChkNodeReady{"c.Type=='Ready'
+&& c.Status != 'True' ?"}--Yes-->ReturnF
+ChkNodeReady
+--Yes-->IterBadConditions["badType := range badTypes"]
+-->ChkType{"badType == c.Type
+&&
+c.Status != 'False' ?"}
+--Yes-->ReturnF
+
+IterBadConditions--loop-->IterCond
+ChkType--loop-->IterBadConditions
+
+
+
+
+style Init text-align:left
+```
+NOTE
+1. controller.NodeConditions should be called controller.BadConditionTypes
