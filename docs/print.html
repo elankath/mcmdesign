@@ -960,6 +960,7 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
 <li><a href="mcm_facilities.html#machinephase">MachinePhase</a></li>
 </ul>
 </li>
+<li><a href="mcm_facilities.html#finalizers">Finalizers</a></li>
 </ul>
 </li>
 </ul>
@@ -1010,6 +1011,7 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
 <li><a href="mcm_facilities.html#machine-controller-core-struct">Machine Controller Core Struct</a></li>
 </ul>
 </li>
+<li><a href="mcm_facilities.html#driver">Driver</a></li>
 <li><a href="mcm_facilities.html#codes-and-error-status">Codes and (error) Status</a>
 <ul>
 <li><a href="mcm_facilities.html#code">Code</a></li>
@@ -1235,6 +1237,17 @@ const (
 	MachineCrashLoopBackOff MachinePhase = &quot;CrashLoopBackOff&quot;
 )
 </code></pre>
+<h4 id="finalizers"><a class="header" href="#finalizers">Finalizers</a></h4>
+<p>See <a href="./k8s_facilities.html#finalizers-and-deletion">K8s Finalizers</a>. The MC defines the following finalizer keys</p>
+<pre><code class="language-go">const (
+	MCMFinalizerName = &quot;machine.sapcloud.io/machine-controller-manager&quot;
+	MCFinalizerName = &quot;machine.sapcloud.io/machine-controller&quot;
+)
+</code></pre>
+<ol>
+<li><code>MCMFinalizerName</code> is the finalizer used to tag dependecies before deletion</li>
+<li><code>MCFinalizerName</code> is the finalizer added on <code>Secret</code> objects.</li>
+</ol>
 <h2 id="utilities"><a class="header" href="#utilities">Utilities</a></h2>
 <h3 id="nodeops"><a class="header" href="#nodeops">NodeOps</a></h3>
 <h4 id="nodeopsgetnodecondition"><a class="header" href="#nodeopsgetnodecondition">nodeops.GetNodeCondition</a></h4>
@@ -1596,6 +1609,24 @@ type controller struct {
 }
 
 </code></pre>
+<h2 id="driver"><a class="header" href="#driver">Driver</a></h2>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/driver#Driver">github.com/gardener/machine-controller-manager/pkg/util/provider/driver.Driver</a>  is the abstraction facade that decouplesthe machine controller from the cloud-provider specific machine lifecycle details. The MC invokes driver methods while performing reconciliation.</p>
+<pre><code class="language-go">type Driver interface {
+	CreateMachine(context.Context, *CreateMachineRequest) (*CreateMachineResponse, error)
+	DeleteMachine(context.Context, *DeleteMachineRequest) (*DeleteMachineResponse, error)
+	GetMachineStatus(context.Context, *GetMachineStatusRequest) (*GetMachineStatusResponse, error)
+	ListMachines(context.Context, *ListMachinesRequest) (*ListMachinesResponse, error)
+	GetVolumeIDs(context.Context, *GetVolumeIDsRequest) (*GetVolumeIDsResponse, error)
+	GenerateMachineClassForMigration(context.Context, *GenerateMachineClassForMigrationRequest) (*GenerateMachineClassForMigrationResponse, error)
+}
+</code></pre>
+<ul>
+<li><code>GetVolumeIDs</code> returns a list volumeIDs for the given list of <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeSpec">PVSpecs</a>
+<ul>
+<li>Example: the AWS driver checks if <code>spec.AWSElasticBlockStore.VolumeID</code> is not nil and coverts the k8s <code>spec.AWSElasticBlockStore.VolumeID</code> to the EBS volume ID. Or if storage is provided by CSI <code>spec.CSI.Driver=&quot;ebs.csi.aws.com&quot;</code> just gets <code>spec.CSI.VolumeHandle</code></li>
+</ul>
+</li>
+</ul>
 <h2 id="codes-and-error-status"><a class="header" href="#codes-and-error-status">Codes and (error) Status</a></h2>
 <h3 id="code"><a class="header" href="#code">Code</a></h3>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code">github.com/gardener/machine-controller-manager/pkg/util/provider/machinecodes/codes.Code</a> is a <code>uint32</code> with following error codes. These error codes are contained in errors returned from Driver methods.</p>
@@ -2629,7 +2660,9 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 <li><a href="node_drain.html#drainoptions">drain.Options</a></li>
 </ul>
 </li>
-<li><a href="node_drain.html#drainpodvolumeinfotype">drain.PodVolumeInfotype</a></li>
+<li><a href="node_drain.html#drainpodvolumeinfo">drain.PodVolumeInfo</a></li>
+<li><a href="node_drain.html#drainoptionsevictpod">drain.Options.evictPod</a></li>
+<li><a href="node_drain.html#drainoptionsdeletepod">drain.Options.deletePod</a></li>
 <li><a href="node_drain.html#drainoptionsrundrain">drain.Options.RunDrain</a>
 <ul>
 <li><a href="node_drain.html#drainfilterpodswithpv">drain.filterPodsWithPv</a></li>
@@ -2643,7 +2676,9 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </li>
 <li><a href="node_drain.html#drainoptionsevictpodswithpv">drain.Options.evictPodsWithPv</a>
 <ul>
+<li><a href="node_drain.html#drainoptionsdoaccountingofpvs">drain.Options.doAccountingOfPvs</a></li>
 <li><a href="node_drain.html#drainoptionsgetpvlist">drain.Options.getPVList</a></li>
+<li><a href="node_drain.html#drainoptionsgetvolidsfromdriver">drain.Options.getVolIDsFromDriver</a></li>
 <li><a href="node_drain.html#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></li>
 </ul>
 </li>
@@ -2707,7 +2742,7 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 <h4 id="drain-constants"><a class="header" href="#drain-constants">Drain Constants</a></h4>
 <ul>
 <li><code>PodEvictionRetryInterval</code> is the interval in which to retry eviction for pods</li>
-<li><code>GetPvDetailsMaxRetries</code> is the number of max retries to get PV details</li>
+<li><code>GetPvDetailsMaxRetries</code> is the number of max retries to get PV details using the <a href="https://pkg.go.dev/k8s.io/client-go/listers/core/v1#PersistentVolumeLister">PersistentVolumeLister</a> or <a href="https://pkg.go.dev/k8s.io/client-go/listers/core/v1#PersistentVolumeClaimLister">PersistentVolumeClaimLister</a></li>
 <li><code>GetPvDetailsRetryInterval</code> is the interval in which to retry getting PV details</li>
 </ul>
 <pre><code class="language-go">const (
@@ -2741,12 +2776,59 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 }
 
 </code></pre>
-<h3 id="drainpodvolumeinfotype"><a class="header" href="#drainpodvolumeinfotype">drain.PodVolumeInfotype</a></h3>
-<p><code>drain.PodVolumeInfo</code> is the struct used to hold the PersistentVolumeID and volumeID for all the <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">PVs</a> attached to the pod</p>
+<h3 id="drainpodvolumeinfo"><a class="header" href="#drainpodvolumeinfo">drain.PodVolumeInfo</a></h3>
+<p><code>drain.PodVolumeInfo</code> is the struct used to encapsulate the PV names and PV ID's for all the <a href="https://kubernetes.io/docs/concepts/storage/persistent-volumes/">PVs</a> attached to the pod</p>
 <pre><code class="language-go">PodVolumeInfo struct {
 	persistentVolumeList []string
 	volumeList           []string
 }
+</code></pre>
+<p>NOTE: The struct fields are badly named.</p>
+<ul>
+<li><code>PodVolumeInfo.persistentVolumeList</code> is a slice of persistent volume names. This is from <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeSpec">PersistentVolumeSpec.VolumeName</a></li>
+<li><code>PodVolumeInfo.volumeList</code> is a slice of persistent volume IDs. This is obtained using <a href="../src/mcm_facilities.html#driver">driver.GetVolumeIDs</a> given the PV Spec.</li>
+</ul>
+<h3 id="drainoptionsevictpod"><a class="header" href="#drainoptionsevictpod">drain.Options.evictPod</a></h3>
+<pre><code class="language-go">func (o *Options) evictPod(ctx context.Context, pod *corev1.Pod, policyGroupVersion string) error 
+</code></pre>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L363">drain.Options.evictPod</a> is a simple helper method to evict a Pod using <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionExpansion">Eviction API</a></p>
+<ul>
+<li>TODO: <code>GracePeriodSeconds</code> in the code is useless here and should be removed as it is always -1.</li>
+<li>TODO: Currently this method uses old <code>k8s.io/api/policy/v1beta1</code>. It must be changed to  <code>k8s.io/api/policy/v1</code>
+TODO NOTE: </li>
+</ul>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Begin((&quot;&quot; ))
+--&gt;InitTypeMeta[&quot;
+		typeMeta:= metav1.TypeMeta{
+			APIVersion: policyGroupVersion,
+			Kind:       'Eviction',
+		},
+&quot;]
+--&gt;InitObjectMeta[&quot;
+		objectMeta := ObjectMeta: metav1.ObjectMeta{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+		},
+&quot;]
+--&gt;InitEviction[&quot;
+eviction := &amp;.Eviction{TypeMeta: typeMeta, ObjectMeta: objectMeta }
+&quot;]
+--&gt;EvictPod[&quot;
+ err := o.client.PolicyV1beta1().Evictions(eviction.Namespace).Evict(ctx, eviction)
+&quot;]
+--&gt;ReturnErr((&quot;return err&quot;))
+
+style InitEviction text-align:left
+</pre>
+<h3 id="drainoptionsdeletepod"><a class="header" href="#drainoptionsdeletepod">drain.Options.deletePod</a></h3>
+<p>Simple helper method to delete a Pod</p>
+<pre><code class="language-go">func (o *Options) deletePod(ctx context.Context, pod *corev1.Pod) error {
+</code></pre>
+<p>Just delegates to <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/core/v1#PodInterface">PodInterface.Delete</a></p>
+<pre><code class="language-go">o.client.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{} )
 </code></pre>
 <h3 id="drainoptionsrundrain"><a class="header" href="#drainoptionsrundrain">drain.Options.RunDrain</a></h3>
 <pre><code class="language-go">func (o *Options) RunDrain(ctx context.Context) error
@@ -2947,15 +3029,108 @@ NilReturn((&quot;return&quot;))
 	getPodFn func(namespace, name string) (*corev1.Pod, error),
 	returnCh chan error)
 </code></pre>
+<p>NOTE</p>
+<ul>
+<li>See <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L580">drain.Options.evictPodsWithPv</a></li>
+<li>This method basically delegates to <code>o.evictPodsWithPVInternal</code> with retry handling</li>
+<li>TODO: UNHAPPY with logic of this method. Needs refactoring!</li>
+<li>Flow diagram is a MESS because code is confusing. sorry.</li>
+</ul>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
 Begin((&quot; &quot;))
 --&gt;SortPods[&quot;
     sortPodsByPriority(pods)
-    //Desc priority pods[i].Spec.Priority &gt; *pods[j].Spec.Priority
+    //Desc priority: pods[i].Spec.Priority &gt; *pods[j].Spec.Priority
 &quot;]
+--&gt;DoVolumeAccounting[&quot;
+	podVolumeInfoMap := o.doAccountingOfPvs(ctx, pods)
+&quot;]
+--&gt;ChkAttemptEvict{attemptEvict ?}
+
+ChkAttemptEvict--Yes--&gt;RetryTillLimit[&quot;
+	until MaxEvictRetries
+&quot;]
+--&gt;
+InvokeHelper[&quot;
+	remainingPods, aborted = o.evictPodsWithPVInternal(ctx, attemptEvict, pods, podVolumeInfoMap, policyGroupVersion,  returnCh)
+&quot;]
+InvokeHelper--&gt;ChkAbort{&quot;
+	aborted ||
+	len(remainingPods) == 0
+&quot;}
+ChkAbort--Yes--&gt;RangeRemainingPods
+ChkAbort--No--&gt;Sleep[&quot;
+	pods = remainingPods
+	time.Sleep(PodEvictionRetryInterval)
+&quot;]
+Sleep--loop--&gt;RetryTillLimit
+
+RetryTillLimit--loopend--&gt;ChkRemaining{&quot;len(remainingPods) &gt; 0?&quot;}
+ChkRemaining--Yes--&gt;InvokeHelper1[&quot;
+// force delete pods
+	remainingPods, _ = o.evictPodsWithPVInternal(ctx, false, pods, podVolumeInfoMap, policyGroupVersion, getPodFn, returnCh)
+&quot;]
+
+ChkAttemptEvict--No--&gt;InvokeHelper1
+InvokeHelper1--&gt;RangeRemainingPods
+ChkRemaining--No--&gt;RangeRemainingPods
+
+RangeRemainingPods[&quot;pod := range remainingPods&quot;]
+RangeRemainingPods--aborted?--&gt;SendNil[&quot;returnCh &lt;- nil&quot;]
+RangeRemainingPods--attemptEvict?--&gt;SendEvictErr[&quot;returnCh &lt;- fmt.Errorf('pod evict error')&quot;]
+RangeRemainingPods--else--&gt;SendDelErr[&quot;returnCh &lt;- fmt.Errorf('pod delete error')&quot;]
+
+
+SendNil--&gt;NilReturn
+SendEvictErr--&gt;NilReturn
+SendDelErr--&gt;NilReturn
 NilReturn((&quot;return&quot;))
+</pre>
+<h4 id="drainoptionsdoaccountingofpvs"><a class="header" href="#drainoptionsdoaccountingofpvs">drain.Options.doAccountingOfPvs</a></h4>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L509">drain.Options.doAccountingOfPvs</a> returns a map of the pod key <code>pod.Namespace + '/' + pod.Name</code> to a <a href="node_drain.html#drainpodvolumeinfo">PodVolumeInfo</a> struct which holds a slice of PV names and PV IDs.</p>
+<p>NOTES:</p>
+<ul>
+<li>See <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L544">filterSharedPVs</a></li>
+</ul>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+Begin((&quot; &quot;))
+--&gt;Init[&quot;
+	podKey2VolNamesMap = make(map[string][]string)
+	podKey2VolInfoMap = make(map[string]PodVolumeInfo)
+&quot;]
+--&gt;RangePods[&quot;
+	for pod := range pods
+&quot;]
+--&gt;PopPod2VolNames[&quot;
+	podKey2VolNamesMap[pod.Namespace + '/' pod.Name] = o.getPVList(pod)
+&quot;]
+--loop--&gt;RangePods
+PopPod2VolNames--done--&gt;FilterSharedPVs[&quot;
+	filterSharedPVs(podKey2VolNamesMap)
+// filters out the PVs that are shared among pods.
+&quot;]
+--&gt;RangePodKey2VolNamesMap[&quot;
+	for podKey, volNames := range podKey2VolNamesMap
+&quot;]
+--&gt;GetVolumeIds[&quot;
+	volumeIds, err := o.getVolIDsFromDriver(ctx, volNames)
+	if err != nil continue; //skip set of volumes
+&quot;]
+--&gt;InitPodVolInfo[&quot;
+	podVolumeInfo := PodVolumeInfo{
+			persistentVolumeList: volNames,
+			volumeList:           volumeIds
+	}
+	//struct field names are bad.
+&quot;]
+--&gt;PopPodVolInfoMap[&quot;
+	podVolumeInfoMap[podKey] = podVolumeInfo
+&quot;]
+--loop--&gt;RangePodKey2VolNamesMap
+PopPodVolInfoMap--done--&gt;Return((&quot;return podVolumeInfoMap&quot;))
 </pre>
 <h4 id="drainoptionsgetpvlist"><a class="header" href="#drainoptionsgetpvlist">drain.Options.getPVList</a></h4>
 <p>NOTE: Should be called <code>getPVNames</code>.  Gets a slice of the persistent volume names bound to the given <code>pod</code>. </p>
@@ -2975,6 +3150,16 @@ NilReturn((&quot;return&quot;))
 flowchart TD
 
 </pre>
+<h4 id="drainoptionsgetvolidsfromdriver"><a class="header" href="#drainoptionsgetvolidsfromdriver">drain.Options.getVolIDsFromDriver</a></h4>
+<p>Given a slice of PV Names, this method gets the corresponding volume ids from the driver. </p>
+<ul>
+<li>It does this by first getting the <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeSpec">PersistentVolumeSpec</a> using <code>o.pvLister.Get(pvName)</code> for each PV name and adding to the <code>pvSpecs</code> slice of type <code>PersistentVolumeSpec</code>. See <a href="https://pkg.go.dev/k8s.io/client-go/listers/core/v1#PersistentVolumeLister">k8s.io/client-go/listers/core/v1.PersistentVolumeLister</a></li>
+<li>Retry handling is implemented here while looking up pvName till <code>GetPvDetailsMaxRetries</code> is reached with sleep interval of <code>GetPvDetailsRetryInterval</code> between each retry attempt.</li>
+<li>Once <code>pvSpecs</code> slice is populated it constructs a <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/driver#GetVolumeIDsRequest">driver.GetVolumeIDsRequest</a> from the same and then invokes <code>driver.GetVolumeIDs(driver.GetVolumeIDsRequest))</code> to obtain the <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/driver#GetVolumeIDsResponse">driver.GetVolumeIDsResponse</a> and retruns <code>driver.GetVolumeIDsResponse.VolumeIDs</code></li>
+</ul>
+<p>TODO: BUG ? In case the PV is not found or retry limit is reached the slice of volume ids will not have a 1:1 correspondence with slice of PV names passed in.</p>
+<pre><code class="language-go">func (o *Options) getVolIDsFromDriver(ctx context.Context, pvNames []string) ([]string, error)
+</code></pre>
 <h4 id="drainoptionsevictpodswithpvinternal"><a class="header" href="#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></h4>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646">drain.Options.evictPodsWithPVInternal</a> is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a <code>remainingPods</code> slice and a <code>fastTrack</code> boolean is meant to abort the pod eviction and exit the calling go-routine. (TODO: should be called <code>abort</code> or even better should use custom error here)</p>
 <pre><code class="language-go">func (o *DrainOptions) evictPodsWithPVInternal(ctx context.Context,
@@ -3121,12 +3306,13 @@ CopyTermReasonAndMessage--&gt;UpdateCondOnNode
 
 UpdateCondOnNode--&gt;ChkNotFound
 </pre>
-<div style="break-before: page; page-break-before: always;"></div><p>🚧 WIP at the moment. Please do not read.</p>
+<div style="break-before: page; page-break-before: always;"></div><p>🚧 WIP at the moment. Lot more material to be added here from notes. Please do not read presently.</p>
 <ul>
 <li><a href="issues.html#issues">Issues</a>
 <ul>
 <li><a href="issues.html#design-issues">Design Issues</a>
 <ul>
+<li><a href="issues.html#bad-packaging">Bad Packaging</a></li>
 <li><a href="issues.html#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></li>
 <li><a href="issues.html#description-misused">Description misused</a></li>
 </ul>
@@ -3164,6 +3350,10 @@ UpdateCondOnNode--&gt;ChkNotFound
 <h1 id="issues"><a class="header" href="#issues">Issues</a></h1>
 <p>This section is very basic WIP atm. Please check after this warning has been removed. Lots more to be added here from notes and appropriately structured.</p>
 <h2 id="design-issues"><a class="header" href="#design-issues">Design Issues</a></h2>
+<h3 id="bad-packaging"><a class="header" href="#bad-packaging">Bad Packaging</a></h3>
+<ul>
+<li><code>package controller</code> is inside import path <code>github.com/gardener/machine-controller-manager/pkg/util/provider/machinecontroller</code></li>
+</ul>
 <h3 id="lastoperation-is-actually-next-operation"><a class="header" href="#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></h3>
 <p>Badly named. TODO: Describe more.</p>
 <h3 id="description-misused"><a class="header" href="#description-misused">Description misused</a></h3>
@@ -3207,7 +3397,8 @@ machine-drain-timeout=5m
 </code></pre>
 <h4 id="dup-code"><a class="header" href="#dup-code">Dup Code</a></h4>
 <ul>
-<li>Types/func/smethods in <code>pkg/controller/machine_util.go</code>
+<li>Nearly all files in <code>pkg/controller/*.go</code></li>
+<li>Ex: Types/func/smethods in <code>pkg/controller/machine_util.go</code>
 <ul>
 <li>Ex: Dup <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48">NodeTerminationCondition</a> in <code>pkg/controller/machine_util.go</code>. The one that is being actively used is <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70">machineutils.NodeTerminationCondition</a></li>
 </ul>
@@ -3219,6 +3410,12 @@ machine-drain-timeout=5m
 <li>Does not set err when <code>c.machineStatusUpdate</code> is called</li>
 <li><code>o.RunCordonOrUncordon</code> should use <code>apierrors.NotFound</code> while checking error returned by a get node op</li>
 <li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict bool usage</a> is confusing. Better design needed. <code>attemptEvict</code> is overridden in  <code>evictPodsWithoutPv</code>.</li>
+<li>Misleading deep copy in <code>drain.Options.doAccountingOfPvs</code>
+<pre><code class="language-go">for podKey, persistentVolumeList := range pvMap {
+ 	persistentVolumeListDeepCopy := persistentVolumeList
+ 	//...
+</code></pre>
+</li>
 </ol>
 <h2 id="node-conditions"><a class="header" href="#node-conditions">Node Conditions</a></h2>
 <ul>

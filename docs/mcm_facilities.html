@@ -163,6 +163,7 @@
 <li><a href="#machinephase">MachinePhase</a></li>
 </ul>
 </li>
+<li><a href="#finalizers">Finalizers</a></li>
 </ul>
 </li>
 </ul>
@@ -213,6 +214,7 @@
 <li><a href="#machine-controller-core-struct">Machine Controller Core Struct</a></li>
 </ul>
 </li>
+<li><a href="#driver">Driver</a></li>
 <li><a href="#codes-and-error-status">Codes and (error) Status</a>
 <ul>
 <li><a href="#code">Code</a></li>
@@ -438,6 +440,17 @@ const (
 	MachineCrashLoopBackOff MachinePhase = &quot;CrashLoopBackOff&quot;
 )
 </code></pre>
+<h4 id="finalizers"><a class="header" href="#finalizers">Finalizers</a></h4>
+<p>See <a href="./k8s_facilities.html#finalizers-and-deletion">K8s Finalizers</a>. The MC defines the following finalizer keys</p>
+<pre><code class="language-go">const (
+	MCMFinalizerName = &quot;machine.sapcloud.io/machine-controller-manager&quot;
+	MCFinalizerName = &quot;machine.sapcloud.io/machine-controller&quot;
+)
+</code></pre>
+<ol>
+<li><code>MCMFinalizerName</code> is the finalizer used to tag dependecies before deletion</li>
+<li><code>MCFinalizerName</code> is the finalizer added on <code>Secret</code> objects.</li>
+</ol>
 <h2 id="utilities"><a class="header" href="#utilities">Utilities</a></h2>
 <h3 id="nodeops"><a class="header" href="#nodeops">NodeOps</a></h3>
 <h4 id="nodeopsgetnodecondition"><a class="header" href="#nodeopsgetnodecondition">nodeops.GetNodeCondition</a></h4>
@@ -799,6 +812,24 @@ type controller struct {
 }
 
 </code></pre>
+<h2 id="driver"><a class="header" href="#driver">Driver</a></h2>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/driver#Driver">github.com/gardener/machine-controller-manager/pkg/util/provider/driver.Driver</a>  is the abstraction facade that decouplesthe machine controller from the cloud-provider specific machine lifecycle details. The MC invokes driver methods while performing reconciliation.</p>
+<pre><code class="language-go">type Driver interface {
+	CreateMachine(context.Context, *CreateMachineRequest) (*CreateMachineResponse, error)
+	DeleteMachine(context.Context, *DeleteMachineRequest) (*DeleteMachineResponse, error)
+	GetMachineStatus(context.Context, *GetMachineStatusRequest) (*GetMachineStatusResponse, error)
+	ListMachines(context.Context, *ListMachinesRequest) (*ListMachinesResponse, error)
+	GetVolumeIDs(context.Context, *GetVolumeIDsRequest) (*GetVolumeIDsResponse, error)
+	GenerateMachineClassForMigration(context.Context, *GenerateMachineClassForMigrationRequest) (*GenerateMachineClassForMigrationResponse, error)
+}
+</code></pre>
+<ul>
+<li><code>GetVolumeIDs</code> returns a list volumeIDs for the given list of <a href="https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeSpec">PVSpecs</a>
+<ul>
+<li>Example: the AWS driver checks if <code>spec.AWSElasticBlockStore.VolumeID</code> is not nil and coverts the k8s <code>spec.AWSElasticBlockStore.VolumeID</code> to the EBS volume ID. Or if storage is provided by CSI <code>spec.CSI.Driver=&quot;ebs.csi.aws.com&quot;</code> just gets <code>spec.CSI.VolumeHandle</code></li>
+</ul>
+</li>
+</ul>
 <h2 id="codes-and-error-status"><a class="header" href="#codes-and-error-status">Codes and (error) Status</a></h2>
 <h3 id="code"><a class="header" href="#code">Code</a></h3>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/machinecodes/codes#Code">github.com/gardener/machine-controller-manager/pkg/util/provider/machinecodes/codes.Code</a> is a <code>uint32</code> with following error codes. These error codes are contained in errors returned from Driver methods.</p>

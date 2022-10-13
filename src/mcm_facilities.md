@@ -10,6 +10,7 @@
 				- [MachineOperationType](#machineoperationtype)
 			- [CurrentStatus](#currentstatus)
 				- [MachinePhase](#machinephase)
+			- [Finalizers](#finalizers)
 	- [Utilities](#utilities)
 		- [NodeOps](#nodeops)
 			- [nodeops.GetNodeCondition](#nodeopsgetnodecondition)
@@ -29,6 +30,7 @@
 				- [SafetyOptions](#safetyoptions)
 	- [Controller Structs](#controller-structs)
 		- [Machine Controller Core Struct](#machine-controller-core-struct)
+	- [Driver](#driver)
 	- [Codes and (error) Status](#codes-and-error-status)
 		- [Code](#code)
 		- [Status](#status)
@@ -288,6 +290,20 @@ const (
 	MachineCrashLoopBackOff MachinePhase = "CrashLoopBackOff"
 )
 ```
+
+#### Finalizers
+
+See [K8s Finalizers](./k8s_facilities.md#finalizers-and-deletion). The MC defines the following finalizer keys
+
+```go
+const (
+	MCMFinalizerName = "machine.sapcloud.io/machine-controller-manager"
+	MCFinalizerName = "machine.sapcloud.io/machine-controller"
+)
+```
+1. `MCMFinalizerName` is the finalizer used to tag dependecies before deletion
+2. `MCFinalizerName` is the finalizer added on `Secret` objects.
+
 ## Utilities
 
 ### NodeOps
@@ -704,7 +720,22 @@ type controller struct {
 
 ```
 
+## Driver
 
+[github.com/gardener/machine-controller-manager/pkg/util/provider/driver.Driver](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/driver#Driver)  is the abstraction facade that decouplesthe machine controller from the cloud-provider specific machine lifecycle details. The MC invokes driver methods while performing reconciliation.
+
+```go
+type Driver interface {
+	CreateMachine(context.Context, *CreateMachineRequest) (*CreateMachineResponse, error)
+	DeleteMachine(context.Context, *DeleteMachineRequest) (*DeleteMachineResponse, error)
+	GetMachineStatus(context.Context, *GetMachineStatusRequest) (*GetMachineStatusResponse, error)
+	ListMachines(context.Context, *ListMachinesRequest) (*ListMachinesResponse, error)
+	GetVolumeIDs(context.Context, *GetVolumeIDsRequest) (*GetVolumeIDsResponse, error)
+	GenerateMachineClassForMigration(context.Context, *GenerateMachineClassForMigrationRequest) (*GenerateMachineClassForMigrationResponse, error)
+}
+```
+- `GetVolumeIDs` returns a list volumeIDs for the given list of [PVSpecs](https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeSpec)
+  - Example: the AWS driver checks if `spec.AWSElasticBlockStore.VolumeID` is not nil and coverts the k8s `spec.AWSElasticBlockStore.VolumeID` to the EBS volume ID. Or if storage is provided by CSI `spec.CSI.Driver="ebs.csi.aws.com"` just gets `spec.CSI.VolumeHandle`
 
 ## Codes and (error) Status
 

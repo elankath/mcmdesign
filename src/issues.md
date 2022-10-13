@@ -1,6 +1,7 @@
-🚧 WIP at the moment. Please do not read.
+🚧 WIP at the moment. Lot more material to be added here from notes. Please do not read presently.
 - [Issues](#issues)
 	- [Design Issues](#design-issues)
+		- [Bad Packaging](#bad-packaging)
 		- [LastOperation is actually Next Operation](#lastoperation-is-actually-next-operation)
 		- [Description misused](#description-misused)
 	- [Gaps](#gaps)
@@ -20,6 +21,11 @@
 This section is very basic WIP atm. Please check after this warning has been removed. Lots more to be added here from notes and appropriately structured.
 
 ## Design Issues
+
+### Bad Packaging
+
+- `package controller` is inside import path `github.com/gardener/machine-controller-manager/pkg/util/provider/machinecontroller`
+
 
 ### LastOperation is actually Next Operation
 
@@ -75,7 +81,8 @@ machine-drain-timeout=5m
 
 #### Dup Code
 
-- Types/func/smethods in `pkg/controller/machine_util.go`
+- Nearly all files in `pkg/controller/*.go`
+- Ex: Types/func/smethods in `pkg/controller/machine_util.go`
   - Ex: Dup [NodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48) in `pkg/controller/machine_util.go`. The one that is being actively used is [machineutils.NodeTerminationCondition](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70)
 - Types/funcs/methods in `pkg/controller/drain.go` 
 
@@ -84,6 +91,12 @@ machine-drain-timeout=5m
 1. Does not set err when `c.machineStatusUpdate` is called
 2. `o.RunCordonOrUncordon` should use `apierrors.NotFound` while checking error returned by a get node op
 3. [attemptEvict bool usage](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400) is confusing. Better design needed. `attemptEvict` is overridden in  `evictPodsWithoutPv`.
+4. Misleading deep copy in `drain.Options.doAccountingOfPvs`
+   ```go
+   for podKey, persistentVolumeList := range pvMap {
+		persistentVolumeListDeepCopy := persistentVolumeList
+		//...
+	```
 
 ## Node Conditions
 - `CloneAndAddCondition` logic seems erroneous ?

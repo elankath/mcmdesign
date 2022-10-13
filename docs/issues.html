@@ -142,12 +142,13 @@
 
                 <div id="content" class="content">
                     <main>
-                        <p>🚧 WIP at the moment. Please do not read.</p>
+                        <p>🚧 WIP at the moment. Lot more material to be added here from notes. Please do not read presently.</p>
 <ul>
 <li><a href="#issues">Issues</a>
 <ul>
 <li><a href="#design-issues">Design Issues</a>
 <ul>
+<li><a href="#bad-packaging">Bad Packaging</a></li>
 <li><a href="#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></li>
 <li><a href="#description-misused">Description misused</a></li>
 </ul>
@@ -185,6 +186,10 @@
 <h1 id="issues"><a class="header" href="#issues">Issues</a></h1>
 <p>This section is very basic WIP atm. Please check after this warning has been removed. Lots more to be added here from notes and appropriately structured.</p>
 <h2 id="design-issues"><a class="header" href="#design-issues">Design Issues</a></h2>
+<h3 id="bad-packaging"><a class="header" href="#bad-packaging">Bad Packaging</a></h3>
+<ul>
+<li><code>package controller</code> is inside import path <code>github.com/gardener/machine-controller-manager/pkg/util/provider/machinecontroller</code></li>
+</ul>
 <h3 id="lastoperation-is-actually-next-operation"><a class="header" href="#lastoperation-is-actually-next-operation">LastOperation is actually Next Operation</a></h3>
 <p>Badly named. TODO: Describe more.</p>
 <h3 id="description-misused"><a class="header" href="#description-misused">Description misused</a></h3>
@@ -228,7 +233,8 @@ machine-drain-timeout=5m
 </code></pre>
 <h4 id="dup-code"><a class="header" href="#dup-code">Dup Code</a></h4>
 <ul>
-<li>Types/func/smethods in <code>pkg/controller/machine_util.go</code>
+<li>Nearly all files in <code>pkg/controller/*.go</code></li>
+<li>Ex: Types/func/smethods in <code>pkg/controller/machine_util.go</code>
 <ul>
 <li>Ex: Dup <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/machine_util.go#L48">NodeTerminationCondition</a> in <code>pkg/controller/machine_util.go</code>. The one that is being actively used is <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machineutils/utils.go#L70">machineutils.NodeTerminationCondition</a></li>
 </ul>
@@ -240,6 +246,12 @@ machine-drain-timeout=5m
 <li>Does not set err when <code>c.machineStatusUpdate</code> is called</li>
 <li><code>o.RunCordonOrUncordon</code> should use <code>apierrors.NotFound</code> while checking error returned by a get node op</li>
 <li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict bool usage</a> is confusing. Better design needed. <code>attemptEvict</code> is overridden in  <code>evictPodsWithoutPv</code>.</li>
+<li>Misleading deep copy in <code>drain.Options.doAccountingOfPvs</code>
+<pre><code class="language-go">for podKey, persistentVolumeList := range pvMap {
+ 	persistentVolumeListDeepCopy := persistentVolumeList
+ 	//...
+</code></pre>
+</li>
 </ol>
 <h2 id="node-conditions"><a class="header" href="#node-conditions">Node Conditions</a></h2>
 <ul>
