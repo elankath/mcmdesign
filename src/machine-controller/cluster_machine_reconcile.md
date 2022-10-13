@@ -4,7 +4,6 @@
     - [controller.getVMStatus](#controllergetvmstatus)
     - [controller.drainNode](#controllerdrainnode)
   - [controller.reconcileMachineHealth](#controllerreconcilemachinehealth)
-  - [controller.syncMachineNodeTemplates](#controllersyncmachinenodetemplates)
 
 While perusing the below, you might need to reference [Machine Controller Helper Functions](./mc_helper_funcs.md)  as several reconcile functions delegate to helper methods defined on the machine controller struct.
 
@@ -72,7 +71,9 @@ CreateFlow-->EnqM
 
 This method badly requires to be split into several functions. It is too long.
 ```go
-func (c *controller) triggerCreationFlow(ctx context.Context, cmr *driver.CreateMachineRequest) (machineutils.RetryPeriod, error) 
+func (c *controller) triggerCreationFlow(ctx context.Context, 
+cmr *driver.CreateMachineRequest) 
+  (machineutils.RetryPeriod, error) 
 ```
 
 ```mermaid
@@ -534,12 +535,5 @@ Note on above
 
 ```go
 func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
-```
-TODO: illustrate me
-
-## controller.syncMachineNodeTemplates
-
-```go
-func (c *controller) syncMachineNodeTemplates(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error) 
 ```
 TODO: illustrate me
