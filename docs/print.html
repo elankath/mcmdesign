@@ -146,7 +146,8 @@
                         <ul>
 <li><a href="intro.html#introduction">Introduction</a></li>
 </ul>
-<p>🚧 WIP: MCM Design Book is work-in-progress at the moment. Please check back in a few days for the first release - several check-ins pending. Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>)</p>
+<p>(NOTE: Current book describes the Machine Controller. The Machine Deployment controller design docu is in progress)</p>
+<p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>)</p>
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
 <p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines. A worker <code>Machine</code> is a provider specific VM/instance that corresponds to a k8s <a href="https://kubernetes.io/docs/concepts/architecture/nodes/">Node</a></p>
@@ -2378,7 +2379,6 @@ f--&gt;z
 </ul>
 </li>
 <li><a href="machine-controller/cluster_machine_reconcile.html#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
-<li><a href="machine-controller/cluster_machine_reconcile.html#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></li>
 </ul>
 </li>
 </ul>
@@ -2438,7 +2438,9 @@ CreateFlow--&gt;EnqM
 <h2 id="controllertriggercreationflow"><a class="header" href="#controllertriggercreationflow">controller.triggerCreationFlow</a></h2>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine.go#L326">Controller Method</a> that orchestraes the call to the <a href="machine-controller/../mcm_facilities.html#driver">Driver.CreateMachine</a></p>
 <p>This method badly requires to be split into several functions. It is too long.</p>
-<pre><code class="language-go">func (c *controller) triggerCreationFlow(ctx context.Context, cmr *driver.CreateMachineRequest) (machineutils.RetryPeriod, error) 
+<pre><code class="language-go">func (c *controller) triggerCreationFlow(ctx context.Context, 
+cmr *driver.CreateMachineRequest) 
+  (machineutils.RetryPeriod, error) 
 </code></pre>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
@@ -2882,10 +2884,6 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </ol>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
-</code></pre>
-<p>TODO: illustrate me</p>
-<h2 id="controllersyncmachinenodetemplates"><a class="header" href="#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></h2>
-<pre><code class="language-go">func (c *controller) syncMachineNodeTemplates(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error) 
 </code></pre>
 <p>TODO: illustrate me</p>
 <div style="break-before: page; page-break-before: always;"></div><ul>

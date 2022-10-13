@@ -153,7 +153,6 @@
 </ul>
 </li>
 <li><a href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
-<li><a href="#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></li>
 </ul>
 </li>
 </ul>
@@ -213,7 +212,9 @@ CreateFlow--&gt;EnqM
 <h2 id="controllertriggercreationflow"><a class="header" href="#controllertriggercreationflow">controller.triggerCreationFlow</a></h2>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine.go#L326">Controller Method</a> that orchestraes the call to the <a href="../mcm_facilities.html#driver">Driver.CreateMachine</a></p>
 <p>This method badly requires to be split into several functions. It is too long.</p>
-<pre><code class="language-go">func (c *controller) triggerCreationFlow(ctx context.Context, cmr *driver.CreateMachineRequest) (machineutils.RetryPeriod, error) 
+<pre><code class="language-go">func (c *controller) triggerCreationFlow(ctx context.Context, 
+cmr *driver.CreateMachineRequest) 
+  (machineutils.RetryPeriod, error) 
 </code></pre>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
@@ -657,10 +658,6 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </ol>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error)
-</code></pre>
-<p>TODO: illustrate me</p>
-<h2 id="controllersyncmachinenodetemplates"><a class="header" href="#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></h2>
-<pre><code class="language-go">func (c *controller) syncMachineNodeTemplates(ctx context.Context, machine *v1alpha1.Machine) (machineutils.RetryPeriod, error) 
 </code></pre>
 <p>TODO: illustrate me</p>
 
