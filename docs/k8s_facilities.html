@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html" class="active"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.2.</strong> Cluster Machine Reconciliation</a></li></ol></li><li class="chapter-item expanded "><a href="node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html" class="active"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.2.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.3.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="machine-controller/node_drain.html"><strong aria-hidden="true">3.4.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">4.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -730,6 +730,20 @@ type PersistentVolumeClaimSpec struct {
 }
 </code></pre>
 <p>Note that <code>PersistentVolumeClaimSpec.VolumeName</code> is of interest to the MC which represents the binding reference to the <code>PersistentVolume</code> backing this claim. Please note that this is different from <code>Pod.Spec.Volumes[*].Name</code> which is more like a label for the volume directory.</p>
+<h3 id="secret"><a class="header" href="#secret">Secret</a></h3>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/core/v1#Secret">k8s.io/api/core/v1.Secret</a> holds secret data of a secret type whose size &lt; 1MB.  See <a href="https://kubernetes.io/docs/concepts/configuration/secret/">K8s Secrets</a></p>
+<ul>
+<li>Secret Data is in <code>Secret.Data</code> which is a <code>map[string][]byte</code> where the bytes is the secret value and key is simple ASCII alphanumeric.</li>
+</ul>
+<pre><code class="language-go">type Secret struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+	Data map[string][]byte 
+	Type SecretType 
+	//... omitted for brevity
+}
+</code></pre>
+<p><code>SecretType</code> can be of many types: <code>SecretTypeOpaque</code> which represents user-defined secreets, <code>SecretTypeServiceAccountToken</code> whichcontains a token that identifies a service account to the API, etc.</p>
 <h2 id="client-go"><a class="header" href="#client-go">client-go</a></h2>
 <p>k8s clients have the type  <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset">k8s.io/client-go/kubernetes.ClientSet</a> which is actually a high-level client set facade encapsulating clients for the  <code>core</code>, <code>appsv1</code>, <code>discoveryv1</code>, <code>eventsv1</code>, <code>networkingv1</code>, <code>nodev1</code>, <code>policyv1</code>, <code>storagev1</code> api groups. These individual clients are available via accessor methods. ie use <a href="https://pkg.go.dev/k8s.io/client-go/kubernetes#Clientset.AppsV1">clientset.AppsV1()</a> to get the the <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/apps/v1#AppsV1Interface">AppsV1</a> client.</p>
 <pre><code class="language-go">// Clientset contains the clients for groups. Each group has exactly one

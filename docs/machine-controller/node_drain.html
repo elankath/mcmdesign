@@ -13,21 +13,21 @@
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff" />
 
-        <link rel="icon" href="favicon.svg">
-        <link rel="shortcut icon" href="favicon.png">
-        <link rel="stylesheet" href="css/variables.css">
-        <link rel="stylesheet" href="css/general.css">
-        <link rel="stylesheet" href="css/chrome.css">
-        <link rel="stylesheet" href="css/print.css" media="print">
+        <link rel="icon" href="../favicon.svg">
+        <link rel="shortcut icon" href="../favicon.png">
+        <link rel="stylesheet" href="../css/variables.css">
+        <link rel="stylesheet" href="../css/general.css">
+        <link rel="stylesheet" href="../css/chrome.css">
+        <link rel="stylesheet" href="../css/print.css" media="print">
 
         <!-- Fonts -->
-        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
-        <link rel="stylesheet" href="fonts/fonts.css">
+        <link rel="stylesheet" href="../FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="../fonts/fonts.css">
 
         <!-- Highlight.js Stylesheets -->
-        <link rel="stylesheet" href="highlight.css">
-        <link rel="stylesheet" href="tomorrow-night.css">
-        <link rel="stylesheet" href="ayu-highlight.css">
+        <link rel="stylesheet" href="../highlight.css">
+        <link rel="stylesheet" href="../tomorrow-night.css">
+        <link rel="stylesheet" href="../ayu-highlight.css">
 
         <!-- Custom theme stylesheets -->
 
@@ -35,7 +35,7 @@
     <body>
         <!-- Provide site root to javascript -->
         <script type="text/javascript">
-            var path_to_root = "";
+            var path_to_root = "../";
             var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
         </script>
 
@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.2.</strong> Cluster Machine Reconciliation</a></li></ol></li><li class="chapter-item expanded "><a href="node_drain.html" class="active"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.2.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.3.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html" class="active"><strong aria-hidden="true">3.4.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">4.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -113,7 +113,7 @@
                     <h1 class="menu-title">Machine Controller Manager Design</h1>
 
                     <div class="right-buttons">
-                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                        <a href="../print.html" title="Print this book" aria-label="Print this book">
                             <i id="print-button" class="fa fa-print"></i>
                         </a>
 
@@ -190,9 +190,9 @@
 <p>Node Drain code is in <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go">github.com/gardener/machine-controller-manager/pkg/util/provider/drain/drain.go</a></p>
 <h2 id="drain-utilities"><a class="header" href="#drain-utilities">Drain Utilities</a></h2>
 <h3 id="volumeattachmenthandler"><a class="header" href="#volumeattachmenthandler">VolumeAttachmentHandler</a></h3>
-<p>Inside <code>github.com/gardener/machine-controller-manager/pkg/util/provider/drain/volume_attachment.go</code>,
-<a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler">pkg/util/provider/drain.VolumeAttachmentHandler</a> is an handler used to distribute
-incoming <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> requests to all listening workers via means of a slice of typed <code>VolumeAttachment</code> channels. A <code>VolumeAttachment</code> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler">pkg/util/provider/drain.VolumeAttachmentHandler</a> is an handler used to distribute
+incoming <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> requests to a number of workers where each worker is a channel of type <code>*VolumeAttachment</code>. </p>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node. See <a href="../src/k8s_facilities.html#volumeattachment">VolumeAttachment</a></p>
 <pre><code class="language-go">type VolumeAttachmentHandler struct {
 	sync.Mutex
 	workers []chan *storagev1.VolumeAttachment
@@ -234,6 +234,14 @@ func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
 func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interface{}) {
 	v.dispatch(newObj)
 }
+</code></pre>
+<h4 id="volumeattachmenthandler-usage"><a class="header" href="#volumeattachmenthandler-usage">VolumeAttachmentHandler Usage</a></h4>
+<p>During construction of the MC:</p>
+<pre><code class="language-go">volumeAttachmentInformer.Informer().AddEventHandler(
+	cache.ResourceEventHandlerFuncs{
+			AddFunc:    controller.volumeAttachmentHandler.AddVolumeAttachment,
+			UpdateFunc: controller.volumeAttachmentHandler.UpdateVolumeAttachment,
+});
 </code></pre>
 <h2 id="drain"><a class="header" href="#drain">Drain</a></h2>
 <h3 id="drain-types"><a class="header" href="#drain-types">Drain Types</a></h3>
@@ -644,10 +652,6 @@ PopPodVolInfoMap--done--&gt;Return((&quot;return podVolumeInfoMap&quot;))
 <li>Adds <code>pvc.Spec.VolumeName</code> to <code>pvNames</code></li>
 <li>Return <code>pvNames</code></li>
 </ol>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
-flowchart TD
-
-</pre>
 <h4 id="drainoptionsgetvolidsfromdriver"><a class="header" href="#drainoptionsgetvolidsfromdriver">drain.Options.getVolIDsFromDriver</a></h4>
 <p>Given a slice of PV Names, this method gets the corresponding volume ids from the driver. </p>
 <ul>
@@ -658,7 +662,7 @@ flowchart TD
 <p>TODO: BUG ? In case the PV is not found or retry limit is reached the slice of volume ids will not have a 1:1 correspondence with slice of PV names passed in.</p>
 <pre><code class="language-go">func (o *Options) getVolIDsFromDriver(ctx context.Context, pvNames []string) ([]string, error)
 </code></pre>
-<h4 id="drainoptionsevictpodswithpvinternal"><a class="header" href="#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></h4>
+<h3 id="drainoptionsevictpodswithpvinternal"><a class="header" href="#drainoptionsevictpodswithpvinternal"># drain.Options.evictPodsWithPVInternal</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646">drain.Options.evictPodsWithPVInternal</a> is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a <code>remainingPods</code> slice and a <code>fastTrack</code> boolean is meant to abort the pod eviction and exit the calling go-routine. (TODO: should be called <code>abort</code> or even better should use custom error here)</p>
 <pre><code class="language-go">func (o *DrainOptions) evictPodsWithPVInternal(ctx context.Context,
     attemptEvict bool, 
@@ -682,11 +686,11 @@ flowchart TD
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="machine-controller/cluster_machine_reconcile.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../machine-controller/mc_helper_methods.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="mc_helper_funcs.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="../issues.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -696,11 +700,11 @@ flowchart TD
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="machine-controller/cluster_machine_reconcile.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../machine-controller/mc_helper_methods.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="mc_helper_funcs.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="../issues.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -715,17 +719,17 @@ flowchart TD
         </script>
 
 
-        <script src="elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
-        <script src="mark.min.js" type="text/javascript" charset="utf-8"></script>
-        <script src="searcher.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../mark.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../searcher.js" type="text/javascript" charset="utf-8"></script>
 
-        <script src="clipboard.min.js" type="text/javascript" charset="utf-8"></script>
-        <script src="highlight.js" type="text/javascript" charset="utf-8"></script>
-        <script src="book.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../clipboard.min.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../highlight.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../book.js" type="text/javascript" charset="utf-8"></script>
 
         <!-- Custom JS scripts -->
-        <script type="text/javascript" src="mermaid.min.js"></script>
-        <script type="text/javascript" src="mermaid-init.js"></script>
+        <script type="text/javascript" src="../mermaid.min.js"></script>
+        <script type="text/javascript" src="../mermaid-init.js"></script>
 
 
     </body>

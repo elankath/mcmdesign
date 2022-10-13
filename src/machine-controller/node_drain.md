@@ -27,9 +27,10 @@ Node Drain code is in [github.com/gardener/machine-controller-manager/pkg/util/p
 
 ### VolumeAttachmentHandler
 
-Inside `github.com/gardener/machine-controller-manager/pkg/util/provider/drain/volume_attachment.go`,
 [pkg/util/provider/drain.VolumeAttachmentHandler](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler) is an handler used to distribute
-incoming [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) requests to all listening workers via means of a slice of typed `VolumeAttachment` channels. A `VolumeAttachment` is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node.
+incoming [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) requests to a number of workers where each worker is a channel of type `*VolumeAttachment`. 
+
+A [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node. See [VolumeAttachment](../src/k8s_facilities.md#volumeattachment)
 
 ```go
 type VolumeAttachmentHandler struct {
@@ -79,6 +80,17 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 	v.dispatch(newObj)
 }
 ```
+#### VolumeAttachmentHandler Usage
+During construction of the MC:
+
+```go
+volumeAttachmentInformer.Informer().AddEventHandler(
+	cache.ResourceEventHandlerFuncs{
+			AddFunc:    controller.volumeAttachmentHandler.AddVolumeAttachment,
+			UpdateFunc: controller.volumeAttachmentHandler.UpdateVolumeAttachment,
+});
+```
+
 
 ## Drain 
 
@@ -533,11 +545,6 @@ func (o *Options) getPVList(pod *corev1.Pod) (pvNames []string, err error)
 3. Adds `pvc.Spec.VolumeName` to `pvNames`
 4. Return `pvNames`
 
-```mermaid
-%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
-flowchart TD
-
-```
 
 #### drain.Options.getVolIDsFromDriver
 
@@ -552,7 +559,7 @@ TODO: BUG ? In case the PV is not found or retry limit is reached the slice of v
 func (o *Options) getVolIDsFromDriver(ctx context.Context, pvNames []string) ([]string, error)
 ```
 
-#### drain.Options.evictPodsWithPVInternal
+###	# drain.Options.evictPodsWithPVInternal
 
 [drain.Options.evictPodsWithPVInternal](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646) is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a `remainingPods` slice and a `fastTrack` boolean is meant to abort the pod eviction and exit the calling go-routine. (TODO: should be called `abort` or even better should use custom error here)
 

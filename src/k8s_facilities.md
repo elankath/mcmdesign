@@ -663,6 +663,23 @@ type PersistentVolumeClaimSpec struct {
 ```
 Note that `PersistentVolumeClaimSpec.VolumeName` is of interest to the MC which represents the binding reference to the `PersistentVolume` backing this claim. Please note that this is different from `Pod.Spec.Volumes[*].Name` which is more like a label for the volume directory.
 
+### Secret
+
+A [k8s.io/api/core/v1.Secret](https://pkg.go.dev/k8s.io/api/core/v1#Secret) holds secret data of a secret type whose size < 1MB.  See [K8s Secrets](https://kubernetes.io/docs/concepts/configuration/secret/)
+
+- Secret Data is in `Secret.Data` which is a `map[string][]byte` where the bytes is the secret value and key is simple ASCII alphanumeric.
+```go
+type Secret struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+	Data map[string][]byte 
+	Type SecretType 
+	//... omitted for brevity
+}
+```
+`SecretType` can be of many types: `SecretTypeOpaque` which represents user-defined secreets, `SecretTypeServiceAccountToken` whichcontains a token that identifies a service account to the API, etc.
+
+
 
 ## client-go
 

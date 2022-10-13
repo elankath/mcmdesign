@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html" class="active"><strong aria-hidden="true">3.2.</strong> Cluster Machine Reconciliation</a></li></ol></li><li class="chapter-item expanded "><a href="../node_drain.html"><strong aria-hidden="true">4.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="../mc_helper_funcs.html"><strong aria-hidden="true">5.</strong> Machine Controller Helper Functions</a></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">6.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html" class="active"><strong aria-hidden="true">3.2.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.3.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html"><strong aria-hidden="true">3.4.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">4.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -145,7 +145,8 @@
                         <ul>
 <li><a href="#cluster-machine-reconcile">Cluster Machine Reconcile</a>
 <ul>
-<li><a href="#triggerdeletionflow">triggerDeletionFlow</a>
+<li><a href="#controllertriggercreationflow">controller.triggerCreationFlow</a></li>
+<li><a href="#controllertriggerdeletionflow">controller.triggerDeletionFlow</a>
 <ul>
 <li><a href="#controllergetvmstatus">controller.getVMStatus</a></li>
 <li><a href="#controllerdrainnode">controller.drainNode</a></li>
@@ -160,7 +161,7 @@
 <h1 id="cluster-machine-reconcile"><a class="header" href="#cluster-machine-reconcile">Cluster Machine Reconcile</a></h1>
 <pre><code class="language-go">func (c *controller) reconcileClusterMachineKey(key string) error
 </code></pre>
-<p>The top-level reconcile function for the machine that analyzes machine status and delegates to the reconcile functions for creation and deletion flows. TODO: Provide descriptive summary</p>
+<p>The top-level reconcile function for the machine that analyzes machine status and delegates to the individual reconcile functions for machine-creation, machine-deletion and machine-health-check flows. </p>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
@@ -183,12 +184,13 @@ SyncNodeTemplates[&quot;controller.syncNodeTemplates(machine)&quot;]
 NewCreateReq[&quot;req=&amp;driver.CreateMachineRequest{machine,machineClz,secretData}&quot;]
 Z((&quot;End&quot;))
 
+Begin((&quot; &quot;))--&gt;A
 A--&gt;GetM
 EnqM--&gt;Z
 LongR--&gt;EnqM
 ShortR--&gt;EnqM
 GetM--&gt;ValM
-ValM--&gt;Ok--&gt;ValMC
+ValM--Ok--&gt;ValMC
 ValM--Err--&gt;LongR
 ValMC--Err--&gt;LongR
 ValMC--Ok--&gt;CheckMDel
@@ -208,7 +210,94 @@ NewCreateReq--&gt;CreateFlow
 CreateFlow--&gt;EnqM
 
 </pre>
-<h2 id="triggerdeletionflow"><a class="header" href="#triggerdeletionflow">triggerDeletionFlow</a></h2>
+<h2 id="controllertriggercreationflow"><a class="header" href="#controllertriggercreationflow">controller.triggerCreationFlow</a></h2>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine.go#L326">Controller Method</a> that orchestraes the call to the <a href="../mcm_facilities.html#driver">Driver.CreateMachine</a></p>
+<pre><code class="language-go">func (c *controller) triggerCreationFlow(ctx context.Context, cmr *driver.CreateMachineRequest) (machineutils.RetryPeriod, error) 
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Begin((&quot; &quot;))--&gt;Init[&quot;
+  machine     = createMachineRequest.Machine
+	machineName = createMachineRequest.Machine.Name
+  secretCopy := createMachineRequest.Secret.DeepCopy() //NOTE: Un-necessary
+&quot;]
+--&gt;AddBootStrapToken[&quot;
+ c.addBootstrapTokenToUserData(ctx, machine.Name, secretCopy)
+//  Add Bootstrap token to machine secret user data
+&quot;]
+
+</pre>
+<h3 id="controlleraddbootstraptokentouserdata"><a class="header" href="#controlleraddbootstraptokentouserdata">controller.addBootstrapTokenToUserData</a></h3>
+<p>This method is responsible for adding the bootstrap token for the machine. Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific <code>SecretType</code>: <code>bootstrap.kubernetes.io/token</code> and live in the <code>kube-system</code> namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server</p>
+<p>Reference</p>
+<ul>
+<li><a href="https://kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/">Bootstrap Tokens</a></li>
+<li><a href="https://github.com/kubernetes/design-proposals-archive/blob/main/cluster-lifecycle/bootstrap-discovery.md#new-bootstrap-token-secrets">Bootstrap Token Secrets</a></li>
+<li><a href="https://github.com/kubernetes/design-proposals-archive/blob/main/cluster-lifecycle/bootstrap-discovery.md#new-bootstrap-token-structure">Bootstrap Token Structure</a></li>
+</ul>
+<pre><code class="language-go">func (c *controller) addBootstrapTokenToUserData(ctx context.Context, machineName string, secret *corev1.Secret) error 
+
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Begin((&quot; &quot;))
+--&gt;InitTokenSecret[&quot;
+tokenID := hex.EncodeToString([]byte(machineName)[len(machineName)-5:])[:6]
+// 6 chars length
+secretName :='bootstrap-token-' + tokenID
+&quot;]
+--&gt;GetSecret[&quot;
+	secret, err = c.targetCoreClient.CoreV1().Secrets('kube-system').Get(ctx, secretName, GetOptions{}) 
+&quot;]
+--&gt;ChkErr{err!=nil?}
+
+ChkErr--Yes--&gt;ChkNotFound{&quot;IsNotFound(err)&quot;}
+
+ChkNotFound--Yes--&gt;GenToken[&quot;
+  tokenSecretKey = generateRandomStrOf16Chars
+&quot;]--&gt;InitSecretData[&quot;
+  data := map[string][]byte{
+    'token-id': []byte(tokenID),
+    'token-secret': []byte(tokenSecretKey),
+    'expiration': []byte(c.safetyOptions.MachineCreationTimeout.Duration)
+    //..others
+ }
+&quot;]
+--&gt;InitSecret[&quot;
+  	secret = &amp;corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: metav1.NamespaceSystem,
+				},
+				Type: 'bootstrap.kubernetes.io/token'
+				Data: data,
+			}
+&quot;]
+--&gt;CreateSecret[&quot;
+secret, err =c.targetCoreClient.CoreV1().Secrets('kube-system').Create(ctx, secret, CreateOptions{})
+&quot;]
+--&gt;ChkErr1{err!=nil?}
+
+ChkErr1--Yes--&gt;ReturnErr((&quot;return err&quot;))
+ChkNotFound--No--&gt;ReturnErr
+
+ChkErr1--No--&gt;CreateToken[&quot;
+token = tokenID + '.' + tokenSecretKey
+&quot;]--&gt;InitUserData[&quot;
+  userDataByes = secret.Data['userData']
+  userDataStr = string(userDataBytes)
+&quot;]--&gt;ReplaceUserData[&quot;
+  	userDataS = strings.ReplaceAll(userDataS, 'BOOTSTRAP_TOKEN',placeholder, token)
+   	secret.Data['userData'] = []byte(userDataS)
+    //discuss this.
+&quot;]--&gt;ReturnNil((&quot;return nil&quot;))
+
+style InitSecretData text-align:left
+style InitSecret text-align:left
+</pre>
+<h2 id="controllertriggerdeletionflow"><a class="header" href="#controllertriggerdeletionflow">controller.triggerDeletionFlow</a></h2>
 <pre><code class="language-go">func (c *controller) triggerDeletionFlow(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error) 
 
 </code></pre>
@@ -237,6 +326,7 @@ GetVMStatus[&quot;retryPeriod=c.getVMStatus(statusReq)&quot;]
 
 Z((&quot;End&quot;))
 
+Begin((&quot; &quot;))--&gt;HasFin
 HasFin--Yes--&gt;GM
 HasFin--No--&gt;LongR
 LongR--&gt;Z
@@ -443,7 +533,7 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="../node_drain.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="../machine-controller/mc_helper_methods.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -457,7 +547,7 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="../node_drain.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="../machine-controller/mc_helper_methods.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

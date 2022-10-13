@@ -1,5 +1,6 @@
 - [Cluster Machine Reconcile](#cluster-machine-reconcile)
-  - [triggerDeletionFlow](#triggerdeletionflow)
+  - [controller.triggerCreationFlow](#controllertriggercreationflow)
+  - [controller.triggerDeletionFlow](#controllertriggerdeletionflow)
     - [controller.getVMStatus](#controllergetvmstatus)
     - [controller.drainNode](#controllerdrainnode)
   - [controller.reconcileMachineHealth](#controllerreconcilemachinehealth)
@@ -12,7 +13,7 @@ While perusing the below, you might need to reference [Machine Controller Helper
 ```go
 func (c *controller) reconcileClusterMachineKey(key string) error
 ```
-The top-level reconcile function for the machine that analyzes machine status and delegates to the reconcile functions for creation and deletion flows. TODO: Provide descriptive summary
+The top-level reconcile function for the machine that analyzes machine status and delegates to the individual reconcile functions for machine-creation, machine-deletion and machine-health-check flows. 
 
 
 ```mermaid
@@ -38,12 +39,13 @@ SyncNodeTemplates["controller.syncNodeTemplates(machine)"]
 NewCreateReq["req=&driver.CreateMachineRequest{machine,machineClz,secretData}"]
 Z(("End"))
 
+Begin((" "))-->A
 A-->GetM
 EnqM-->Z
 LongR-->EnqM
 ShortR-->EnqM
 GetM-->ValM
-ValM-->Ok-->ValMC
+ValM--Ok-->ValMC
 ValM--Err-->LongR
 ValMC--Err-->LongR
 ValMC--Ok-->CheckMDel
@@ -63,7 +65,106 @@ NewCreateReq-->CreateFlow
 CreateFlow-->EnqM
 
 ```
-## triggerDeletionFlow
+
+## controller.triggerCreationFlow
+
+[Controller Method](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine.go#L326) that orchestraes the call to the [Driver.CreateMachine](../mcm_facilities.md#driver)
+```go
+func (c *controller) triggerCreationFlow(ctx context.Context, cmr *driver.CreateMachineRequest) (machineutils.RetryPeriod, error) 
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+Begin((" "))-->Init["
+  machine     = createMachineRequest.Machine
+	machineName = createMachineRequest.Machine.Name
+  secretCopy := createMachineRequest.Secret.DeepCopy() //NOTE: Un-necessary
+"]
+-->AddBootStrapToken["
+ c.addBootstrapTokenToUserData(ctx, machine.Name, secretCopy)
+//  Add Bootstrap token to machine secret user data
+"]
+
+```
+
+### controller.addBootstrapTokenToUserData
+
+This method is responsible for adding the bootstrap token for the machine. Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific `SecretType`: `bootstrap.kubernetes.io/token` and live in the `kube-system` namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server
+
+Reference
+- [Bootstrap Tokens](https://kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/)
+- [Bootstrap Token Secrets](https://github.com/kubernetes/design-proposals-archive/blob/main/cluster-lifecycle/bootstrap-discovery.md#new-bootstrap-token-secrets)
+- [Bootstrap Token Structure](https://github.com/kubernetes/design-proposals-archive/blob/main/cluster-lifecycle/bootstrap-discovery.md#new-bootstrap-token-structure)
+
+
+```go
+func (c *controller) addBootstrapTokenToUserData(ctx context.Context, machineName string, secret *corev1.Secret) error 
+
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+Begin((" "))
+-->InitTokenSecret["
+tokenID := hex.EncodeToString([]byte(machineName)[len(machineName)-5:])[:6]
+// 6 chars length
+secretName :='bootstrap-token-' + tokenID
+"]
+-->GetSecret["
+	secret, err = c.targetCoreClient.CoreV1().Secrets('kube-system').Get(ctx, secretName, GetOptions{}) 
+"]
+-->ChkErr{err!=nil?}
+
+ChkErr--Yes-->ChkNotFound{"IsNotFound(err)"}
+
+ChkNotFound--Yes-->GenToken["
+  tokenSecretKey = generateRandomStrOf16Chars
+"]-->InitSecretData["
+  data := map[string][]byte{
+    'token-id': []byte(tokenID),
+    'token-secret': []byte(tokenSecretKey),
+    'expiration': []byte(c.safetyOptions.MachineCreationTimeout.Duration)
+    //..others
+ }
+"]
+-->InitSecret["
+  	secret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: metav1.NamespaceSystem,
+				},
+				Type: 'bootstrap.kubernetes.io/token'
+				Data: data,
+			}
+"]
+-->CreateSecret["
+secret, err =c.targetCoreClient.CoreV1().Secrets('kube-system').Create(ctx, secret, CreateOptions{})
+"]
+-->ChkErr1{err!=nil?}
+
+ChkErr1--Yes-->ReturnErr(("return err"))
+ChkNotFound--No-->ReturnErr
+
+ChkErr1--No-->CreateToken["
+token = tokenID + '.' + tokenSecretKey
+"]-->InitUserData["
+  userDataByes = secret.Data['userData']
+  userDataStr = string(userDataBytes)
+"]-->ReplaceUserData["
+  	userDataS = strings.ReplaceAll(userDataS, 'BOOTSTRAP_TOKEN',placeholder, token)
+   	secret.Data['userData'] = []byte(userDataS)
+    //discuss this.
+"]-->ReturnNil(("return nil"))
+
+style InitSecretData text-align:left
+style InitSecret text-align:left
+```
+
+## controller.triggerDeletionFlow
 
 ```go
 func (c *controller) triggerDeletionFlow(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error) 
@@ -96,6 +197,7 @@ GetVMStatus["retryPeriod=c.getVMStatus(statusReq)"]
 
 Z(("End"))
 
+Begin((" "))-->HasFin
 HasFin--Yes-->GM
 HasFin--No-->LongR
 LongR-->Z
