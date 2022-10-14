@@ -22,7 +22,6 @@
 		- [Misc](#misc)
 			- [permits.PermitGiver](#permitspermitgiver)
 				- [permits.NewPermitGiver](#permitsnewpermitgiver)
-				- [permits.RegisterPermits](#permitsregisterpermits)
 	- [Main Server Structs](#main-server-structs)
 		- [MCServer](#mcserver)
 			- [MCServer Usage](#mcserver-usage)
@@ -468,17 +467,25 @@ const (
 
 #### permits.PermitGiver
 
-[github.com/gardener/machine-controller-manager/pkg/util/permits.PermitGiver](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/permits/permits.go#L29) maintains a sync map of keys whose values can be deleted if not accessed for a configured time
+`permits.PermitGiver` provides the ability to register, obtain, release and delete permits for a given key. All operations are concurrent safe.
 
-`permits.PermitGiver` provides different operations regarding permit for a given key. All operations are concurrent safe.
-```go 
+```go
 type PermitGiver interface {
-	RegisterPermits(key string, numPermits int)
+	RegisterPermits(key string, numPermits int) //numPermits should be  maxNumPermits
 	TryPermit(key string, timeout time.Duration) bool
 	ReleasePermit(key string)
 	DeletePermits(key string)
 	Close()
 }
+```
+The implementation of [github.com/gardener/machine-controller-manager/pkg/util/permits.PermitGiver](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/permits/permits.go#L29) maintains:
+ -  a sync map of permit keys mapped to permits, where each permit is a structure comprising a buffered empty struct `struct{}` channel  with buffer size equalling the (max) number of permits. 
+    -  `RegisterPermits(key, numPermits)` registers `numPermits` for the given `key`. A `permit` struct is initialized with `permit.c` buffer size as `numPermits`.
+ -  entries are deleted if not accessed for a configured time represented by `stalePermitKeyTimeout`. This is done by 'janitor' go-routine associated with the permit giver instance.
+ -  When attempting to get a permit, one writes an empty struct to the permit channel within a given timeout. If one can do so within the timeout one has acquired the permit, else not. 
+    - `TryPermit(key, timeout)` attempts to get a permit for the given key by sending a `struct{}{}` instance to the buffered `permit.c` channel. 
+
+```go 
 type permit struct {
 	// lastAcquiredPermitTime is time since last successful TryPermit or new RegisterPermits
 	lastAcquiredPermitTime time.Time
@@ -491,11 +498,9 @@ type permitGiver struct {
 }
 
 ```
-NOTES
-- `RegisterPermits(key, numPermits)` registers `numPermits` for the given `key`. A `permit` struct is initialized with `permit.c` buffer size as `numPermits`.
-- `TryPermit(key, timeout)` attempts to get a permit for the given key by sending a `struct{}{}` instance to the buffered `permit.c` channel. If `numPermits` is exceeded
 
 ##### permits.NewPermitGiver
+
 `permits.NewPermitGiver` returns a new `PermitGiver`
 ```go
 func NewPermitGiver(stalePermitKeyTimeout time.Duration, janitorFrequency time.Duration) PermitGiver
@@ -530,8 +535,6 @@ flowchart TB
 	ReadTickerCh--No-->caseReadStopCh
 	end
 ```
-
-##### permits.RegisterPermits 
 
 
 ## Main Server Structs

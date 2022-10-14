@@ -188,7 +188,6 @@
 <li><a href="#permitspermitgiver">permits.PermitGiver</a>
 <ul>
 <li><a href="#permitsnewpermitgiver">permits.NewPermitGiver</a></li>
-<li><a href="#permitsregisterpermits">permits.RegisterPermits</a></li>
 </ul>
 </li>
 </ul>
@@ -589,16 +588,30 @@ const (
 </code></pre>
 <h3 id="misc"><a class="header" href="#misc">Misc</a></h3>
 <h4 id="permitspermitgiver"><a class="header" href="#permitspermitgiver">permits.PermitGiver</a></h4>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/permits/permits.go#L29">github.com/gardener/machine-controller-manager/pkg/util/permits.PermitGiver</a> maintains a sync map of keys whose values can be deleted if not accessed for a configured time</p>
-<p><code>permits.PermitGiver</code> provides different operations regarding permit for a given key. All operations are concurrent safe.</p>
+<p><code>permits.PermitGiver</code> provides the ability to register, obtain, release and delete permits for a given key. All operations are concurrent safe.</p>
 <pre><code class="language-go">type PermitGiver interface {
-	RegisterPermits(key string, numPermits int)
+	RegisterPermits(key string, numPermits int) //numPermits should be  maxNumPermits
 	TryPermit(key string, timeout time.Duration) bool
 	ReleasePermit(key string)
 	DeletePermits(key string)
 	Close()
 }
-type permit struct {
+</code></pre>
+<p>The implementation of <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/permits/permits.go#L29">github.com/gardener/machine-controller-manager/pkg/util/permits.PermitGiver</a> maintains:</p>
+<ul>
+<li>a sync map of permit keys mapped to permits, where each permit is a structure comprising a buffered empty struct <code>struct{}</code> channel  with buffer size equalling the (max) number of permits. 
+<ul>
+<li><code>RegisterPermits(key, numPermits)</code> registers <code>numPermits</code> for the given <code>key</code>. A <code>permit</code> struct is initialized with <code>permit.c</code> buffer size as <code>numPermits</code>.</li>
+</ul>
+</li>
+<li>entries are deleted if not accessed for a configured time represented by <code>stalePermitKeyTimeout</code>. This is done by 'janitor' go-routine associated with the permit giver instance.</li>
+<li>When attempting to get a permit, one writes an empty struct to the permit channel within a given timeout. If one can do so within the timeout one has acquired the permit, else not. 
+<ul>
+<li><code>TryPermit(key, timeout)</code> attempts to get a permit for the given key by sending a <code>struct{}{}</code> instance to the buffered <code>permit.c</code> channel. </li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-go">type permit struct {
 	// lastAcquiredPermitTime is time since last successful TryPermit or new RegisterPermits
 	lastAcquiredPermitTime time.Time
 	// c is initialized with buffer size N representing num permits
@@ -610,11 +623,6 @@ type permitGiver struct {
 }
 
 </code></pre>
-<p>NOTES</p>
-<ul>
-<li><code>RegisterPermits(key, numPermits)</code> registers <code>numPermits</code> for the given <code>key</code>. A <code>permit</code> struct is initialized with <code>permit.c</code> buffer size as <code>numPermits</code>.</li>
-<li><code>TryPermit(key, timeout)</code> attempts to get a permit for the given key by sending a <code>struct{}{}</code> instance to the buffered <code>permit.c</code> channel. If <code>numPermits</code> is exceeded</li>
-</ul>
 <h5 id="permitsnewpermitgiver"><a class="header" href="#permitsnewpermitgiver">permits.NewPermitGiver</a></h5>
 <p><code>permits.NewPermitGiver</code> returns a new <code>PermitGiver</code></p>
 <pre><code class="language-go">func NewPermitGiver(stalePermitKeyTimeout time.Duration, janitorFrequency time.Duration) PermitGiver
@@ -647,7 +655,6 @@ flowchart TB
 	ReadTickerCh--No--&gt;caseReadStopCh
 	end
 </pre>
-<h5 id="permitsregisterpermits"><a class="header" href="#permitsregisterpermits">permits.RegisterPermits</a></h5>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40">machine-controller-manager/pkg/util/provider/app/options.MCServer</a>

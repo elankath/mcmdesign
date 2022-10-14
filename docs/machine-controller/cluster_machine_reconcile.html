@@ -156,7 +156,13 @@
 <li><a href="#controllerdrainnode">controller.drainNode</a></li>
 </ul>
 </li>
-<li><a href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
+<li><a href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a>
+<ul>
+<li><a href="#health-check-flow-diagram">Health Check FLow Diagram</a></li>
+<li><a href="#health-check-summary">Health Check Summary</a></li>
+<li><a href="#health-check-doubts">Health Check Doubts</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -668,12 +674,9 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </code></pre>
 <p>NOTES:</p>
 <ol>
-<li>TODO: Why don't we check the machine health using the <code>Driver.GetMachineStatus</code> in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)</li>
-<li>TODO: Why do we do <code>len(machine.Status.Condtions)==0</code> in the below when ?</li>
-<li>TODO: why doesn't this code make use of the helper method: <code>c.machineStatusUpdate</code> ?</li>
-<li>TODO: Unclear why <code>LastOperation.Description</code> does not use/concatenate one of the predefined constants in <code>machineutils</code></li>
 <li>Reference <a href="./mc_helper_methods.html#controllerishealthy">controller.isHealth</a> which checks the machine status conditions.</li>
 </ol>
+<h3 id="health-check-flow-diagram"><a class="header" href="#health-check-flow-diagram">Health Check FLow Diagram</a></h3>
 <pre class="mermaid">
 %%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
@@ -765,6 +768,36 @@ machine.Status.CurrentStatus.Phase == MachineRunning
 style SetUnknown text-align:left
 
 </pre>
+<h3 id="health-check-summary"><a class="header" href="#health-check-summary">Health Check Summary</a></h3>
+<ol>
+<li>Gets the <code>Node</code> obj associated with the machine. If it IS NOT found, yet the current machine phase is <code>Running</code>, change the machine phase to <code>Unknown</code>, the last operation state to <code>Processing</code>, the last operation type to <code>HealthCheck</code>, update the machine status and return with a short retry.</li>
+<li>If the <code>Node</code> object IS found, then it checks whether the <code>Machine.Status.Conditions</code> are different from <code>Node.Status.Conditions</code>. If so it sets the machine conditions to the node conditions.</li>
+<li>If the machine IS NOT healthy (See <a href="./mc_helper_methods.html#controllerishealthy">isHealthy</a>) but the current machine phase is <code>Running</code>, change the machine phase to <code>Unknown</code>, the last operation state to <code>Processing</code>, the last operation type to <code>HealthCheck</code>, update the machine status and return with a short retry.</li>
+<li>If the machine IS healthy but the current machine phase is NOT <code>Running</code>,  check whether the last operation type was a <code>Create</code>.
+<ol>
+<li>If the last operation type was a <code>Create</code> and last operation state is not marked as <code>Successful</code>, then delete the bootstrap token associated with the machine. Change the last operation state to <code>Successful</code>.</li>
+<li>If the last operation type was NOT a <code>Create</code>, change the last operation type to <code>HealthCheck</code></li>
+<li>Change the machine phase to <code>Running</code> and update the machine status and return with a short retry.</li>
+</ol>
+</li>
+<li>If the current machine phase is <code>Pending</code> (ie machine being created) get the configured machine creation timeout and check.
+<ol>
+<li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
+<li>If the timeout HAS expired, then change the last operation state to <code>Failed</code> and the machine phase to <code>Failed</code>. Update the machine status and return with a short retry.</li>
+</ol>
+</li>
+<li>If the current machine phase is <code>Unknown</code>, get the effective machine health timeout and check. 
+<ol>
+<li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
+<li>If the timoeut HAS expired 
+<ol>
+<li>Get the machine deployment name <code>machine.Labels['name']</code></li>
+<li>Register ONE permit with this name. See <a href="../mcm_facilities.html#permitspermitgiver">Permit Giver</a></li>
+</ol>
+</li>
+</ol>
+</li>
+</ol>
 <pre><code>    machineClone.Status.CurrentStatus = CurrentStatus {
       Phase: MachineUnknown,
       LastUpdateTime: Now(),
@@ -777,6 +810,15 @@ style SetUnknown text-align:left
     }
     cloneDirty = true
 </code></pre>
+<h3 id="health-check-doubts"><a class="header" href="#health-check-doubts">Health Check Doubts</a></h3>
+<ol>
+<li>TODO: Why don't we check the machine health using the <code>Driver.GetMachineStatus</code> in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)</li>
+<li>TODO: Why do we do <code>len(machine.Status.Condtions)==0</code> in the below when ?</li>
+<li>TODO: why doesn't this code make use of the helper method: <code>c.machineStatusUpdate</code> ?</li>
+<li>TODO: Unclear why <code>LastOperation.Description</code> does not use/concatenate one of the predefined constants in <code>machineutils</code></li>
+<li>TODO: code makes too much use of <code>cloneDirty</code> to check whether machine clone obj has changed, when it could easily return early in several branches.</li>
+<li>TODO: Code directly makes calls to enqueue machine keys on the machine queue and still returns retry periods to caller leanding to un-necessary enqueue of machine keys. (spurious design)</li>
+</ol>
 
                     </main>
 

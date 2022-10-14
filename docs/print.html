@@ -147,9 +147,8 @@
 <li><a href="intro.html#introduction">Introduction</a></li>
 <li><a href="intro.html#change-log">Change Log</a></li>
 </ul>
-<p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>. 
-Please see <a href="intro.html#change-log">Change Log</a> for new additions/corrections.
-🚧 Please Check on Oct 16th for v1 release! 🏗</p>
+<p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>. </p>
+<p>(🚧 Please see <a href="intro.html#change-log">Change Log</a> for new additions/corrections.Please Check on Oct 16th for v1 release!🏗)</p>
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
 <p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines. A worker <code>Machine</code> is a provider specific VM/instance that corresponds to a k8s <a href="https://kubernetes.io/docs/concepts/architecture/nodes/">Node</a></p>
@@ -1017,7 +1016,6 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
 <li><a href="mcm_facilities.html#permitspermitgiver">permits.PermitGiver</a>
 <ul>
 <li><a href="mcm_facilities.html#permitsnewpermitgiver">permits.NewPermitGiver</a></li>
-<li><a href="mcm_facilities.html#permitsregisterpermits">permits.RegisterPermits</a></li>
 </ul>
 </li>
 </ul>
@@ -1418,16 +1416,30 @@ const (
 </code></pre>
 <h3 id="misc"><a class="header" href="#misc">Misc</a></h3>
 <h4 id="permitspermitgiver"><a class="header" href="#permitspermitgiver">permits.PermitGiver</a></h4>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/permits/permits.go#L29">github.com/gardener/machine-controller-manager/pkg/util/permits.PermitGiver</a> maintains a sync map of keys whose values can be deleted if not accessed for a configured time</p>
-<p><code>permits.PermitGiver</code> provides different operations regarding permit for a given key. All operations are concurrent safe.</p>
+<p><code>permits.PermitGiver</code> provides the ability to register, obtain, release and delete permits for a given key. All operations are concurrent safe.</p>
 <pre><code class="language-go">type PermitGiver interface {
-	RegisterPermits(key string, numPermits int)
+	RegisterPermits(key string, numPermits int) //numPermits should be  maxNumPermits
 	TryPermit(key string, timeout time.Duration) bool
 	ReleasePermit(key string)
 	DeletePermits(key string)
 	Close()
 }
-type permit struct {
+</code></pre>
+<p>The implementation of <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/permits/permits.go#L29">github.com/gardener/machine-controller-manager/pkg/util/permits.PermitGiver</a> maintains:</p>
+<ul>
+<li>a sync map of permit keys mapped to permits, where each permit is a structure comprising a buffered empty struct <code>struct{}</code> channel  with buffer size equalling the (max) number of permits. 
+<ul>
+<li><code>RegisterPermits(key, numPermits)</code> registers <code>numPermits</code> for the given <code>key</code>. A <code>permit</code> struct is initialized with <code>permit.c</code> buffer size as <code>numPermits</code>.</li>
+</ul>
+</li>
+<li>entries are deleted if not accessed for a configured time represented by <code>stalePermitKeyTimeout</code>. This is done by 'janitor' go-routine associated with the permit giver instance.</li>
+<li>When attempting to get a permit, one writes an empty struct to the permit channel within a given timeout. If one can do so within the timeout one has acquired the permit, else not. 
+<ul>
+<li><code>TryPermit(key, timeout)</code> attempts to get a permit for the given key by sending a <code>struct{}{}</code> instance to the buffered <code>permit.c</code> channel. </li>
+</ul>
+</li>
+</ul>
+<pre><code class="language-go">type permit struct {
 	// lastAcquiredPermitTime is time since last successful TryPermit or new RegisterPermits
 	lastAcquiredPermitTime time.Time
 	// c is initialized with buffer size N representing num permits
@@ -1439,11 +1451,6 @@ type permitGiver struct {
 }
 
 </code></pre>
-<p>NOTES</p>
-<ul>
-<li><code>RegisterPermits(key, numPermits)</code> registers <code>numPermits</code> for the given <code>key</code>. A <code>permit</code> struct is initialized with <code>permit.c</code> buffer size as <code>numPermits</code>.</li>
-<li><code>TryPermit(key, timeout)</code> attempts to get a permit for the given key by sending a <code>struct{}{}</code> instance to the buffered <code>permit.c</code> channel. If <code>numPermits</code> is exceeded</li>
-</ul>
 <h5 id="permitsnewpermitgiver"><a class="header" href="#permitsnewpermitgiver">permits.NewPermitGiver</a></h5>
 <p><code>permits.NewPermitGiver</code> returns a new <code>PermitGiver</code></p>
 <pre><code class="language-go">func NewPermitGiver(stalePermitKeyTimeout time.Duration, janitorFrequency time.Duration) PermitGiver
@@ -1476,7 +1483,6 @@ flowchart TB
 	ReadTickerCh--No--&gt;caseReadStopCh
 	end
 </pre>
-<h5 id="permitsregisterpermits"><a class="header" href="#permitsregisterpermits">permits.RegisterPermits</a></h5>
 <h2 id="main-server-structs"><a class="header" href="#main-server-structs">Main Server Structs</a></h2>
 <h3 id="mcserver"><a class="header" href="#mcserver">MCServer</a></h3>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/options/options.go#L40">machine-controller-manager/pkg/util/provider/app/options.MCServer</a>
@@ -2399,7 +2405,13 @@ f--&gt;z
 <li><a href="machine-controller/cluster_machine_reconcile.html#controllerdrainnode">controller.drainNode</a></li>
 </ul>
 </li>
-<li><a href="machine-controller/cluster_machine_reconcile.html#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></li>
+<li><a href="machine-controller/cluster_machine_reconcile.html#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a>
+<ul>
+<li><a href="machine-controller/cluster_machine_reconcile.html#health-check-flow-diagram">Health Check FLow Diagram</a></li>
+<li><a href="machine-controller/cluster_machine_reconcile.html#health-check-summary">Health Check Summary</a></li>
+<li><a href="machine-controller/cluster_machine_reconcile.html#health-check-doubts">Health Check Doubts</a></li>
+</ul>
+</li>
 </ul>
 </li>
 </ul>
@@ -2911,12 +2923,9 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </code></pre>
 <p>NOTES:</p>
 <ol>
-<li>TODO: Why don't we check the machine health using the <code>Driver.GetMachineStatus</code> in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)</li>
-<li>TODO: Why do we do <code>len(machine.Status.Condtions)==0</code> in the below when ?</li>
-<li>TODO: why doesn't this code make use of the helper method: <code>c.machineStatusUpdate</code> ?</li>
-<li>TODO: Unclear why <code>LastOperation.Description</code> does not use/concatenate one of the predefined constants in <code>machineutils</code></li>
 <li>Reference <a href="machine-controller/./mc_helper_methods.html#controllerishealthy">controller.isHealth</a> which checks the machine status conditions.</li>
 </ol>
+<h3 id="health-check-flow-diagram"><a class="header" href="#health-check-flow-diagram">Health Check FLow Diagram</a></h3>
 <pre class="mermaid">
 %%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
@@ -3008,6 +3017,36 @@ machine.Status.CurrentStatus.Phase == MachineRunning
 style SetUnknown text-align:left
 
 </pre>
+<h3 id="health-check-summary"><a class="header" href="#health-check-summary">Health Check Summary</a></h3>
+<ol>
+<li>Gets the <code>Node</code> obj associated with the machine. If it IS NOT found, yet the current machine phase is <code>Running</code>, change the machine phase to <code>Unknown</code>, the last operation state to <code>Processing</code>, the last operation type to <code>HealthCheck</code>, update the machine status and return with a short retry.</li>
+<li>If the <code>Node</code> object IS found, then it checks whether the <code>Machine.Status.Conditions</code> are different from <code>Node.Status.Conditions</code>. If so it sets the machine conditions to the node conditions.</li>
+<li>If the machine IS NOT healthy (See <a href="machine-controller/./mc_helper_methods.html#controllerishealthy">isHealthy</a>) but the current machine phase is <code>Running</code>, change the machine phase to <code>Unknown</code>, the last operation state to <code>Processing</code>, the last operation type to <code>HealthCheck</code>, update the machine status and return with a short retry.</li>
+<li>If the machine IS healthy but the current machine phase is NOT <code>Running</code>,  check whether the last operation type was a <code>Create</code>.
+<ol>
+<li>If the last operation type was a <code>Create</code> and last operation state is not marked as <code>Successful</code>, then delete the bootstrap token associated with the machine. Change the last operation state to <code>Successful</code>.</li>
+<li>If the last operation type was NOT a <code>Create</code>, change the last operation type to <code>HealthCheck</code></li>
+<li>Change the machine phase to <code>Running</code> and update the machine status and return with a short retry.</li>
+</ol>
+</li>
+<li>If the current machine phase is <code>Pending</code> (ie machine being created) get the configured machine creation timeout and check.
+<ol>
+<li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
+<li>If the timeout HAS expired, then change the last operation state to <code>Failed</code> and the machine phase to <code>Failed</code>. Update the machine status and return with a short retry.</li>
+</ol>
+</li>
+<li>If the current machine phase is <code>Unknown</code>, get the effective machine health timeout and check. 
+<ol>
+<li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
+<li>If the timoeut HAS expired 
+<ol>
+<li>Get the machine deployment name <code>machine.Labels['name']</code></li>
+<li>Register ONE permit with this name. See <a href="machine-controller/../mcm_facilities.html#permitspermitgiver">Permit Giver</a></li>
+</ol>
+</li>
+</ol>
+</li>
+</ol>
 <pre><code>    machineClone.Status.CurrentStatus = CurrentStatus {
       Phase: MachineUnknown,
       LastUpdateTime: Now(),
@@ -3020,6 +3059,15 @@ style SetUnknown text-align:left
     }
     cloneDirty = true
 </code></pre>
+<h3 id="health-check-doubts"><a class="header" href="#health-check-doubts">Health Check Doubts</a></h3>
+<ol>
+<li>TODO: Why don't we check the machine health using the <code>Driver.GetMachineStatus</code> in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)</li>
+<li>TODO: Why do we do <code>len(machine.Status.Condtions)==0</code> in the below when ?</li>
+<li>TODO: why doesn't this code make use of the helper method: <code>c.machineStatusUpdate</code> ?</li>
+<li>TODO: Unclear why <code>LastOperation.Description</code> does not use/concatenate one of the predefined constants in <code>machineutils</code></li>
+<li>TODO: code makes too much use of <code>cloneDirty</code> to check whether machine clone obj has changed, when it could easily return early in several branches.</li>
+<li>TODO: Code directly makes calls to enqueue machine keys on the machine queue and still returns retry periods to caller leanding to un-necessary enqueue of machine keys. (spurious design)</li>
+</ol>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="machine-controller/mc_helper_methods.html#machine-controller-helper-methods">Machine Controller Helper Methods</a>
 <ul>
