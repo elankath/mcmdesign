@@ -187,13 +187,17 @@ Please see <a href="intro.html#change-log">Change Log</a> for new additions/corr
 <h1 id="change-log"><a class="header" href="#change-log">Change Log</a></h1>
 <ul>
 <li><input disabled="" type="checkbox" checked=""/>
-14th Oct 2022. Machine Health Reconciliation</li>
+14th Oct 2022. Machine Health Reconciliation. See <a href="./machine-controller/cluster_machine_reconcile.html#controllerreconcilemachinehealth">Machine Health Reconcile</a></li>
 <li><input disabled="" type="checkbox"/>
 TODO: Reconcile Machine Safety Orphan VM's.</li>
 <li><input disabled="" type="checkbox"/>
-TODO: enq</li>
+TODO: evictPodsWithPVInternal (complicated due to concurrent flow)</li>
 <li><input disabled="" type="checkbox"/>
 TODO: Machine Deployment Controller</li>
+<li><input disabled="" type="checkbox"/>
+TODO: reconcileClusterMachineSafetyAPIServer </li>
+<li><input disabled="" type="checkbox"/>
+TODO: Machine Status Diagram with actions/transitions (complicated due to concurrency)</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="k8s_facilities.html#kubernetes-client-facilities">Kubernetes Client Facilities</a>
@@ -2902,11 +2906,12 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </ol>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L584">controller.reconcileMachineHealth</a> reconciles the machine object with any change in node conditions or VM health.</p>
-<h2 id="note"><a class="header" href="#note">NOTE:</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *Machine) 
   (machineutils.RetryPeriod, error)
 </code></pre>
+<p>NOTES:</p>
 <ol>
+<li>TODO: Why don't we check the machine health using the <code>Driver.GetMachineStatus</code> in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)</li>
 <li>TODO: Why do we do <code>len(machine.Status.Condtions)==0</code> in the below when ?</li>
 <li>TODO: why doesn't this code make use of the helper method: <code>c.machineStatusUpdate</code> ?</li>
 <li>TODO: Unclear why <code>LastOperation.Description</code> does not use/concatenate one of the predefined constants in <code>machineutils</code></li>

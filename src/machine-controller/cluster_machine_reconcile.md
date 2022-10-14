@@ -537,17 +537,17 @@ Note on above
 
 [controller.reconcileMachineHealth](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L584) reconciles the machine object with any change in node conditions or VM health.
 
-NOTE:
-- 
 ```go
 func (c *controller) reconcileMachineHealth(ctx context.Context, machine *Machine) 
   (machineutils.RetryPeriod, error)
 ```
 
+NOTES:
+1. TODO: Why don't we check the machine health using the `Driver.GetMachineStatus` in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)
 1. TODO: Why do we do `len(machine.Status.Condtions)==0` in the below when ?
-2. TODO: why doesn't this code make use of the helper method: `c.machineStatusUpdate` ?
-3. TODO: Unclear why `LastOperation.Description` does not use/concatenate one of the predefined constants in `machineutils`
-4. Reference [controller.isHealth](./mc_helper_methods.md#controllerishealthy) which checks the machine status conditions.
+1. TODO: why doesn't this code make use of the helper method: `c.machineStatusUpdate` ?
+1. TODO: Unclear why `LastOperation.Description` does not use/concatenate one of the predefined constants in `machineutils`
+1. Reference [controller.isHealth](./mc_helper_methods.md#controllerishealthy) which checks the machine status conditions.
 
 ```mermaid
 

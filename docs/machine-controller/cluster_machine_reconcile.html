@@ -663,11 +663,12 @@ InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,last
 </ol>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L584">controller.reconcileMachineHealth</a> reconciles the machine object with any change in node conditions or VM health.</p>
-<h2 id="note"><a class="header" href="#note">NOTE:</a></h2>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *Machine) 
   (machineutils.RetryPeriod, error)
 </code></pre>
+<p>NOTES:</p>
 <ol>
+<li>TODO: Why don't we check the machine health using the <code>Driver.GetMachineStatus</code> in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)</li>
 <li>TODO: Why do we do <code>len(machine.Status.Condtions)==0</code> in the below when ?</li>
 <li>TODO: why doesn't this code make use of the helper method: <code>c.machineStatusUpdate</code> ?</li>
 <li>TODO: Unclear why <code>LastOperation.Description</code> does not use/concatenate one of the predefined constants in <code>machineutils</code></li>
