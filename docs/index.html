@@ -144,9 +144,11 @@
                     <main>
                         <ul>
 <li><a href="#introduction">Introduction</a></li>
+<li><a href="#change-log">Change Log</a></li>
 </ul>
-<p>(NOTE: Current book describes the Machine Controller. The Machine Deployment controller design docu is in progress)</p>
-<p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>)</p>
+<p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>. 
+Please see <a href="#change-log">Change Log</a> for new additions/corrections.
+🚧 Please Check on Oct 16th for v1 release! 🏗</p>
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
 <p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines. A worker <code>Machine</code> is a provider specific VM/instance that corresponds to a k8s <a href="https://kubernetes.io/docs/concepts/architecture/nodes/">Node</a></p>
@@ -181,6 +183,17 @@
 <p>The Modern Way of writing controllers is by leveraging the <a href="https://github.com/kubernetes-sigs/controller-runtime">Controller Runtime</a> and generating skeletal code fur custom controllers using the <a href="https://book.kubebuilder.io/quick-start.html">Kubebuilder Tool</a>.</p>
 <p>The MCM has a planned backlog to port the project to the controller runtime. The details of this will be documented in a separate proposal. (TODO: link me). </p>
 <p>This book describes the current design of the MCM in order to aid code comprehension for development, enhancement and migratiion/port activities.</p>
+<h1 id="change-log"><a class="header" href="#change-log">Change Log</a></h1>
+<ul>
+<li><input disabled="" type="checkbox" checked=""/>
+14th Oct 2022. Machine Health Reconciliation</li>
+<li><input disabled="" type="checkbox"/>
+TODO: Reconcile Machine Safety Orphan VM's.</li>
+<li><input disabled="" type="checkbox"/>
+TODO: enq</li>
+<li><input disabled="" type="checkbox"/>
+TODO: Machine Deployment Controller</li>
+</ul>
 
                     </main>
 

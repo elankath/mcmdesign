@@ -4,6 +4,7 @@
 	- [controller.setMachineTerminationStatus](#controllersetmachineterminationstatus)
 	- [controller.machineStatusUpdate](#controllermachinestatusupdate)
 	- [controller.UpdateNodeTerminationCondition](#controllerupdatenodeterminationcondition)
+	- [controller.isHealthy](#controllerishealthy)
 # Machine Controller Helper Methods
 
 ## controller.ValidateMachineClass
@@ -11,8 +12,15 @@
 ```go
 func (c *controller) ValidateMachineClass(ctx context.Context, classSpec *v1alpha1.ClassSpec) (*v1alpha1.MachineClass, map[string][]byte, machineutils.RetryPeriod, error) 
 ```
+ - Checks whether `MachineClass.Spec.Kind` is `MachineClass`. If not, thijs implies an deprecated, in-tree provider-specific machine class. Performs migration to the modern machine class object, creates the new machine class object and updates class references. (Details not covered here)
+ - Confirms the presence of the machine class using [MachineClassLister](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/client/listers/machine/v1alpha1#MachineClassLister) through `c.machineClassLister.MachineClasses(c.namespace).Get(classSpec.Name)`
+ - Gets the [MachineClass](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineClass) `SecretRef` and `CredentialsSecretRef`- which are both [k8s.io/api/core/v1.SecretReference](https://pkg.go.dev/k8s.io/api/core/v1#SecretReference)'s.
+ - Retrives the k8s secrets using the secret lister using the secret references and checks that there are no errors in doing so.
+ - Validates the node templates for the machine class. (TODO: more on this later)
+ - Checks that the `MCMFinalizerName` constant `machine.sapcloud.io/machine-controller-manager` is present in `MachineClass.Finalizers`. if not, adds the macine class name to the machine class queue using `c.machineClassQueue.Add(machineClass.Name)`.
+ - If validation fails in any of the above steps, returns `machineutils.ShortRetry` else returns `machineutils.LongRetry`
 
-TODO: Validation Flow Diagram and Retrieval of secrets.
+
 
 ## controller.addMachineFinalizers
 
@@ -42,7 +50,7 @@ func (c *controller) addMachineFinalizers(ctx context.Context, machine *v1alpha1
 
 ##  controller.setMachineTerminationStatus
 
-`setMachineTerminationStatus` set's the machine status to terminating. This is illustrated below. Please note that `Machine.Status.LastOperation` is set an instance of the `LastOperation` struct. This is VERY misleading as this generally the Next Operation carried in the next pickup by the reconciler func.
+`setMachineTerminationStatus` set's the machine status to terminating. This is illustrated below. Please note that `Machine.Status.LastOperation` is set an instance of the `LastOperation` struct. (This appears a bit misleading as this can be interpreted as sometimes the Next Operation carried in the next pickup by the reconciler func?: Discuss this)
 
 ```go
 func (c *controller) setMachineTerminationStatus(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)  
@@ -192,3 +200,6 @@ style Init text-align:left
 ```
 NOTE
 1. controller.NodeConditions should be called controller.BadConditionTypes
+2. Iterate over `machine.Status.Conditions`
+   1. If `Ready` condition inis not `True`, node is determined as un-healty.
+   2. If any of the bad condition types are detected, then node is determine as un-healthy

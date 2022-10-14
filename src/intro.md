@@ -1,8 +1,9 @@
 - [Introduction](#introduction)
+- [Change Log](#change-log)
 
-(NOTE: Current book describes the Machine Controller. The Machine Deployment controller design docu is in progress)
-
- Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/))
+ Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/). 
+ Please see [Change Log](#change-log) for new additions/corrections.
+ 🚧 Please Check on Oct 16th for v1 release! 🏗
 
 # Introduction
 
@@ -36,3 +37,10 @@ The MCM has a planned backlog to port the project to the controller runtime. The
 This book describes the current design of the MCM in order to aid code comprehension for development, enhancement and migratiion/port activities.
 
 
+
+# Change Log
+
+- [x] 14th Oct 2022. Machine Health Reconciliation
+- [ ] TODO: Reconcile Machine Safety Orphan VM's.
+- [ ] TODO: enq
+- [ ] TODO: Machine Deployment Controller

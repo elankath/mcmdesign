@@ -1,5 +1,6 @@
-- [Cluster Machine Reconcile](#cluster-machine-reconcile)
+- [Cluster Machine Reconciliation](#cluster-machine-reconciliation)
   - [controller.triggerCreationFlow](#controllertriggercreationflow)
+    - [controller.addBootstrapTokenToUserData](#controlleraddbootstraptokentouserdata)
   - [controller.triggerDeletionFlow](#controllertriggerdeletionflow)
     - [controller.getVMStatus](#controllergetvmstatus)
     - [controller.drainNode](#controllerdrainnode)
@@ -7,7 +8,7 @@
 
 While perusing the below, you might need to reference [Machine Controller Helper Functions](./mc_helper_funcs.md)  as several reconcile functions delegate to helper methods defined on the machine controller struct.
 
-# Cluster Machine Reconcile 
+# Cluster Machine Reconciliation
 
 ```go
 func (c *controller) reconcileClusterMachineKey(key string) error
@@ -69,13 +70,14 @@ CreateFlow-->EnqM
 
 [Controller Method](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine.go#L326) that orchestraes the call to the [Driver.CreateMachine](../mcm_facilities.md#driver)
 
-This method badly requires to be split into several functions. It is too long.
+This method badly requires to be split into several functions. It is too long. 
 ```go
 func (c *controller) triggerCreationFlow(ctx context.Context, 
 cmr *driver.CreateMachineRequest) 
   (machineutils.RetryPeriod, error) 
 ```
 
+Apologies for HUMONGOUS flow diagram - all this is in one method - will split into several sections later for clarity!
 ```mermaid
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
@@ -533,19 +535,123 @@ Note on above
 
 ## controller.reconcileMachineHealth
 
-[controller.reconcileMachineHealth] reconciles the machine object with any change in node conditions or VM health.
+[controller.reconcileMachineHealth](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L584) reconciles the machine object with any change in node conditions or VM health.
+
+NOTE:
+- 
 ```go
 func (c *controller) reconcileMachineHealth(ctx context.Context, machine *Machine) 
   (machineutils.RetryPeriod, error)
 ```
+
+1. TODO: Why do we do `len(machine.Status.Condtions)==0` in the below when ?
+2. TODO: why doesn't this code make use of the helper method: `c.machineStatusUpdate` ?
+3. TODO: Unclear why `LastOperation.Description` does not use/concatenate one of the predefined constants in `machineutils`
+4. Reference [controller.isHealth](./mc_helper_methods.md#controllerishealthy) which checks the machine status conditions.
 
 ```mermaid
 
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
 
-Begin((" "))-->GetNode["
+ShortR(("return machineutils.ShortRetry, err"))
+Begin((" "))-->Init["
+cloneDirty = false
+machineClone = machine.DeepCopy()
+"]-->GetNode["
   node, err := c.nodeLister.Get(machine.Status.Node)
-"]
+"]-->CheckErr{err!-nil}
 
+CheckErr--Yes-->
+  ChkIsNotFound{"IsNotFound(err)"}
+    --Yes-->ChkMachinePhase{"
+    len(machine.Status.Conditions) > 0
+    &&
+  machine.Status.CurrentStatus.Phase == MachineRunning
+"} --"Yes\n(node missing)"
+  -->SetUnhealthyNotFound["
+    lastOpDesc='machine unhealthy due to node obj missing'
+    lastOpState=MachineStateProcessing
+    machinePhase: MachineUnknown
+    cloneDirty=true
+    "]
+  -->TODO
+
+ChkIsNotFound--No-->ShortR
+ChkMachinePhase--No-->TODO
+
+
+CheckErr--No-->CheckNodeConditions{"nodeConditionsHaveChanged(
+  machine.Status.Conditions, 
+  node.Status.Conditions) ? "}
+
+CheckNodeConditions--Yes-->SetChangedConditions["
+   machineClone.Status.Conditions = node.Status.Conditions
+   cloneDirty = true
+"]-->ChkNotHealthyButRunning
+CheckNodeConditions--No-->ChkNotHealthyButRunning
+
+
+ChkNotHealthyButRunning{"!c.isHealth(machine)
+&&
+machine.Status.CurrentStatus.Phase == MachineRunning
+// machine not healthy, and current state running,"}
+--Yes-->SetUnhealtyDesc["
+  lastOpDesc ='Machine Unealthy due to conditions:' + machine.Status.Condtions
+  lastOpState=MachineStateProcessing
+  machinePhase: MachineUnknown
+  cloneDirty=true"]
+-->ChkHealthyButNotRunning{"!c.isHealthy(clone)
+  && 
+  clone.Status.CurrentStatus.Phase == MachineRunning
+  //machine healthy, but curr phase not running
+  "}
+  -->ChkMachineCreateOk{"
+    machine.Status.LastOperation.Type == MachineOperationCreate 
+    &&
+		machine.Status.LastOperation.State != MachineStateSuccessful 
+  "}
+  -->ChkLastOpCreateAndOpStateNotMarkedSuccess{"
+   machine.Status.LastOperation.Type == MachineOperationCreate 
+   &&
+	 machine.Status.LastOperation.State != MachineStateSuccessful 
+   //create ok but not marked yet as success
+  "}
+  --Yes-->SetSuccessDesc["
+    lastOpDes = 'Machine successfully joined the cluster'
+		lastOpType = MachineOperationCreate
+  "]-->DeleteBootstrapToken["
+    c.deleteBootstrapToken(ctx, Machine.Name)
+    // delete bootstrap token created at machine launch
+  "]-->SetLastOpStateSuccessAndPhaseRuning["
+    lastOpState = MachineStateSuccessful,
+    machinePhase: MachineRunning
+    cloneDirty=true
+  "]
+
+  ChkLastOpCreateAndOpStateNotMarkedSuccess--No-->SetMachineRejoinCluster["
+    lastOpDes = 'Machine successfully re-joined the cluster'
+		lastOpType = MachineOperationHealthCheck
+  "]-->SetLastOpStateSuccessAndPhaseRuning
+
+
+  SetLastOpStateSuccessAndPhaseRuning-->TODO
+
+
+style SetUnknown text-align:left
+
+```
+
+```
+    machineClone.Status.CurrentStatus = CurrentStatus {
+      Phase: MachineUnknown,
+      LastUpdateTime: Now(),
+    };
+    machineClone.Status.LastOperation = LastOperation{
+        Description:    statusDesc,
+        State:          MachineStateProcessing,
+        Type:           MachineOperationHealthCheck,
+        LastUpdateTime: Now(),
+    }
+    cloneDirty = true
 ```
