@@ -152,6 +152,30 @@
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
 <p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines. A worker <code>Machine</code> is a provider specific VM/instance that corresponds to a k8s <a href="https://kubernetes.io/docs/concepts/architecture/nodes/">Node</a></p>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TB
+    subgraph MCM
+
+    mcm[&quot;machine-controller-manager
+    (Common MC Code, MachineSet, MachineDeploy controllers)&quot;]
+    mcmlo[&quot;machine-controller-manager-provider-local
+    (Machine Controller Local atop K8s Kind)&quot;]
+    mcmaws[&quot;machine-controller-manager-provider-aws
+    (Machine Controller for AWS)&quot;]
+    mcmazure[&quot;machine-controller-manager-provider-azure
+    (Machine Controller for Azure)&quot;]
+    mcmgcp[&quot;machine-controller-manager-provider-gcp
+    (Machine Controller for GCP)&quot;]
+    mcmx[&quot;machine-controller-manager-provider-X
+    (Machine Controller for equinox/openstack/etc)&quot;]
+    end
+
+    mcmlo--uses--&gt;mcm
+    mcmaws--uses--&gt;mcm
+    mcmazure--uses--&gt;mcm
+    mcmgcp--uses--&gt;mcm
+    mcmx--&gt;mcm
+</pre>
 <p>The MCM project is divided into:</p>
 <ol>
 <li>The <a href="https://github.com/gardener/machine-controller-manager">MCM Module</a>. This contains 
@@ -1710,7 +1734,11 @@ func New(code codes.Code, msg string) *Status {
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="machine-controller/index.html#machine-controller">Machine Controller</a>
 <ul>
-<li><a href="machine-controller/index.html#mc-launch">MC Launch</a></li>
+<li><a href="machine-controller/index.html#mc-launch">MC Launch</a>
+<ul>
+<li><a href="machine-controller/index.html#summary">Summary</a></li>
+</ul>
+</li>
 <li><a href="machine-controller/index.html#machine-controller-loop">machine controller loop</a>
 <ul>
 <li><a href="machine-controller/index.html#apprun">app.run</a></li>
@@ -1753,8 +1781,11 @@ func New(code codes.Code, msg string) *Status {
 </li>
 </ul>
 <h1 id="machine-controller"><a class="header" href="#machine-controller">Machine Controller</a></h1>
+<p>The Machine Controller Entry Point for any provider is at 
+<code>machine-controller-manager-provider-&lt;name&gt;/cmd/machine-controller/main.go</code></p>
 <h2 id="mc-launch"><a class="header" href="#mc-launch">MC Launch</a></h2>
-<p>most of these timeout flags are redundant since exact same values are 
+<p>A <code>Makefile</code> launches the entry point with the given flags below.
+Most of these timeout flags are redundant since exact same values are 
 given in <code>machine-controller-manager/pkg/util/provider/app/options.newmcserver</code></p>
 <pre><code>go run -mod=vendor cmd/machine-controller/main.go \
 			--control-kubeconfig=$(control_kubeconfig) \
@@ -1771,12 +1802,12 @@ given in <code>machine-controller-manager/pkg/util/provider/app/options.newmcser
 			--v=3
 
 </code></pre>
-<p>entrypoint: 
-<code>cmd/machine-controller/main.go</code></p>
+<h3 id="summary"><a class="header" href="#summary">Summary</a></h3>
 <ul>
 <li>
-<p>creates <code>machine-controller-manager/pkg/util/provider/app/options.mcserver</code> using <code>options.newmcserver</code> which is the main context object for the machinecontroller that embeds a
-<code>machineconfig.machinecontrollerconfiguration</code>,   the <code>options.newmcserver</code> initializes <code>options.mcserver</code> with default values for <code>port: 10258</code>, <code>namespace: default</code>, <code>concurrentnodesyncs: 50</code>, <code>nodeconditions: &quot;kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable&quot;</code>, <code>minresyncperiod: 12 hours</code>, <code>kubeapiqps: 20</code>, <code>kubeapiburst:30</code> </p>
+<p>Creates <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/app/options#MCServer">machine-controller-manager/pkg/util/provider/app/options.MCServer</a> using <code>options.NewMCServer</code> which is the main context object for the machinecontroller that embeds a
+<a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/options#MachineControllerManagerConfiguration">options.MachineControllerConfiguration</a> 
+The <code>options.newmcserver</code> initializes <code>options.mcserver</code> with default values for <code>port: 10258</code>, <code>namespace: default</code>, <code>concurrentnodesyncs: 50</code>, <code>nodeconditions: &quot;kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable&quot;</code>, <code>minresyncperiod: 12 hours</code>, <code>kubeapiqps: 20</code>, <code>kubeapiburst:30</code> </p>
 </li>
 <li>
 <p>calls <code>mcserver.addflags</code> which defines all parsing flags for the machine controller into fields of <code>mcserver</code> instance created in the last step.</p>

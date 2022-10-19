@@ -11,7 +11,31 @@ A Kubernetes Controller is a program that watches for lifecycle events on specif
 
 Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines. A worker `Machine` is a provider specific VM/instance that corresponds to a k8s [Node](https://kubernetes.io/docs/concepts/architecture/nodes/)
 
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TB
+    subgraph MCM
 
+    mcm["machine-controller-manager
+    (Common MC Code, MachineSet, MachineDeploy controllers)"]
+    mcmlo["machine-controller-manager-provider-local
+    (Machine Controller Local atop K8s Kind)"]
+    mcmaws["machine-controller-manager-provider-aws
+    (Machine Controller for AWS)"]
+    mcmazure["machine-controller-manager-provider-azure
+    (Machine Controller for Azure)"]
+    mcmgcp["machine-controller-manager-provider-gcp
+    (Machine Controller for GCP)"]
+    mcmx["machine-controller-manager-provider-X
+    (Machine Controller for equinox/openstack/etc)"]
+    end
+
+    mcmlo--uses-->mcm
+    mcmaws--uses-->mcm
+    mcmazure--uses-->mcm
+    mcmgcp--uses-->mcm
+    mcmx-->mcm
+```
 
 The MCM project is divided into:
 

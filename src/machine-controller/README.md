@@ -1,5 +1,6 @@
 - [Machine Controller](#machine-controller)
 	- [MC Launch](#mc-launch)
+		- [Summary](#summary)
 	- [machine controller loop](#machine-controller-loop)
 		- [app.run](#apprun)
 		- [app.startcontrollers](#appstartcontrollers)
@@ -22,9 +23,13 @@
 			- [4. reconciliation functions executed by worker](#4-reconciliation-functions-executed-by-worker)
 # Machine Controller
 
+The Machine Controller Entry Point for any provider is at 
+`machine-controller-manager-provider-<name>/cmd/machine-controller/main.go`
+
 ## MC Launch
 
-most of these timeout flags are redundant since exact same values are 
+A `Makefile` launches the entry point with the given flags below.
+Most of these timeout flags are redundant since exact same values are 
 given in `machine-controller-manager/pkg/util/provider/app/options.newmcserver`
 ```
 go run -mod=vendor cmd/machine-controller/main.go \
@@ -42,11 +47,11 @@ go run -mod=vendor cmd/machine-controller/main.go \
 			--v=3
 
 ```
-entrypoint: 
-`cmd/machine-controller/main.go`
 
-- creates `machine-controller-manager/pkg/util/provider/app/options.mcserver` using `options.newmcserver` which is the main context object for the machinecontroller that embeds a
-`machineconfig.machinecontrollerconfiguration`,   the `options.newmcserver` initializes `options.mcserver` with default values for `port: 10258`, `namespace: default`, `concurrentnodesyncs: 50`, `nodeconditions: "kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable"`, `minresyncperiod: 12 hours`, `kubeapiqps: 20`, `kubeapiburst:30` 
+### Summary
+- Creates [machine-controller-manager/pkg/util/provider/app/options.MCServer](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/app/options#MCServer) using `options.NewMCServer` which is the main context object for the machinecontroller that embeds a
+[options.MachineControllerConfiguration](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/options#MachineControllerManagerConfiguration) 
+	The `options.newmcserver` initializes `options.mcserver` with default values for `port: 10258`, `namespace: default`, `concurrentnodesyncs: 50`, `nodeconditions: "kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable"`, `minresyncperiod: 12 hours`, `kubeapiqps: 20`, `kubeapiburst:30` 
 
 - calls `mcserver.addflags` which defines all parsing flags for the machine controller into fields of `mcserver` instance created in the last step.
 
