@@ -40,9 +40,10 @@ This book describes the current design of the MCM in order to aid code comprehen
 
 # Change Log
 
-- [x] 14th Oct 2022. Machine Health Reconciliation. See [Machine Health Reconcile](./machine-controller/cluster_machine_reconcile.md#controllerreconcilemachinehealth)
-- [ ] TODO - PLANNED 21th : Reconcile Machine Safety Orphan VM's.
+- [x] 14th Oct 2022. Machine Health Reconciliation.
+- [ ] TODO - PLANNED 21th: Reconcile Machine Safety Orphan VM's.
 - [ ] TODO - PLANNED 21th: reconcileClusterMachineSafetyAPIServer 
 - [ ] TODO - PLANNED 21th: Machine Status Diagram with actions/transitions (complicated due to concurrency)
-- [ ] TODO -  Machine Deployment Controller
+- [ ] TODO - PLANNED 31th: Machine Deployment Controller
+- [ ] TODO - PLANNED 31th: AWS, Azure Drivers
 - [ ] TODO - evictPodsWithPVInternal (complicated due to concurrent flow)
