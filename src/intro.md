@@ -3,7 +3,7 @@
 
  Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/). 
 
-(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on Oct 16th for v1 release!🏗)
+(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on Oct 21th for v1.1 release!🏗)
 
 # Introduction
 
