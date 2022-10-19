@@ -82,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.2.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.3.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="machine-controller/node_drain.html"><strong aria-hidden="true">3.4.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">4.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">4.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -1742,18 +1742,7 @@ func New(code codes.Code, msg string) *Status {
 <li><a href="machine-controller/index.html#31-createworker">3.1 createworker</a></li>
 </ul>
 </li>
-<li><a href="machine-controller/index.html#4-reconciliation-functions-executed-by-worker">4. reconciliation functions executed by worker</a>
-<ul>
-<li><a href="machine-controller/index.html#42--reconcileclustermachineclasskey">4.2  reconcileclustermachineclasskey</a></li>
-<li><a href="machine-controller/index.html#43--reconcileclustermachinekey">4.3  reconcileclustermachinekey</a>
-<ul>
-<li><a href="machine-controller/index.html#431-controllertriggercreationflow">4.3.1 controller.triggercreationflow</a></li>
-</ul>
-</li>
-<li><a href="machine-controller/index.html#44--reconcileclustermachinesafetyorphanvms">4.4  reconcileclustermachinesafetyorphanvms</a></li>
-<li><a href="machine-controller/index.html#45--reconcileclustermachinesafetyapiserver">4.5  reconcileclustermachinesafetyapiserver</a></li>
-</ul>
-</li>
+<li><a href="machine-controller/index.html#4-reconciliation-functions-executed-by-worker">4. reconciliation functions executed by worker</a></li>
 </ul>
 </li>
 </ul>
@@ -2252,48 +2241,13 @@ added to the wait group when started and marked done when finished.</p>
 </code></pre>
 <h4 id="4-reconciliation-functions-executed-by-worker"><a class="header" href="#4-reconciliation-functions-executed-by-worker">4. reconciliation functions executed by worker</a></h4>
 <p>the controller starts worker go-routines that pop out keys from the relevant workqueue and execute the reconcile function.</p>
-<h5 id="42--reconcileclustermachineclasskey"><a class="header" href="#42--reconcileclustermachineclasskey">4.2  reconcileclustermachineclasskey</a></h5>
-<p><code>reconcileclustermachineclasskey</code> re-queues after 10seconds on failure and 10mins on success. ie the machine class key is regularly re-queued.  bad: we are not using the <code>machineutils.longretry|shortretry</code> constants here.</p>
-<pre class="mermaid">
-%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
-
-flowchart td
-
-rok[&quot;machineclassqueue.addafter(clzkey, 10m)&quot;]
-rerr[&quot;machineclassqueue.addafter(clzkey, 10s)&quot;]
-a[&quot;ns,name=cache.splitmetanamespacekey(clzkey)&quot;]
-gmc[&quot;clz=machineclasslister.machineclasses(ns).get(name)&quot;]
-fm[&quot;machines=findmachinesforclass(clz)&quot;]
-checknildel{&quot;clz.deletiontimestamp==nil?&quot;}
-checklen{&quot;len(machines)&gt;0&quot;}
-hasfin{&quot;clz.hasfinalizer&quot;}
-addfin[&quot;addmachineclassfinalizers(clz)&quot;]
-delfin[&quot;deletemachineclassfinalizers(clz)&quot;]
-eqm1[&quot;machinequeue.add(machinekeys)&quot;]
-eqm2[&quot;machinequeue.add(machinekeys)&quot;]
-z((&quot;end&quot;))
-
-rok--&gt;z
-rerr--&gt;z
-a--&gt;gmc
-gmc--&gt;fm
-fm--succ--&gt;checklen
-fm--err--&gt;rerr
-checklen--yes--&gt;checknildel
-checklen--no--&gt;delfin
-checknildel--yes--&gt;hasfin
-checknildel--no--&gt;eqm2
-hasfin--no--&gt;addfin
-hasfin--yes--&gt;rok
-addfin--&gt;eqm1
-eqm1--&gt;rok
-eqm2--&gt;rerr
-delfin--&gt;rok
-</pre>
-<h5 id="43--reconcileclustermachinekey"><a class="header" href="#43--reconcileclustermachinekey">4.3  reconcileclustermachinekey</a></h5>
-<pre class="mermaid">%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
-
-flowchart td
+<p>See reconcile chapters.</p>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="reconcile-cluster-machine-class-key"><a class="header" href="#reconcile-cluster-machine-class-key">Reconcile Cluster Machine Class Key</a></h1>
+<p><code>reconcileClusterMachineClassKey</code> reconciles an machineClass due to controller resync or an event on the machineClass.</p>
+<pre><code class="language-go">func (c *controller) reconcileClusterMachineClassKey(key string) error
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
 
 
 a[&quot;ns,name=cache.splitmetanamespacekey(mkey)&quot;]
@@ -2340,12 +2294,6 @@ newcreatereq--&gt;createflow
 createflow--&gt;enqm
 
 </pre>
-<h6 id="431-controllertriggercreationflow"><a class="header" href="#431-controllertriggercreationflow">4.3.1 controller.triggercreationflow</a></h6>
-<p>the creation flow adds policy and delegates to the <code>driver.createmachine</code>.</p>
-<h5 id="44--reconcileclustermachinesafetyorphanvms"><a class="header" href="#44--reconcileclustermachinesafetyorphanvms">4.4  reconcileclustermachinesafetyorphanvms</a></h5>
-<p>tbd</p>
-<h5 id="45--reconcileclustermachinesafetyapiserver"><a class="header" href="#45--reconcileclustermachinesafetyapiserver">4.5  reconcileclustermachinesafetyapiserver</a></h5>
-<p>tbd</p>
 <div style="break-before: page; page-break-before: always;"></div><h1 id="reconcile-cluster-secret"><a class="header" href="#reconcile-cluster-secret">Reconcile Cluster Secret</a></h1>
 <p><code>reconcileClusterSecretKey</code> reconciles an secret due to controller resync
 or an event on the secret</p>

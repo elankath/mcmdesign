@@ -1,30 +1,25 @@
 - [Machine Controller](#machine-controller)
-  - [MC Launch](#mc-launch)
-  - [machine controller loop](#machine-controller-loop)
-    - [app.run](#apprun)
-    - [app.startcontrollers](#appstartcontrollers)
-    - [controller initialization](#controller-initialization)
-      - [1. newcontroller factory func](#1-newcontroller-factory-func)
-      - [1.1 create controller struct](#11-create-controller-struct)
-      - [1.2 assign listers and hassynced funcs to controller struct](#12-assign-listers-and-hassynced-funcs-to-controller-struct)
-      - [1.3 register controller event handlers on informers.](#13-register-controller-event-handlers-on-informers)
-      - [1.4 event handler functions](#14-event-handler-functions)
-        - [1.4.1 adding secrets keys to secretsqueue](#141-adding-secrets-keys-to-secretsqueue)
-        - [1.4.2 adding machine class names and keys to machineclassqueue](#142-adding-machine-class-names-and-keys-to-machineclassqueue)
-        - [1.4.3 adding machine keys to machinequeue](#143-adding-machine-keys-to-machinequeue)
-    - [machinecontroller.run](#machinecontrollerrun)
-      - [1. wait for informer caches to sync](#1-wait-for-informer-caches-to-sync)
-      - [2. register metrics](#2-register-metrics)
-        - [2.1 controller.describe](#21-controllerdescribe)
-        - [2.1 controller.collect](#21-controllercollect)
-      - [3. create controller worker go-routines applying reconciliations](#3-create-controller-worker-go-routines-applying-reconciliations)
-        - [3.1 createworker](#31-createworker)
-      - [4. reconciliation functions executed by worker](#4-reconciliation-functions-executed-by-worker)
-        - [4.2  reconcileclustermachineclasskey](#42--reconcileclustermachineclasskey)
-        - [4.3  reconcileclustermachinekey](#43--reconcileclustermachinekey)
-          - [4.3.1 controller.triggercreationflow](#431-controllertriggercreationflow)
-        - [4.4  reconcileclustermachinesafetyorphanvms](#44--reconcileclustermachinesafetyorphanvms)
-        - [4.5  reconcileclustermachinesafetyapiserver](#45--reconcileclustermachinesafetyapiserver)
+	- [MC Launch](#mc-launch)
+	- [machine controller loop](#machine-controller-loop)
+		- [app.run](#apprun)
+		- [app.startcontrollers](#appstartcontrollers)
+		- [controller initialization](#controller-initialization)
+			- [1. newcontroller factory func](#1-newcontroller-factory-func)
+			- [1.1 create controller struct](#11-create-controller-struct)
+			- [1.2 assign listers and hassynced funcs to controller struct](#12-assign-listers-and-hassynced-funcs-to-controller-struct)
+			- [1.3 register controller event handlers on informers.](#13-register-controller-event-handlers-on-informers)
+			- [1.4 event handler functions](#14-event-handler-functions)
+				- [1.4.1 adding secrets keys to secretsqueue](#141-adding-secrets-keys-to-secretsqueue)
+				- [1.4.2 adding machine class names and keys to machineclassqueue](#142-adding-machine-class-names-and-keys-to-machineclassqueue)
+				- [1.4.3 adding machine keys to machinequeue](#143-adding-machine-keys-to-machinequeue)
+		- [machinecontroller.run](#machinecontrollerrun)
+			- [1. wait for informer caches to sync](#1-wait-for-informer-caches-to-sync)
+			- [2. register metrics](#2-register-metrics)
+				- [2.1 controller.describe](#21-controllerdescribe)
+				- [2.1 controller.collect](#21-controllercollect)
+			- [3. create controller worker go-routines applying reconciliations](#3-create-controller-worker-go-routines-applying-reconciliations)
+				- [3.1 createworker](#31-createworker)
+			- [4. reconciliation functions executed by worker](#4-reconciliation-functions-executed-by-worker)
 # Machine Controller
 
 ## MC Launch
@@ -561,112 +556,5 @@ func worker(queue workqueue.ratelimitinginterface, resourcetype string, maxretri
 
 the controller starts worker go-routines that pop out keys from the relevant workqueue and execute the reconcile function.
 
-
-##### 4.2  reconcileclustermachineclasskey 
-
-`reconcileclustermachineclasskey` re-queues after 10seconds on failure and 10mins on success. ie the machine class key is regularly re-queued.  bad: we are not using the `machineutils.longretry|shortretry` constants here.
-
-```mermaid
-
-%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
-
-flowchart td
-
-rok["machineclassqueue.addafter(clzkey, 10m)"]
-rerr["machineclassqueue.addafter(clzkey, 10s)"]
-a["ns,name=cache.splitmetanamespacekey(clzkey)"]
-gmc["clz=machineclasslister.machineclasses(ns).get(name)"]
-fm["machines=findmachinesforclass(clz)"]
-checknildel{"clz.deletiontimestamp==nil?"}
-checklen{"len(machines)>0"}
-hasfin{"clz.hasfinalizer"}
-addfin["addmachineclassfinalizers(clz)"]
-delfin["deletemachineclassfinalizers(clz)"]
-eqm1["machinequeue.add(machinekeys)"]
-eqm2["machinequeue.add(machinekeys)"]
-z(("end"))
-
-rok-->z
-rerr-->z
-a-->gmc
-gmc-->fm
-fm--succ-->checklen
-fm--err-->rerr
-checklen--yes-->checknildel
-checklen--no-->delfin
-checknildel--yes-->hasfin
-checknildel--no-->eqm2
-hasfin--no-->addfin
-hasfin--yes-->rok
-addfin-->eqm1
-eqm1-->rok
-eqm2-->rerr
-delfin-->rok
-```
-##### 4.3  reconcileclustermachinekey 
-
-
-```mermaid
-%%{init: {'themevariables': { 'fontsize': '10px'}}}%%
-
-flowchart td
-
-
-a["ns,name=cache.splitmetanamespacekey(mkey)"]
-getm["machine=machinelister.machines(ns).get(name)"]
-valm["validation.validatemachine(machine)"]
-valmc["machineclz,secretdata,err=validation.validatemachineclass(machine)"]
-longr["retryperiod=machineutils.longretry"]
-shortr["retryperiod=machineutils.shortretry"]
-enqm["machinequeue.addafter(mkey, retryperiod)"]
-checkmdel{"is\nmachine.deletiontimestamp\nset?"}
-newdelreq["req=&driver.deletemachinerequest{machine,machineclz,secretdata}"]
-delflow["retryperiod=controller.triggerdeletionflow(req)"]
-createflow["retryperiod=controller.triggercreationflow(req)"]
-hasfin{"hasfinalizer(machine)"}
-addfin["addmachinefinalizers(machine)"]
-checkmachinenodeexists{"machine.status.node\nexists?"}
-reconcilemachinehealth["controller.reconcilemachinehealth(machine)"]
-syncnodetemplates["controller.syncnodetemplates(machine)"]
-newcreatereq["req=&driver.createmachinerequest{machine,machineclz,secretdata}"]
-z(("end"))
-
-a-->getm
-enqm-->z
-longr-->enqm
-shortr-->enqm
-getm-->valm
-valm-->ok-->valmc
-valm--err-->longr
-valmc--err-->longr
-valmc--ok-->checkmdel
-checkmdel--yes-->newdelreq
-checkmdel--no-->hasfin
-newdelreq-->delflow
-hasfin--no-->addfin
-hasfin--yes-->shortr
-addfin-->checkmachinenodeexists
-checkmachinenodeexists--yes-->reconcilemachinehealth
-checkmachinenodeexists--no-->newcreatereq
-reconcilemachinehealth--ok-->syncnodetemplates
-syncnodetemplates--ok-->longr
-syncnodetemplates--err-->shortr
-delflow-->enqm
-newcreatereq-->createflow
-createflow-->enqm
-
-```
-
-###### 4.3.1 controller.triggercreationflow
-
-the creation flow adds policy and delegates to the `driver.createmachine`.
-
-
-##### 4.4  reconcileclustermachinesafetyorphanvms
-tbd
-
-##### 4.5  reconcileclustermachinesafetyapiserver 
-tbd
-
-
+See reconcile chapters.
 
