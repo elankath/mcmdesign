@@ -1,7 +1,10 @@
 - [Machine Controller](#machine-controller)
 	- [MC Launch](#mc-launch)
-		- [Summary](#summary)
-	- [machine controller loop](#machine-controller-loop)
+		- [Dev Launch](#dev-launch)
+		- [Prod Launch](#prod-launch)
+		- [Launch Flow](#launch-flow)
+			- [Summary](#summary)
+	- [Machine Controller Loop](#machine-controller-loop)
 		- [app.run](#apprun)
 		- [app.startcontrollers](#appstartcontrollers)
 		- [controller initialization](#controller-initialization)
@@ -28,9 +31,10 @@ The Machine Controller Entry Point for any provider is at
 
 ## MC Launch
 
+### Dev Launch
 A `Makefile` launches the entry point with the given flags below.
 Most of these timeout flags are redundant since exact same values are 
-given in `machine-controller-manager/pkg/util/provider/app/options.newmcserver`
+given in [machine-controller-manager/pkg/util/provider/app/options.NewMCServer]()
 ```
 go run -mod=vendor cmd/machine-controller/main.go \
 			--control-kubeconfig=$(control_kubeconfig) \
@@ -47,21 +51,73 @@ go run -mod=vendor cmd/machine-controller/main.go \
 			--v=3
 
 ```
+### Prod Launch
 
-### Summary
+A `Dockerfile` builds the provider specific machine controller and launches it directly with no CLI arguments. Hence uses coded defaults
+
+```Dockerfile
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
+      go build \
+      -mod=vendor \
+      -o /usr/local/bin/machine-controller \
+      cmd/machine-controller/main.go
+COPY --from=builder /usr/local/bin/machine-controller /machine-controller
+ENTRYPOINT ["/machine-controller"]
+```
+
+### Launch Flow
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TB
+
+Begin(("cmd/
+machine-controller/
+main.go"))
+-->NewMCServer["mc=options.NewMCServer"]
+-->AddFlaogs["mc.AddFlags(pflag.CommandLine)"]
+-->LogOptions["options := k8s.io/component/base/logs.NewOptions()
+	options.AddFlags(pflag.CommandLine)"]
+-->InitFlags["flag.InitFlags"]
+InitFlags--local-->NewLocalDriver["
+	driver, err := local.NewDriver(s.ControlKubeconfig)
+	if err exit
+"]
+InitFlags--aws-->NewPlatformDriver["
+	driver := aws.NewAWSDriver(&spi.PluginSPIImpl{}))
+	OR
+	driver := cp.NewAzureDriver(&spi.PluginSPIImpl{})
+	//etc
+"]
+
+NewLocalDriver-->AppRun["
+	err := app.Run(mc, driver)
+	if err != nil os.Exit(1)
+"]
+NewPlatformDriver-->AppRun
+```
+#### Summary
 - Creates [machine-controller-manager/pkg/util/provider/app/options.MCServer](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/app/options#MCServer) using `options.NewMCServer` which is the main context object for the machinecontroller that embeds a
 [options.MachineControllerConfiguration](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/options#MachineControllerManagerConfiguration) 
-	The `options.newmcserver` initializes `options.mcserver` with default values for `port: 10258`, `namespace: default`, `concurrentnodesyncs: 50`, `nodeconditions: "kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable"`, `minresyncperiod: 12 hours`, `kubeapiqps: 20`, `kubeapiburst:30` 
+  - `options.NewMCServer` initializes `options.MCServer` struct with default values for 
+    - `Port: 10258`, 
+    - `Namespace: default`, 
+    - `ConcurrentNodeSyncs: 50`: number of worker go-routines that are used to process items from a work queue. See [Worker](#31-createworker) below
+    - `NodeConditions: "kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable"` (failure node conditions that mark a machine as un-healthy)
+    - `MinResyncPeriod: 12 hours`, `KubeAPIQPS: 20`, `KubeAPIBurst:30`: config params for k8s clients. See [rest.Config](https://pkg.go.dev/k8s.io/client-go@v0.25.3/rest#Config)
 
-- calls `mcserver.addflags` which defines all parsing flags for the machine controller into fields of `mcserver` instance created in the last step.
-
-- calls `k8s.io/component-base/logs.newoptions` and then `options.addflags` for logging options. probably get rid of this when moving to `logr`. see [logging in gardener components](https://github.com/gardener/gardener/blob/master/docs/development/logging.md). then use the [logcheck](https://github.com/gardener/gardener/tree/master/hack/tools/logcheck)tool.
-- calls `newdriver` with control kube config that creates a controller runtime client (`sigs.k8s.io/controller-runtime/pkg/client`) which then calls `pkg/local/driver.newdriver` passing the controlloer-runtime client which constructs a `localdriver` encapsulating the passed in client.
+- calls `MCServer.AddFlags` which defines all parsing flags for the machine controller into fields of `MCServer` instance created in the last step.
+- calls `k8s.io/component-base/logs.NewOptions` and then `options.AddFlags` for logging options. 
+  - TODO: Should get rid of this when moving to `logr`.) 
+    - See [Logging In Gardener Components](https://github.com/gardener/gardener/blob/master/docs/development/logging.md). 
+    - Then use the [logcheck](https://github.com/gardener/gardener/tree/master/hack/tools/logcheck)tool.
+- Driver initialization code various according to the provider type.
+- Local Driver:
+  - calls `NewDriver` with control kube config that creates a controller runtime client (`sigs.k8s.io/controller-runtime/pkg/client`) which then calls `pkg/local/driver.NewDriver` passing the controlloer-runtime client which constructs a `localdriver` encapsulating the passed in client.
   - the `localdriver` implements [driver](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/driver/driver.go#l28) is the facade for creation/deletion of vm's
-- calls [app.run](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l77) passing in the previously created `mcserver` and `driver` instances.
-- 
+- calls [app.Run](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l77) passing in the previously created `MCServer` and `Driver` instances.
 
-## machine controller loop
+## Machine Controller Loop
 
 ### app.run
 
