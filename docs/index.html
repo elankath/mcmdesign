@@ -146,6 +146,7 @@
 <li><a href="#introduction">Introduction</a>
 <ul>
 <li><a href="#project-structure">Project Structure</a></li>
+<li><a href="#deployment-structure">Deployment Structure</a></li>
 </ul>
 </li>
 <li><a href="#change-log">Change Log</a></li>
@@ -154,13 +155,15 @@
 <p>(🚧 Please see <a href="#change-log">Change Log</a> for new additions/corrections.Please Check on Oct 21th for v1.1 release!🏗)</p>
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
-<p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines, machine-classes machine-sets and machine deployments. </p>
+<p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines, machine-classes machine-sets and machine deployments. All these objects are custom resources.</p>
 <ul>
 <li>A worker <a href="./mcm_facilities.html#machine">Machine</a> is a provider specific VM/instance that corresponds to a k8s <a href="https://kubernetes.io/docs/concepts/architecture/nodes/">Node</a>. (k8s doesn't bring up nodes by its own, the MCM does so by using cloud provider API's abstracted by the <a href="./mcm_facilities.html#driver">Driver</a> facade to bring up machines and map them to nodes)</li>
 <li>A <a href="./mcm_facilities.html#machineclass">MachineClass</a> represents a template that contains cloud provider specific details used to create machines.</li>
 <li>A <a href="./mcm_facilities.html#machineset">MachineSet</a> ensures that the specified number of <code>Machine</code> replicas are running at a given point of time. Analogoues to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/">ReplicaSets</a>.</li>
 <li>A <a href="./mcm_facilities.html#machinedeployment">MachineDeployment</a> provides a declarative update for <code>MachineSet</code> and <code>Machines</code>. Analogous to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/">Deployments</a>. </li>
 </ul>
+<p>All the custom resources (<code>Machine-*</code> objects) mentioned above are stored in the K8s <em>control cluster</em>. The nodes corresponding to the machines are created and registered in the <em>target cluster</em>. </p>
+<p>For productive Gardener deployments, the <em>control cluster</em> is the control plane of the shoot cluster and since the MCM is running in the shoot's control plane, the kubeconfig for the control cluster is generally specified as the <a href="https://github.com/kubernetes/client-go/tree/master/examples/in-cluster-client-configuration">In-Cluster Config</a>. The target cluster is the shoot cluster and hence the target cluster config is the shoot kube config.</p>
 <h2 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h2>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TB
@@ -212,6 +215,38 @@ flowchart TB
 <p>The Modern Way of writing controllers is by leveraging the <a href="https://github.com/kubernetes-sigs/controller-runtime">Controller Runtime</a> and generating skeletal code fur custom controllers using the <a href="https://book.kubebuilder.io/quick-start.html">Kubebuilder Tool</a>.</p>
 <p>The MCM has a planned backlog to port the project to the controller runtime. The details of this will be documented in a separate proposal. (TODO: link me in future). </p>
 <p>This book describes the current design of the MCM in order to aid code comprehension for development, enhancement and migratiion/port activities.</p>
+<h2 id="deployment-structure"><a class="header" href="#deployment-structure">Deployment Structure</a></h2>
+<p>The MCM Pod's are part of the <code>Deployment</code> named <code>machine-controller-manager</code> that resides in the shoot control plane. After logging into the shoot control plane (use <code>gardenctl</code>), you can the deployment details using <code>k get deploy machine-controller-manager -o yaml </code>. The MCM deployment has two containers:</p>
+<ol>
+<li><code>machine-controller-manager-provider-&lt;provider&gt;</code>. Ex: <code>machine-controller-manager-provider-aws</code>.  This container name is a bit misleading as it starts the provider specific machine controller main program responsible for reconciling machine-classes and machines. See <a href="./machine-controller/README.html">Machine Controller</a>. (Ideally the <code>-manager</code> should have been removed)</li>
+</ol>
+<p>Container command configured on AWS:</p>
+<pre><code>./machine-controller
+         --control-kubeconfig=inClusterConfig
+         --machine-creation-timeout=20m
+         --machine-drain-timeout=2h
+         --machine-health-timeout=10m
+         --namespace=shoot--i034796--tre
+         --port=10259
+         --target-kubeconfig=/var/run/secrets/gardener.cloud/shoot/generic-kubeconfig/kubeconfig`
+</code></pre>
+<ol start="2">
+<li><code>&lt;provider&gt;-machine-controller-manager</code>. Ex: <code>aws-machine-controller-manager</code>. This container name is a bit misleading as it starts the machine deployment controller main program responsible for reconciling machine-deployments and machine-sets. (See: TODO: link me). Ideally it should have been called simply <code>machine-deployment-controller</code> as it is provider independent.</li>
+</ol>
+<p>Container command configured on AWS</p>
+<pre><code>./machine-controller-manager
+         --control-kubeconfig=inClusterConfig
+         --delete-migrated-machine-class=true
+         --machine-safety-apiserver-statuscheck-timeout=30s
+         --machine-safety-apiserver-statuscheck-period=1m
+         --machine-safety-orphan-vms-period=30m
+         --machine-safety-overshooting-period=1m
+         --namespace=shoot--i034796--tre
+         --port=10258
+         --safety-up=2
+         --safety-down=1
+         --target-kubeconfig=/var/run/secrets/gardener.cloud/shoot/generic-kubeconfig/kubeconfig
+</code></pre>
 <h1 id="change-log"><a class="header" href="#change-log">Change Log</a></h1>
 <ul>
 <li><input disabled="" type="checkbox" checked=""/>

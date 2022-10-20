@@ -1,5 +1,6 @@
 - [Introduction](#introduction)
   - [Project Structure](#project-structure)
+  - [Deployment Structure](#deployment-structure)
 - [Change Log](#change-log)
 
  Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/). 
@@ -10,11 +11,15 @@
 
 A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more _reconcile_ functions in response. A _reconcile function_ is called with the _Namespace_ and _Name_ of an object corresponding to the resource and its job is to make the object _Status_ match the declared state in the object _Spec_. 
 
-Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines, machine-classes machine-sets and machine deployments. 
+Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines, machine-classes machine-sets and machine deployments. All these objects are custom resources.
    - A worker [Machine](./mcm_facilities.md#machine) is a provider specific VM/instance that corresponds to a k8s [Node](https://kubernetes.io/docs/concepts/architecture/nodes/). (k8s doesn't bring up nodes by its own, the MCM does so by using cloud provider API's abstracted by the [Driver](./mcm_facilities.md#driver) facade to bring up machines and map them to nodes)
    - A [MachineClass](./mcm_facilities.md#machineclass) represents a template that contains cloud provider specific details used to create machines.
    - A [MachineSet](./mcm_facilities.md#machineset) ensures that the specified number of `Machine` replicas are running at a given point of time. Analogoues to k8s [ReplicaSets](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/).
    - A [MachineDeployment](./mcm_facilities.md#machinedeployment) provides a declarative update for `MachineSet` and `Machines`. Analogous to k8s [Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/). 
+
+All the custom resources (`Machine-*` objects) mentioned above are stored in the K8s _control cluster_. The nodes corresponding to the machines are created and registered in the _target cluster_. 
+
+For productive Gardener deployments, the _control cluster_ is the control plane of the shoot cluster and since the MCM is running in the shoot's control plane, the kubeconfig for the control cluster is generally specified as the [In-Cluster Config](https://github.com/kubernetes/client-go/tree/master/examples/in-cluster-client-configuration). The target cluster is the shoot cluster and hence the target cluster config is the shoot kube config.
 
 ## Project Structure
 
@@ -65,6 +70,41 @@ The MCM has a planned backlog to port the project to the controller runtime. The
 
 This book describes the current design of the MCM in order to aid code comprehension for development, enhancement and migratiion/port activities.
 
+
+## Deployment Structure
+
+The MCM Pod's are part of the `Deployment` named `machine-controller-manager` that resides in the shoot control plane. After logging into the shoot control plane (use `gardenctl`), you can the deployment details using `k get deploy machine-controller-manager -o yaml `. The MCM deployment has two containers:
+
+1. `machine-controller-manager-provider-<provider>`. Ex: `machine-controller-manager-provider-aws`.  This container name is a bit misleading as it starts the provider specific machine controller main program responsible for reconciling machine-classes and machines. See [Machine Controller](./machine-controller/README.md). (Ideally the `-manager` should have been removed)
+
+Container command configured on AWS:
+```
+./machine-controller
+         --control-kubeconfig=inClusterConfig
+         --machine-creation-timeout=20m
+         --machine-drain-timeout=2h
+         --machine-health-timeout=10m
+         --namespace=shoot--i034796--tre
+         --port=10259
+         --target-kubeconfig=/var/run/secrets/gardener.cloud/shoot/generic-kubeconfig/kubeconfig`
+```
+2. `<provider>-machine-controller-manager`. Ex: `aws-machine-controller-manager`. This container name is a bit misleading as it starts the machine deployment controller main program responsible for reconciling machine-deployments and machine-sets. (See: TODO: link me). Ideally it should have been called simply `machine-deployment-controller` as it is provider independent.
+
+Container command configured on AWS
+```
+./machine-controller-manager
+         --control-kubeconfig=inClusterConfig
+         --delete-migrated-machine-class=true
+         --machine-safety-apiserver-statuscheck-timeout=30s
+         --machine-safety-apiserver-statuscheck-period=1m
+         --machine-safety-orphan-vms-period=30m
+         --machine-safety-overshooting-period=1m
+         --namespace=shoot--i034796--tre
+         --port=10258
+         --safety-up=2
+         --safety-down=1
+         --target-kubeconfig=/var/run/secrets/gardener.cloud/shoot/generic-kubeconfig/kubeconfig
+```
 
 
 # Change Log

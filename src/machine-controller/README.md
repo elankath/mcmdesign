@@ -27,6 +27,8 @@
 			- [4. reconciliation functions executed by worker](#4-reconciliation-functions-executed-by-worker)
 # Machine Controller
 
+The Machine Controller handles reconciliation of [Machine](./../mcm_facilities.md#machine) and [MachineClass](./../mcm_facilities.md#machineclass) objects.
+
 The Machine Controller Entry Point for any provider is at 
 `machine-controller-manager-provider-<name>/cmd/machine-controller/main.go`
 
