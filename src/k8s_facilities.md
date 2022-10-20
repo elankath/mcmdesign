@@ -6,6 +6,7 @@
 				- [OwnerReferences](#ownerreferences)
 				- [Finalizers and Deletion](#finalizers-and-deletion)
 				- [Diff between Labels and Annotations](#diff-between-labels-and-annotations)
+				- [RawExtension](#rawextension)
 			- [API Errors](#api-errors)
 				- [errors.IsNotFound](#errorsisnotfound)
 				- [errors.IsNotFound](#errorsisnotfound-1)
@@ -36,6 +37,7 @@
 			- [Pod Volumes](#pod-volumes)
 		- [PersistentVolume](#persistentvolume)
 			- [PersistentVolumeClaim](#persistentvolumeclaim)
+		- [Secret](#secret)
 	- [client-go](#client-go)
 		- [client-go Shared Informers.](#client-go-shared-informers)
 		- [client-go workqueues](#client-go-workqueues)
@@ -158,6 +160,20 @@ When you tell Kubernetes to delete an object that has finalizers specified for i
 _Labels_ are used in conjunction with selectors to identify groups of related resources and meant to be meaningful to users. Because selectors are used to query labels, this operation needs to be efficient. To ensure efficient queries, labels are constrained by RFC 1123. RFC 1123, among other constraints, restricts labels to a maximum 63 character length. Thus, labels should be used when you want Kubernetes to group a set of related resources. See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ on label key and value restrictions
 
 _Annotations_ are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not 
+
+##### RawExtension
+
+[k8s.io/apimachinery/pkg/runtime.RawExtension](https://pkg.go.dev/k8s.io/apimachinery/pkg/runtime#RawExtension) is used to hold extension objects whose structures can be arbitrary. An example of MCM type that leverages this is the [MachineClass](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineClass) type whose `ProviderSpec` field is of type `runtime.RawExtension` and whose structure can vary according to the provider.
+
+One can use a different custom structure type for each extension variant and then decode the field into an instance of that extension structure type using the standard Go json decoder.
+
+Example:
+```go
+var providerSpec *api.AWSProviderSpec
+json.Unmarshal(machineClass.ProviderSpec.Raw, &providerSpec)
+```
+
+One can
 
 #### API Errors
 

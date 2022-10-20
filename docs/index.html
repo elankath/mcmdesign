@@ -143,14 +143,25 @@
                 <div id="content" class="content">
                     <main>
                         <ul>
-<li><a href="#introduction">Introduction</a></li>
+<li><a href="#introduction">Introduction</a>
+<ul>
+<li><a href="#project-structure">Project Structure</a></li>
+</ul>
+</li>
 <li><a href="#change-log">Change Log</a></li>
 </ul>
 <p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>. </p>
 <p>(🚧 Please see <a href="#change-log">Change Log</a> for new additions/corrections.Please Check on Oct 21th for v1.1 release!🏗)</p>
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
-<p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines. A worker <code>Machine</code> is a provider specific VM/instance that corresponds to a k8s <a href="https://kubernetes.io/docs/concepts/architecture/nodes/">Node</a></p>
+<p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines, machine-classes machine-sets and machine deployments. </p>
+<ul>
+<li>A worker <a href="./mcm_facilities.html#machine">Machine</a> is a provider specific VM/instance that corresponds to a k8s <a href="https://kubernetes.io/docs/concepts/architecture/nodes/">Node</a>. (k8s doesn't bring up nodes by its own, the MCM does so by using cloud provider API's abstracted by the <a href="./mcm_facilities.html#driver">Driver</a> facade to bring up machines and map them to nodes)</li>
+<li>A <a href="./mcm_facilities.html#machineclass">MachineClass</a> represents a template that contains cloud provider specific details used to create machines.</li>
+<li>A <a href="./mcm_facilities.html#machineset">MachineSet</a> ensures that the specified number of <code>Machine</code> replicas are running at a given point of time. Analogoues to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/">ReplicaSets</a>.</li>
+<li>A <a href="./mcm_facilities.html#machinedeployment">MachineDeployment</a> provides a declarative update for <code>MachineSet</code> and <code>Machines</code>. Analogous to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/">Deployments</a>. </li>
+</ul>
+<h2 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h2>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TB
     subgraph MCM
@@ -179,20 +190,15 @@ flowchart TB
 <ol>
 <li>The <a href="https://github.com/gardener/machine-controller-manager">MCM Module</a>. This contains 
 <ol>
-<li>The <a href="https://github.com/gardener/machine-controller-manager/blob/51cea3373d8be7c78aee3f7a4664ccd31f439269/pkg/controller/controller.go#L421">MCM Controller Type</a> and <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/controller.go#L62">MCM Controller Factory Method</a>. The <code>MCM Controller</code> is responsible for reconciling the <code>MachineDeployment</code> and <code>MachineSet</code> custom resources. 
-<ol>
-<li>A <code>MachineDeployment</code> provides a declarative update for <code>MachineSet</code> and <code>Machines</code>. Analogous to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/">Deployments</a>. </li>
-<li>A <code>MachineSet</code> ensures that the specified number of <code>Machine</code> replicas are running at a given point of time. Analogoues to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/">ReplicaSets</a></li>
-</ol>
-</li>
-<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/cmd/machine-controller-manager/controller_manager.go#L40">MCM Main</a> which creates and start s the MCM Controller.</li>
+<li>The <a href="https://github.com/gardener/machine-controller-manager/blob/51cea3373d8be7c78aee3f7a4664ccd31f439269/pkg/controller/controller.go#L421">MCM Controller Type</a> and <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/controller.go#L62">MCM Controller Factory Method</a>. The <code>MCM Controller</code> is responsible for reconciling the <code>MachineDeployment</code> and <code>MachineSet</code> custom resources. </li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/cmd/machine-controller-manager/controller_manager.go#L40">MCM Main</a> which creates and starts the MCM Controller.</li>
 <li>The <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/controller.go#L252">MC Controller Type</a> and <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/controller.go#L77">MC Controller Factory Method</a>.
 <ol>
 <li>The <code>MC Controller</code> implements the reconciliation loop for <code>MachineClass</code> and <code>Machine</code> objects but delegates creation/updation/deletion/status-retrieval of Machines to the <code>Driver</code> facade. </li>
 </ol>
 </li>
 <li>The <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/driver/driver.go#L28">Driver</a> facade that abstracts away the lifecycle operations on Machines and obtaining Machine status.</li>
-<li>Utility Code used provider modules (TODO: give internal links)</li>
+<li>Utility Code leveraged by provider modules. </li>
 </ol>
 </li>
 <li>The provider specific modules named as <code>machine-controller-manager-provider-&lt;providerName&gt;</code>. 
@@ -204,7 +210,7 @@ flowchart TB
 </ol>
 <p>The MCM leverages the <em>old-school</em> technique of writing controllers directly using <a href="https://github.com/kubernetes/sample-controller/blob/master/docs/controller-client-go.md">client-go</a>. Skeleton code for client types is generated using <a href="https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/generating-clientset.md">client-gen</a>. A barebones example is illustrated in the <a href="https://github.com/kubernetes/sample-controller">sample controller</a>. </p>
 <p>The Modern Way of writing controllers is by leveraging the <a href="https://github.com/kubernetes-sigs/controller-runtime">Controller Runtime</a> and generating skeletal code fur custom controllers using the <a href="https://book.kubebuilder.io/quick-start.html">Kubebuilder Tool</a>.</p>
-<p>The MCM has a planned backlog to port the project to the controller runtime. The details of this will be documented in a separate proposal. (TODO: link me). </p>
+<p>The MCM has a planned backlog to port the project to the controller runtime. The details of this will be documented in a separate proposal. (TODO: link me in future). </p>
 <p>This book describes the current design of the MCM in order to aid code comprehension for development, enhancement and migratiion/port activities.</p>
 <h1 id="change-log"><a class="header" href="#change-log">Change Log</a></h1>
 <ul>

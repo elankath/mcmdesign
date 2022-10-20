@@ -155,6 +155,7 @@
 <li><a href="#ownerreferences">OwnerReferences</a></li>
 <li><a href="#finalizers-and-deletion">Finalizers and Deletion</a></li>
 <li><a href="#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></li>
+<li><a href="#rawextension">RawExtension</a></li>
 </ul>
 </li>
 <li><a href="#api-errors">API Errors</a>
@@ -219,6 +220,7 @@
 <li><a href="#persistentvolumeclaim">PersistentVolumeClaim</a></li>
 </ul>
 </li>
+<li><a href="#secret">Secret</a></li>
 </ul>
 </li>
 <li><a href="#client-go">client-go</a>
@@ -332,6 +334,14 @@
 <h5 id="diff-between-labels-and-annotations"><a class="header" href="#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></h5>
 <p><em>Labels</em> are used in conjunction with selectors to identify groups of related resources and meant to be meaningful to users. Because selectors are used to query labels, this operation needs to be efficient. To ensure efficient queries, labels are constrained by RFC 1123. RFC 1123, among other constraints, restricts labels to a maximum 63 character length. Thus, labels should be used when you want Kubernetes to group a set of related resources. See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ on label key and value restrictions</p>
 <p><em>Annotations</em> are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not </p>
+<h5 id="rawextension"><a class="header" href="#rawextension">RawExtension</a></h5>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/runtime#RawExtension">k8s.io/apimachinery/pkg/runtime.RawExtension</a> is used to hold extension objects whose structures can be arbitrary. An example of MCM type that leverages this is the <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineClass">MachineClass</a> type whose <code>ProviderSpec</code> field is of type <code>runtime.RawExtension</code> and whose structure can vary according to the provider.</p>
+<p>One can use a different custom structure type for each extension variant and then decode the field into an instance of that extension structure type using the standard Go json decoder.</p>
+<p>Example:</p>
+<pre><code class="language-go">var providerSpec *api.AWSProviderSpec
+json.Unmarshal(machineClass.ProviderSpec.Raw, &amp;providerSpec)
+</code></pre>
+<p>One can</p>
 <h4 id="api-errors"><a class="header" href="#api-errors">API Errors</a></h4>
 <p><a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/errors">k8s.io/apimachinery/pkg/api/errors</a> provides detailed error types  ans <code>IsXXX</code> methods for k8s api errors.</p>
 <h5 id="errorsisnotfound"><a class="header" href="#errorsisnotfound">errors.IsNotFound</a></h5>

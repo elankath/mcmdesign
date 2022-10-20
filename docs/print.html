@@ -144,14 +144,25 @@
                 <div id="content" class="content">
                     <main>
                         <ul>
-<li><a href="intro.html#introduction">Introduction</a></li>
+<li><a href="intro.html#introduction">Introduction</a>
+<ul>
+<li><a href="intro.html#project-structure">Project Structure</a></li>
+</ul>
+</li>
 <li><a href="intro.html#change-log">Change Log</a></li>
 </ul>
 <p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>. </p>
 <p>(🚧 Please see <a href="intro.html#change-log">Change Log</a> for new additions/corrections.Please Check on Oct 21th for v1.1 release!🏗)</p>
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
-<p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines. A worker <code>Machine</code> is a provider specific VM/instance that corresponds to a k8s <a href="https://kubernetes.io/docs/concepts/architecture/nodes/">Node</a></p>
+<p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines, machine-classes machine-sets and machine deployments. </p>
+<ul>
+<li>A worker <a href="./mcm_facilities.html#machine">Machine</a> is a provider specific VM/instance that corresponds to a k8s <a href="https://kubernetes.io/docs/concepts/architecture/nodes/">Node</a>. (k8s doesn't bring up nodes by its own, the MCM does so by using cloud provider API's abstracted by the <a href="./mcm_facilities.html#driver">Driver</a> facade to bring up machines and map them to nodes)</li>
+<li>A <a href="./mcm_facilities.html#machineclass">MachineClass</a> represents a template that contains cloud provider specific details used to create machines.</li>
+<li>A <a href="./mcm_facilities.html#machineset">MachineSet</a> ensures that the specified number of <code>Machine</code> replicas are running at a given point of time. Analogoues to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/">ReplicaSets</a>.</li>
+<li>A <a href="./mcm_facilities.html#machinedeployment">MachineDeployment</a> provides a declarative update for <code>MachineSet</code> and <code>Machines</code>. Analogous to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/">Deployments</a>. </li>
+</ul>
+<h2 id="project-structure"><a class="header" href="#project-structure">Project Structure</a></h2>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TB
     subgraph MCM
@@ -180,20 +191,15 @@ flowchart TB
 <ol>
 <li>The <a href="https://github.com/gardener/machine-controller-manager">MCM Module</a>. This contains 
 <ol>
-<li>The <a href="https://github.com/gardener/machine-controller-manager/blob/51cea3373d8be7c78aee3f7a4664ccd31f439269/pkg/controller/controller.go#L421">MCM Controller Type</a> and <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/controller.go#L62">MCM Controller Factory Method</a>. The <code>MCM Controller</code> is responsible for reconciling the <code>MachineDeployment</code> and <code>MachineSet</code> custom resources. 
-<ol>
-<li>A <code>MachineDeployment</code> provides a declarative update for <code>MachineSet</code> and <code>Machines</code>. Analogous to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/deployment/">Deployments</a>. </li>
-<li>A <code>MachineSet</code> ensures that the specified number of <code>Machine</code> replicas are running at a given point of time. Analogoues to k8s <a href="https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/">ReplicaSets</a></li>
-</ol>
-</li>
-<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/cmd/machine-controller-manager/controller_manager.go#L40">MCM Main</a> which creates and start s the MCM Controller.</li>
+<li>The <a href="https://github.com/gardener/machine-controller-manager/blob/51cea3373d8be7c78aee3f7a4664ccd31f439269/pkg/controller/controller.go#L421">MCM Controller Type</a> and <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/controller/controller.go#L62">MCM Controller Factory Method</a>. The <code>MCM Controller</code> is responsible for reconciling the <code>MachineDeployment</code> and <code>MachineSet</code> custom resources. </li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/cmd/machine-controller-manager/controller_manager.go#L40">MCM Main</a> which creates and starts the MCM Controller.</li>
 <li>The <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/controller.go#L252">MC Controller Type</a> and <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/controller.go#L77">MC Controller Factory Method</a>.
 <ol>
 <li>The <code>MC Controller</code> implements the reconciliation loop for <code>MachineClass</code> and <code>Machine</code> objects but delegates creation/updation/deletion/status-retrieval of Machines to the <code>Driver</code> facade. </li>
 </ol>
 </li>
 <li>The <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/driver/driver.go#L28">Driver</a> facade that abstracts away the lifecycle operations on Machines and obtaining Machine status.</li>
-<li>Utility Code used provider modules (TODO: give internal links)</li>
+<li>Utility Code leveraged by provider modules. </li>
 </ol>
 </li>
 <li>The provider specific modules named as <code>machine-controller-manager-provider-&lt;providerName&gt;</code>. 
@@ -205,7 +211,7 @@ flowchart TB
 </ol>
 <p>The MCM leverages the <em>old-school</em> technique of writing controllers directly using <a href="https://github.com/kubernetes/sample-controller/blob/master/docs/controller-client-go.md">client-go</a>. Skeleton code for client types is generated using <a href="https://github.com/kubernetes/community/blob/master/contributors/devel/sig-api-machinery/generating-clientset.md">client-gen</a>. A barebones example is illustrated in the <a href="https://github.com/kubernetes/sample-controller">sample controller</a>. </p>
 <p>The Modern Way of writing controllers is by leveraging the <a href="https://github.com/kubernetes-sigs/controller-runtime">Controller Runtime</a> and generating skeletal code fur custom controllers using the <a href="https://book.kubebuilder.io/quick-start.html">Kubebuilder Tool</a>.</p>
-<p>The MCM has a planned backlog to port the project to the controller runtime. The details of this will be documented in a separate proposal. (TODO: link me). </p>
+<p>The MCM has a planned backlog to port the project to the controller runtime. The details of this will be documented in a separate proposal. (TODO: link me in future). </p>
 <p>This book describes the current design of the MCM in order to aid code comprehension for development, enhancement and migratiion/port activities.</p>
 <h1 id="change-log"><a class="header" href="#change-log">Change Log</a></h1>
 <ul>
@@ -237,6 +243,7 @@ TODO - evictPodsWithPVInternal (complicated due to concurrent flow)</li>
 <li><a href="k8s_facilities.html#ownerreferences">OwnerReferences</a></li>
 <li><a href="k8s_facilities.html#finalizers-and-deletion">Finalizers and Deletion</a></li>
 <li><a href="k8s_facilities.html#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></li>
+<li><a href="k8s_facilities.html#rawextension">RawExtension</a></li>
 </ul>
 </li>
 <li><a href="k8s_facilities.html#api-errors">API Errors</a>
@@ -301,6 +308,7 @@ TODO - evictPodsWithPVInternal (complicated due to concurrent flow)</li>
 <li><a href="k8s_facilities.html#persistentvolumeclaim">PersistentVolumeClaim</a></li>
 </ul>
 </li>
+<li><a href="k8s_facilities.html#secret">Secret</a></li>
 </ul>
 </li>
 <li><a href="k8s_facilities.html#client-go">client-go</a>
@@ -414,6 +422,14 @@ TODO - evictPodsWithPVInternal (complicated due to concurrent flow)</li>
 <h5 id="diff-between-labels-and-annotations"><a class="header" href="#diff-between-labels-and-annotations">Diff between Labels and Annotations</a></h5>
 <p><em>Labels</em> are used in conjunction with selectors to identify groups of related resources and meant to be meaningful to users. Because selectors are used to query labels, this operation needs to be efficient. To ensure efficient queries, labels are constrained by RFC 1123. RFC 1123, among other constraints, restricts labels to a maximum 63 character length. Thus, labels should be used when you want Kubernetes to group a set of related resources. See https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/ on label key and value restrictions</p>
 <p><em>Annotations</em> are used for “non-identifying information” i.e., metadata that Kubernetes does not care about. As such, annotation keys and values have no constraints. Can include characters not </p>
+<h5 id="rawextension"><a class="header" href="#rawextension">RawExtension</a></h5>
+<p><a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/runtime#RawExtension">k8s.io/apimachinery/pkg/runtime.RawExtension</a> is used to hold extension objects whose structures can be arbitrary. An example of MCM type that leverages this is the <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineClass">MachineClass</a> type whose <code>ProviderSpec</code> field is of type <code>runtime.RawExtension</code> and whose structure can vary according to the provider.</p>
+<p>One can use a different custom structure type for each extension variant and then decode the field into an instance of that extension structure type using the standard Go json decoder.</p>
+<p>Example:</p>
+<pre><code class="language-go">var providerSpec *api.AWSProviderSpec
+json.Unmarshal(machineClass.ProviderSpec.Raw, &amp;providerSpec)
+</code></pre>
+<p>One can</p>
 <h4 id="api-errors"><a class="header" href="#api-errors">API Errors</a></h4>
 <p><a href="https://pkg.go.dev/k8s.io/apimachinery@v0.25.2/pkg/api/errors">k8s.io/apimachinery/pkg/api/errors</a> provides detailed error types  ans <code>IsXXX</code> methods for k8s api errors.</p>
 <h5 id="errorsisnotfound"><a class="header" href="#errorsisnotfound">errors.IsNotFound</a></h5>
@@ -1020,6 +1036,13 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
 <li><a href="mcm_facilities.html#finalizers">Finalizers</a></li>
 </ul>
 </li>
+<li><a href="mcm_facilities.html#machineclass">MachineClass</a>
+<ul>
+<li><a href="mcm_facilities.html#nodetemplate">NodeTemplate</a></li>
+</ul>
+</li>
+<li><a href="mcm_facilities.html#machineset">MachineSet</a></li>
+<li><a href="mcm_facilities.html#machinedeployment">MachineDeployment</a></li>
 </ul>
 </li>
 <li><a href="mcm_facilities.html#utilities">Utilities</a>
@@ -1080,9 +1103,10 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
 <h1 id="mcm-facilities"><a class="header" href="#mcm-facilities">MCM Facilities</a></h1>
 <p>This chapter describes the core types and utilities present in the MCM module and used by the controllers and drivers.</p>
 <h2 id="machine-controller-core-types"><a class="header" href="#machine-controller-core-types">Machine Controller Core Types</a></h2>
-<p>The relevant machine types managed by the MCM controlled reside in <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1">github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1</a>. This follows the standard location for client gen types <code>&lt;module&gt;/pkg/apis/&lt;group&gt;/&lt;version&gt;</code></p>
+<p>The relevant machine types managed by the MCM controlled reside in <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1">github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1</a>. This follows the standard location for client gen types <code>&lt;module&gt;/pkg/apis/&lt;group&gt;/&lt;version&gt;</code>.</p>
+<p>Example: <code>Machine</code> type is <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#Machine">pkg/apis/machine/v1alpha1.Machine</a></p>
 <h3 id="machine"><a class="header" href="#machine">Machine</a></h3>
-<p>Machine is the representation of a physical or virtual machine that corresponds to a front-end k8s node object. An example YAML looks like the below</p>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#Machine">Machine</a> is the representation of a physical or virtual machine that corresponds to a front-end k8s node object. An example YAML looks like the below</p>
 <pre><code class="language-yaml">apiVersion: machine.sapcloud.io/v1alpha1
 kind: Machine
 metadata:
@@ -1093,7 +1117,6 @@ spec:
     kind: MachineClass
     name: test-class
 </code></pre>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/apis/machine/v1alpha1/machine_types.go#L39">pkg/apis/machine/v1alpha1.Machine</a></p>
 <p>A <code>Machine</code> has a <code>Spec</code> field represented by <a href="mcm_facilities.html#machinespec">MachineSpec</a></p>
 <pre><code class="language-go">type Machine struct {
 	// ObjectMeta for machine object
@@ -1304,6 +1327,121 @@ const (
 <li><code>MCMFinalizerName</code> is the finalizer used to tag dependecies before deletion</li>
 <li><code>MCFinalizerName</code> is the finalizer added on <code>Secret</code> objects.</li>
 </ol>
+<h3 id="machineclass"><a class="header" href="#machineclass">MachineClass</a></h3>
+<p>A <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineClass">MachineClass</a> is used to used to templatize and re-use provider configuration across multiple Machines or MachineSets or MachineDeployments</p>
+<details>
+<summary>Example MachineClass YAML for AWS provider</summary>
+<pre><code class="language-yaml">apiVersion: machine.sapcloud.io/v1alpha1
+credentialsSecretRef:
+  name: cloudprovider
+  namespace: shoot--i544024--hana-test
+kind: MachineClass
+metadata:
+  creationTimestamp: &quot;2022-10-20T13:08:07Z&quot;
+  finalizers:
+  - machine.sapcloud.io/machine-controller-manager
+  generation: 1
+  labels:
+    failure-domain.beta.kubernetes.io/zone: eu-west-1c
+  name: shoot--i544024--hana-test-whana-z1-b0f23
+  namespace: shoot--i544024--hana-test
+  resourceVersion: &quot;38424578&quot;
+  uid: 656f863e-5061-420f-8710-96dcc9777be4
+nodeTemplate:
+  capacity:
+    cpu: &quot;4&quot;
+    gpu: &quot;1&quot;
+    memory: 61Gi
+  instanceType: p2.xlarge
+  region: eu-west-1
+  zone: eu-west-1c
+provider: AWS
+providerSpec:
+  ami: ami-0c3484dbcde4c4d0c
+  blockDevices:
+  - ebs:
+      deleteOnTermination: true
+      encrypted: true
+      volumeSize: 50
+      volumeType: gp3
+  iam:
+    name: shoot--i544024--hana-test-nodes
+  keyName: shoot--i544024--hana-test-ssh-publickey
+  machineType: p2.xlarge
+  networkInterfaces:
+  - securityGroupIDs:
+    - sg-0445497aa49ddecb2
+    subnetID: subnet-04a338730d20ea601
+  region: eu-west-1
+  srcAndDstChecksEnabled: false
+  tags:
+    kubernetes.io/arch: amd64
+    kubernetes.io/cluster/shoot--i544024--hana-test: &quot;1&quot;
+    kubernetes.io/role/node: &quot;1&quot;
+    networking.gardener.cloud/node-local-dns-enabled: &quot;true&quot;
+    node.kubernetes.io/role: node
+    worker.garden.sapcloud.io/group: whana
+    worker.gardener.cloud/cri-name: containerd
+    worker.gardener.cloud/pool: whana
+    worker.gardener.cloud/system-components: &quot;true&quot;
+secretRef:
+  name: shoot--i544024--hana-test-whana-z1-b0f23
+  namespace: shoot--i544024--hana-test
+</code></pre>
+</details>
+<br />
+<p>Type definition for <code>MachineClass</code> shown below</p>
+<pre><code class="language-go">type MachineClass struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+
+	ProviderSpec runtime.RawExtension `json:&quot;providerSpec&quot;`
+	SecretRef *corev1.SecretReference `json:&quot;secretRef,omitempty&quot;`
+	CredentialsSecretRef *corev1.SecretReference
+	Provider string 
+
+
+	NodeTemplate *NodeTemplate 
+}
+</code></pre>
+<p>Notes</p>
+<ul>
+<li>As can be seen above , the provider specific configuration to create a node is specified in <code>MachineClass.ProviderSpec</code> and this is of extensible custom type <a href="./k8s_facilities.html#rawextension">runtime.RawExtension</a>. This permits instances of different structure types like AWS <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager-provider-aws@v0.14.0/pkg/aws/apis#AWSProviderSpec">aws/api/AWSProviderSpec</a> or <a href="https://github.com/gardener/machine-controller-manager-provider-azure/blob/v0.9.0/pkg/azure/apis/azure_provider_spec.go#L38">azure/apis.AzureProviderSpec</a> to be held within a single type.</li>
+<li><code>MachineClass.SecretRef</code> stores the necessary secrets such as cloud credentials or userdata (holding bootstrap tokens) 
+<ul>
+<li><code>MachineClass.CredentialsSecretRef</code> can optionally store the credentials if it is not set in the secret ref. (TODO: Unsure why)</li>
+</ul>
+</li>
+<li><code>MachineClass.Provider</code> is specified as the combination of name and location of cloud-specific drivers. (Unsure if this is being actually being followed as for AWS&amp;Azure this is set to simply <code>AWS</code> and <code>Azure</code> respectively)</li>
+</ul>
+<h4 id="nodetemplate"><a class="header" href="#nodetemplate">NodeTemplate</a></h4>
+<p>A <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#NodeTemplate">NodeTemplate</a> as shown below</p>
+<ol>
+<li><code>Capacity</code> is of type <a href="https://pkg.go.dev/k8s.io/api/core/v1#ResourceList">k8s.io/api/core/v1.ResourceList</a> which is effectively a map of (resource name, quantity) pairs. Similar to <a href="./k8s_facilities.html#capacity">Node Capacity</a>, it has keys like <code>cpu</code>, <code>gpu</code>, <code>memory</code>, <code>storage</code>, etc and string values that are represented by <a href="https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource#Quantity">resource.Quantity</a></li>
+<li><code>InstanceType</code> provider specific Instance type of the node belonging to nodeGroup. For AWS this would be the EC2 instance type like <code>p2.xlarge</code> for AWS.</li>
+<li><code>Region</code>: provider specific region name like <code>eu-west-1</code> for AWS.</li>
+<li><code>Zone</code>: provider specified Availability Zone like <code>eu-west-1c</code> for AWS.</li>
+</ol>
+<pre><code class="language-go">type NodeTemplate struct {
+	Capacity corev1.ResourceList 
+	InstanceType string 
+	Region string 
+	Zone string 
+}
+</code></pre>
+<p>Example</p>
+<pre><code class="language-yaml">nodeTemplate:
+  capacity:
+    cpu: &quot;4&quot;
+    gpu: &quot;1&quot;
+    memory: 61Gi
+  instanceType: p2.xlarge
+  region: eu-west-1
+  zone: eu-west-1c
+
+</code></pre>
+<h3 id="machineset"><a class="header" href="#machineset">MachineSet</a></h3>
+<h3 id="machinedeployment"><a class="header" href="#machinedeployment">MachineDeployment</a></h3>
 <h2 id="utilities"><a class="header" href="#utilities">Utilities</a></h2>
 <h3 id="nodeops"><a class="header" href="#nodeops">NodeOps</a></h3>
 <h4 id="nodeopsgetnodecondition"><a class="header" href="#nodeopsgetnodecondition">nodeops.GetNodeCondition</a></h4>
@@ -1747,8 +1885,12 @@ func New(code codes.Code, msg string) *Status {
 </li>
 <li><a href="machine-controller/index.html#machine-controller-loop">Machine Controller Loop</a>
 <ul>
-<li><a href="machine-controller/index.html#apprun">app.run</a></li>
-<li><a href="machine-controller/index.html#appstartcontrollers">app.startcontrollers</a></li>
+<li><a href="machine-controller/index.html#apprun">app.Run</a>
+<ul>
+<li><a href="machine-controller/index.html#summary-1">Summary</a></li>
+</ul>
+</li>
+<li><a href="machine-controller/index.html#appstartcontrollers">app.StartControllers</a></li>
 <li><a href="machine-controller/index.html#controller-initialization">controller initialization</a>
 <ul>
 <li><a href="machine-controller/index.html#1-newcontroller-factory-func">1. newcontroller factory func</a></li>
@@ -1844,9 +1986,10 @@ InitFlags--aws--&gt;NewPlatformDriver[&quot;
 
 NewLocalDriver--&gt;AppRun[&quot;
 	err := app.Run(mc, driver)
-	if err != nil os.Exit(1)
 &quot;]
 NewPlatformDriver--&gt;AppRun
+AppRun--&gt;End((&quot;if err != nil 
+os.Exit(1)&quot;))
 </pre>
 <h4 id="summary"><a class="header" href="#summary">Summary</a></h4>
 <ul>
@@ -1894,12 +2037,20 @@ NewPlatformDriver--&gt;AppRun
 </li>
 </ul>
 <h2 id="machine-controller-loop"><a class="header" href="#machine-controller-loop">Machine Controller Loop</a></h2>
-<h3 id="apprun"><a class="header" href="#apprun">app.run</a></h3>
-<p><code>app.run</code> is the function that setups the main control loop of the machine controller server. </p>
+<h3 id="apprun"><a class="header" href="#apprun">app.Run</a></h3>
+<p><code>app.Run</code> is the function that setups the main control loop of the machine controller server. </p>
+<pre><code class="language-go">func Run(s *options.MCServer, driver driver.Driver) error
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TB
+
+Begin((&quot; &quot;))
+</pre>
+<h4 id="summary-1"><a class="header" href="#summary-1">Summary</a></h4>
 <ul>
-<li><a href="https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l77">app.run(s *options.mcserver, driver driver.driger)</a> is the common run loop for all machine controllers</li>
-<li>creates <code>targetkubeconfig</code> and <code>controlkubeconfig</code> of type <code>k8s.io/client-go/rest.config</code> from the target kube config path using <code>clientcmd.buildconfigfromflags</code></li>
-<li>set fields such as <code>config.qps</code> and <code>config.burst</code>  in both <code>targetkubeconfig</code> and <code>controlkubeconfig</code> from the <code>options.newmcserver</code></li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L77">app.Run(s *options.MCServer, driver driver.Driver)</a> is the common run loop for all provider Machine Controllers.</li>
+<li>Creates <code>targetkubeconfig</code> and <code>controlkubeconfig</code> of type <code>k8s.io/client-go/rest.config</code> from the target kube config path using <code>clientcmd.BuildConfigFromFlags</code></li>
+<li>set fields such as <code>config.QPS</code> and <code>config.Burst</code>  in both <code>targetkubeconfig</code> and <code>controlkubeconfig</code> from the <code>options.newmcserver</code></li>
 <li>create <code>kubeclientcontrol</code> from the <code>controlkubeconfig</code> using the standard client-go client factory metohd: <code>kubernetes.newforconfig</code> that returns a <code>client-go/kubernetes.clientset</code></li>
 <li>similarly create another <code>clientset</code> named <code>leaderelectionclient</code> using <code>controlkubeconfig</code></li>
 <li>start a go routine using the function <code>starthttp</code> that registers a bunch of http handlers for the go profiler, prometheus metrics and the health check.</li>
@@ -1928,10 +2079,10 @@ NewPlatformDriver--&gt;AppRun
 </ul>
 </li>
 </ul>
-<h3 id="appstartcontrollers"><a class="header" href="#appstartcontrollers">app.startcontrollers</a></h3>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l202">app.startcontrollers</a> starts all controllers which are part fo machine controller. currently there is only one controller: the machine controller started.</p>
+<h3 id="appstartcontrollers"><a class="header" href="#appstartcontrollers">app.StartControllers</a></h3>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L202">app.StartControllers</a> starts all controller loops which are part of the machine controller. </p>
 <ul>
-<li>calls <code>getavailableresources</code> using the <code>controlcoreclientbuilder</code> that returns a <code>map[schema.groupversionresource]bool]</code> assigned to <code>availableresources</code>
+<li>calls <code>GetAvailableResources</code> using the <code>controlcoreclientbuilder</code> that returns a <code>map[schema.groupversionresource]bool]</code> assigned to <code>availableresources</code>
 <ul>
 <li><code>getavailableresources</code> waits till the api server is running by checking its <code>/healthz</code> using <code>wait.pollimmediate</code>. keeps re-creating the client using <code>clientbuilder.client</code> method. </li>
 <li>then uses <code>clientset.interface.discovery.serverresources</code> to get a <code>[]*metav1.apiresourcelist</code> (which encapsulates a <code>[]apiresources</code>) and then converts that to a <code>map[schema.groupversionresource]bool]</code> `</li>
@@ -1976,7 +2127,7 @@ NewPlatformDriver--&gt;AppRun
 <code>machine-controller-manager/pkg/util/provider/machinecontroller/controller.newcontroller</code> factory function which initializes the <code>controller</code> struct.</p>
 <h4 id="1-newcontroller-factory-func"><a class="header" href="#1-newcontroller-factory-func">1. newcontroller factory func</a></h4>
 <p>mc is constructed using the factory function below:</p>
-<pre><code class="language-go">func newcontroller(
+<pre><code class="language-go">func NewController(
 	namespace string,
 	controlmachineclient machineapi.machinev1alpha1interface,
 	controlcoreclient kubernetes.interface,

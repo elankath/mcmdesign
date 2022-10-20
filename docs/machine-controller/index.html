@@ -158,8 +158,12 @@
 </li>
 <li><a href="#machine-controller-loop">Machine Controller Loop</a>
 <ul>
-<li><a href="#apprun">app.run</a></li>
-<li><a href="#appstartcontrollers">app.startcontrollers</a></li>
+<li><a href="#apprun">app.Run</a>
+<ul>
+<li><a href="#summary-1">Summary</a></li>
+</ul>
+</li>
+<li><a href="#appstartcontrollers">app.StartControllers</a></li>
 <li><a href="#controller-initialization">controller initialization</a>
 <ul>
 <li><a href="#1-newcontroller-factory-func">1. newcontroller factory func</a></li>
@@ -255,9 +259,10 @@ InitFlags--aws--&gt;NewPlatformDriver[&quot;
 
 NewLocalDriver--&gt;AppRun[&quot;
 	err := app.Run(mc, driver)
-	if err != nil os.Exit(1)
 &quot;]
 NewPlatformDriver--&gt;AppRun
+AppRun--&gt;End((&quot;if err != nil 
+os.Exit(1)&quot;))
 </pre>
 <h4 id="summary"><a class="header" href="#summary">Summary</a></h4>
 <ul>
@@ -305,12 +310,20 @@ NewPlatformDriver--&gt;AppRun
 </li>
 </ul>
 <h2 id="machine-controller-loop"><a class="header" href="#machine-controller-loop">Machine Controller Loop</a></h2>
-<h3 id="apprun"><a class="header" href="#apprun">app.run</a></h3>
-<p><code>app.run</code> is the function that setups the main control loop of the machine controller server. </p>
+<h3 id="apprun"><a class="header" href="#apprun">app.Run</a></h3>
+<p><code>app.Run</code> is the function that setups the main control loop of the machine controller server. </p>
+<pre><code class="language-go">func Run(s *options.MCServer, driver driver.Driver) error
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TB
+
+Begin((&quot; &quot;))
+</pre>
+<h4 id="summary-1"><a class="header" href="#summary-1">Summary</a></h4>
 <ul>
-<li><a href="https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l77">app.run(s *options.mcserver, driver driver.driger)</a> is the common run loop for all machine controllers</li>
-<li>creates <code>targetkubeconfig</code> and <code>controlkubeconfig</code> of type <code>k8s.io/client-go/rest.config</code> from the target kube config path using <code>clientcmd.buildconfigfromflags</code></li>
-<li>set fields such as <code>config.qps</code> and <code>config.burst</code>  in both <code>targetkubeconfig</code> and <code>controlkubeconfig</code> from the <code>options.newmcserver</code></li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L77">app.Run(s *options.MCServer, driver driver.Driver)</a> is the common run loop for all provider Machine Controllers.</li>
+<li>Creates <code>targetkubeconfig</code> and <code>controlkubeconfig</code> of type <code>k8s.io/client-go/rest.config</code> from the target kube config path using <code>clientcmd.BuildConfigFromFlags</code></li>
+<li>set fields such as <code>config.QPS</code> and <code>config.Burst</code>  in both <code>targetkubeconfig</code> and <code>controlkubeconfig</code> from the <code>options.newmcserver</code></li>
 <li>create <code>kubeclientcontrol</code> from the <code>controlkubeconfig</code> using the standard client-go client factory metohd: <code>kubernetes.newforconfig</code> that returns a <code>client-go/kubernetes.clientset</code></li>
 <li>similarly create another <code>clientset</code> named <code>leaderelectionclient</code> using <code>controlkubeconfig</code></li>
 <li>start a go routine using the function <code>starthttp</code> that registers a bunch of http handlers for the go profiler, prometheus metrics and the health check.</li>
@@ -339,10 +352,10 @@ NewPlatformDriver--&gt;AppRun
 </ul>
 </li>
 </ul>
-<h3 id="appstartcontrollers"><a class="header" href="#appstartcontrollers">app.startcontrollers</a></h3>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l202">app.startcontrollers</a> starts all controllers which are part fo machine controller. currently there is only one controller: the machine controller started.</p>
+<h3 id="appstartcontrollers"><a class="header" href="#appstartcontrollers">app.StartControllers</a></h3>
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L202">app.StartControllers</a> starts all controller loops which are part of the machine controller. </p>
 <ul>
-<li>calls <code>getavailableresources</code> using the <code>controlcoreclientbuilder</code> that returns a <code>map[schema.groupversionresource]bool]</code> assigned to <code>availableresources</code>
+<li>calls <code>GetAvailableResources</code> using the <code>controlcoreclientbuilder</code> that returns a <code>map[schema.groupversionresource]bool]</code> assigned to <code>availableresources</code>
 <ul>
 <li><code>getavailableresources</code> waits till the api server is running by checking its <code>/healthz</code> using <code>wait.pollimmediate</code>. keeps re-creating the client using <code>clientbuilder.client</code> method. </li>
 <li>then uses <code>clientset.interface.discovery.serverresources</code> to get a <code>[]*metav1.apiresourcelist</code> (which encapsulates a <code>[]apiresources</code>) and then converts that to a <code>map[schema.groupversionresource]bool]</code> `</li>
@@ -387,7 +400,7 @@ NewPlatformDriver--&gt;AppRun
 <code>machine-controller-manager/pkg/util/provider/machinecontroller/controller.newcontroller</code> factory function which initializes the <code>controller</code> struct.</p>
 <h4 id="1-newcontroller-factory-func"><a class="header" href="#1-newcontroller-factory-func">1. newcontroller factory func</a></h4>
 <p>mc is constructed using the factory function below:</p>
-<pre><code class="language-go">func newcontroller(
+<pre><code class="language-go">func NewController(
 	namespace string,
 	controlmachineclient machineapi.machinev1alpha1interface,
 	controlcoreclient kubernetes.interface,

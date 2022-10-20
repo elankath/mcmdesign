@@ -11,6 +11,10 @@
 			- [CurrentStatus](#currentstatus)
 				- [MachinePhase](#machinephase)
 			- [Finalizers](#finalizers)
+		- [MachineClass](#machineclass)
+			- [NodeTemplate](#nodetemplate)
+		- [MachineSet](#machineset)
+		- [MachineDeployment](#machinedeployment)
 	- [Utilities](#utilities)
 		- [NodeOps](#nodeops)
 			- [nodeops.GetNodeCondition](#nodeopsgetnodecondition)
@@ -40,13 +44,14 @@ This chapter describes the core types and utilities present in the MCM module an
 
 ## Machine Controller Core Types
 
-The relevant machine types managed by the MCM controlled reside in [github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1). This follows the standard location for client gen types `<module>/pkg/apis/<group>/<version>`
+The relevant machine types managed by the MCM controlled reside in [github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1). This follows the standard location for client gen types `<module>/pkg/apis/<group>/<version>`.
 
+Example: `Machine` type is [pkg/apis/machine/v1alpha1.Machine](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#Machine)
 
 
 ### Machine
 
-Machine is the representation of a physical or virtual machine that corresponds to a front-end k8s node object. An example YAML looks like the below
+[Machine](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#Machine) is the representation of a physical or virtual machine that corresponds to a front-end k8s node object. An example YAML looks like the below
 ```yaml
 apiVersion: machine.sapcloud.io/v1alpha1
 kind: Machine
@@ -58,7 +63,6 @@ spec:
     kind: MachineClass
     name: test-class
 ```
-[pkg/apis/machine/v1alpha1.Machine](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/apis/machine/v1alpha1/machine_types.go#L39)
 
 A `Machine` has a `Spec` field represented by [MachineSpec](#machinespec)
 ```go
@@ -303,6 +307,126 @@ const (
 1. `MCMFinalizerName` is the finalizer used to tag dependecies before deletion
 2. `MCFinalizerName` is the finalizer added on `Secret` objects.
 
+### MachineClass
+
+A [MachineClass](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineClass) is used to used to templatize and re-use provider configuration across multiple Machines or MachineSets or MachineDeployments
+
+<details>
+<summary>Example MachineClass YAML for AWS provider</summary>
+
+```yaml
+apiVersion: machine.sapcloud.io/v1alpha1
+credentialsSecretRef:
+  name: cloudprovider
+  namespace: shoot--i544024--hana-test
+kind: MachineClass
+metadata:
+  creationTimestamp: "2022-10-20T13:08:07Z"
+  finalizers:
+  - machine.sapcloud.io/machine-controller-manager
+  generation: 1
+  labels:
+    failure-domain.beta.kubernetes.io/zone: eu-west-1c
+  name: shoot--i544024--hana-test-whana-z1-b0f23
+  namespace: shoot--i544024--hana-test
+  resourceVersion: "38424578"
+  uid: 656f863e-5061-420f-8710-96dcc9777be4
+nodeTemplate:
+  capacity:
+    cpu: "4"
+    gpu: "1"
+    memory: 61Gi
+  instanceType: p2.xlarge
+  region: eu-west-1
+  zone: eu-west-1c
+provider: AWS
+providerSpec:
+  ami: ami-0c3484dbcde4c4d0c
+  blockDevices:
+  - ebs:
+      deleteOnTermination: true
+      encrypted: true
+      volumeSize: 50
+      volumeType: gp3
+  iam:
+    name: shoot--i544024--hana-test-nodes
+  keyName: shoot--i544024--hana-test-ssh-publickey
+  machineType: p2.xlarge
+  networkInterfaces:
+  - securityGroupIDs:
+    - sg-0445497aa49ddecb2
+    subnetID: subnet-04a338730d20ea601
+  region: eu-west-1
+  srcAndDstChecksEnabled: false
+  tags:
+    kubernetes.io/arch: amd64
+    kubernetes.io/cluster/shoot--i544024--hana-test: "1"
+    kubernetes.io/role/node: "1"
+    networking.gardener.cloud/node-local-dns-enabled: "true"
+    node.kubernetes.io/role: node
+    worker.garden.sapcloud.io/group: whana
+    worker.gardener.cloud/cri-name: containerd
+    worker.gardener.cloud/pool: whana
+    worker.gardener.cloud/system-components: "true"
+secretRef:
+  name: shoot--i544024--hana-test-whana-z1-b0f23
+  namespace: shoot--i544024--hana-test
+```
+</details>
+
+<br />
+
+Type definition for `MachineClass` shown below
+```go
+type MachineClass struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+
+	ProviderSpec runtime.RawExtension `json:"providerSpec"`
+	SecretRef *corev1.SecretReference `json:"secretRef,omitempty"`
+	CredentialsSecretRef *corev1.SecretReference
+	Provider string 
+
+
+	NodeTemplate *NodeTemplate 
+}
+```
+Notes
+ - As can be seen above , the provider specific configuration to create a node is specified in `MachineClass.ProviderSpec` and this is of extensible custom type [runtime.RawExtension](./k8s_facilities.md#rawextension). This permits instances of different structure types like AWS [aws/api/AWSProviderSpec](https://pkg.go.dev/github.com/gardener/machine-controller-manager-provider-aws@v0.14.0/pkg/aws/apis#AWSProviderSpec) or [azure/apis.AzureProviderSpec](https://github.com/gardener/machine-controller-manager-provider-azure/blob/v0.9.0/pkg/azure/apis/azure_provider_spec.go#L38) to be held within a single type.
+ - `MachineClass.SecretRef` stores the necessary secrets such as cloud credentials or userdata (holding bootstrap tokens) 
+   - `MachineClass.CredentialsSecretRef` can optionally store the credentials if it is not set in the secret ref. (TODO: Unsure why)
+ - `MachineClass.Provider` is specified as the combination of name and location of cloud-specific drivers. (Unsure if this is being actually being followed as for AWS&Azure this is set to simply `AWS` and `Azure` respectively)
+
+#### NodeTemplate
+
+A [NodeTemplate](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#NodeTemplate) as shown below
+1. `Capacity` is of type [k8s.io/api/core/v1.ResourceList](https://pkg.go.dev/k8s.io/api/core/v1#ResourceList) which is effectively a map of (resource name, quantity) pairs. Similar to [Node Capacity](./k8s_facilities.md#capacity), it has keys like `cpu`, `gpu`, `memory`, `storage`, etc and string values that are represented by [resource.Quantity](https://pkg.go.dev/k8s.io/apimachinery/pkg/api/resource#Quantity)
+2. `InstanceType` provider specific Instance type of the node belonging to nodeGroup. For AWS this would be the EC2 instance type like `p2.xlarge` for AWS.
+3. `Region`: provider specific region name like `eu-west-1` for AWS.
+4. `Zone`: provider specified Availability Zone like `eu-west-1c` for AWS.
+```go
+type NodeTemplate struct {
+	Capacity corev1.ResourceList 
+	InstanceType string 
+	Region string 
+	Zone string 
+}
+```
+Example
+```yaml
+nodeTemplate:
+  capacity:
+    cpu: "4"
+    gpu: "1"
+    memory: 61Gi
+  instanceType: p2.xlarge
+  region: eu-west-1
+  zone: eu-west-1c
+
+```
+### MachineSet
+### MachineDeployment
+
 ## Utilities
 
 ### NodeOps
@@ -386,6 +510,7 @@ subgraph "fn"
 	-->ReturnErr
 end
 ```
+
 
 ### MachineUtils
 

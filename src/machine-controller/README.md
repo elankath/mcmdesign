@@ -5,8 +5,9 @@
 		- [Launch Flow](#launch-flow)
 			- [Summary](#summary)
 	- [Machine Controller Loop](#machine-controller-loop)
-		- [app.run](#apprun)
-		- [app.startcontrollers](#appstartcontrollers)
+		- [app.Run](#apprun)
+			- [Summary](#summary-1)
+		- [app.StartControllers](#appstartcontrollers)
 		- [controller initialization](#controller-initialization)
 			- [1. newcontroller factory func](#1-newcontroller-factory-func)
 			- [1.1 create controller struct](#11-create-controller-struct)
@@ -92,9 +93,10 @@ InitFlags--aws-->NewPlatformDriver["
 
 NewLocalDriver-->AppRun["
 	err := app.Run(mc, driver)
-	if err != nil os.Exit(1)
 "]
 NewPlatformDriver-->AppRun
+AppRun-->End(("if err != nil 
+os.Exit(1)"))
 ```
 #### Summary
 - Creates [machine-controller-manager/pkg/util/provider/app/options.MCServer](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/app/options#MCServer) using `options.NewMCServer` which is the main context object for the machinecontroller that embeds a
@@ -119,13 +121,25 @@ NewPlatformDriver-->AppRun
 
 ## Machine Controller Loop
 
-### app.run
+### app.Run
 
-`app.run` is the function that setups the main control loop of the machine controller server. 
+`app.Run` is the function that setups the main control loop of the machine controller server. 
 
-- [app.run(s *options.mcserver, driver driver.driger)](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l77) is the common run loop for all machine controllers
-- creates `targetkubeconfig` and `controlkubeconfig` of type `k8s.io/client-go/rest.config` from the target kube config path using `clientcmd.buildconfigfromflags`
-- set fields such as `config.qps` and `config.burst`  in both `targetkubeconfig` and `controlkubeconfig` from the `options.newmcserver`
+```go
+func Run(s *options.MCServer, driver driver.Driver) error
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TB
+
+Begin((" "))
+```
+
+#### Summary
+- [app.Run(s *options.MCServer, driver driver.Driver)](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L77) is the common run loop for all provider Machine Controllers.
+- Creates `targetkubeconfig` and `controlkubeconfig` of type `k8s.io/client-go/rest.config` from the target kube config path using `clientcmd.BuildConfigFromFlags`
+- set fields such as `config.QPS` and `config.Burst`  in both `targetkubeconfig` and `controlkubeconfig` from the `options.newmcserver`
 - create `kubeclientcontrol` from the `controlkubeconfig` using the standard client-go client factory metohd: `kubernetes.newforconfig` that returns a `client-go/kubernetes.clientset`
 - similarly create another `clientset` named `leaderelectionclient` using `controlkubeconfig`
 - start a go routine using the function `starthttp` that registers a bunch of http handlers for the go profiler, prometheus metrics and the health check.
@@ -145,9 +159,9 @@ NewPlatformDriver-->AppRun
       - if `startcontrollers` return an error panic and exit `run`.
   - use [leaderelection.runordie](https://github.com/kubernetes/client-go/blob/master/tools/leaderelection/leaderelection.go#l218) to start a leader election and pass the previously created `run` function to the leader callbacks for `onstartedleading`. `onstartedleading` is called when a leaderelector client starts leading.
 
-### app.startcontrollers
-[app.startcontrollers](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l202) starts all controllers which are part fo machine controller. currently there is only one controller: the machine controller started.
-- calls `getavailableresources` using the `controlcoreclientbuilder` that returns a `map[schema.groupversionresource]bool]` assigned to `availableresources`
+### app.StartControllers
+[app.StartControllers](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L202) starts all controller loops which are part of the machine controller. 
+- calls `GetAvailableResources` using the `controlcoreclientbuilder` that returns a `map[schema.groupversionresource]bool]` assigned to `availableresources`
   - `getavailableresources` waits till the api server is running by checking its `/healthz` using `wait.pollimmediate`. keeps re-creating the client using `clientbuilder.client` method. 
   - then uses `clientset.interface.discovery.serverresources` to get a `[]*metav1.apiresourcelist` (which encapsulates a `[]apiresources`) and then converts that to a `map[schema.groupversionresource]bool]` `
 - creates a `controlmachineclient` which is a client for the controller crd types (type: `versioned.interface`) using `controlmachineclientbuilder.clientordie` using `machine-controller` as client name. this client targets the control cluster - ie the cluster holding the machine cr's.
@@ -184,7 +198,7 @@ NewPlatformDriver-->AppRun
 
 mc is constructed using the factory function below:
 ```go
-func newcontroller(
+func NewController(
 	namespace string,
 	controlmachineclient machineapi.machinev1alpha1interface,
 	controlcoreclient kubernetes.interface,
