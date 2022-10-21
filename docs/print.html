@@ -1045,8 +1045,17 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
 <li><a href="mcm_facilities.html#nodetemplate">NodeTemplate</a></li>
 </ul>
 </li>
-<li><a href="mcm_facilities.html#machineset">MachineSet</a></li>
-<li><a href="mcm_facilities.html#machinedeployment">MachineDeployment</a></li>
+<li><a href="mcm_facilities.html#machineset">MachineSet</a>
+<ul>
+<li><a href="mcm_facilities.html#machinesetspec">MachineSetSpec</a></li>
+<li><a href="mcm_facilities.html#example-machineset-yaml">Example MachineSet YAML</a></li>
+</ul>
+</li>
+<li><a href="mcm_facilities.html#machinedeployment">MachineDeployment</a>
+<ul>
+<li><a href="mcm_facilities.html#example-machinedeployment-yaml">Example MachineDeployment YAML</a></li>
+</ul>
+</li>
 <li><a href="mcm_facilities.html#volumeattachment">VolumeAttachment</a></li>
 <li><a href="mcm_facilities.html#volumeattachmentspec">VolumeAttachmentSpec</a></li>
 </ul>
@@ -1476,7 +1485,8 @@ secretAccessKey: dm52MX...
 
 </code></pre>
 <h3 id="machineset"><a class="header" href="#machineset">MachineSet</a></h3>
-<p>A <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSet">MachineSet</a> is to a <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#Machine">Machine</a> in an analogue of what a <a href="https://pkg.go.dev/k8s.io/api/apps/v1#ReplicaSet">ReplicaSet</a> is to a <a href="https://pkg.go.dev/k8s.io/api/core/v1#Pod">Pod</a>. A <code>MachineSet</code> ensures that the specified number of <code>Machines</code> are running at any given time. A <code>MachineSet</code> is rarely rarely created directly. It is generated owned by its parent <a href="mcm_facilities.html#machinedeployment">MachineDeployment</a></p>
+<p>A <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSet">MachineSet</a> is to a <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#Machine">Machine</a> in an analogue of what a <a href="https://pkg.go.dev/k8s.io/api/apps/v1#ReplicaSet">ReplicaSet</a> is to a <a href="https://pkg.go.dev/k8s.io/api/core/v1#Pod">Pod</a>. A <code>MachineSet</code> ensures that the specified number of <code>Machines</code> are running at any given time. A <code>MachineSet</code> is rarely rarely created directly. It is generally owned by its parent <a href="mcm_facilities.html#machinedeployment">MachineDeployment</a> and its <code>ObjectMetadata.OwnerReferenes</code> slice has a reference to the parent deployment.</p>
+<p><code>MachineSet</code> struct is defined as follows:</p>
 <pre><code class="language-go">type MachineSet struct {
 	metav1.ObjectMeta 
 	metav1.TypeMeta
@@ -1485,7 +1495,167 @@ secretAccessKey: dm52MX...
 	Status MachineSetStatus 
 }
 </code></pre>
+<h4 id="machinesetspec"><a class="header" href="#machinesetspec">MachineSetSpec</a></h4>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSetSpec">MachineSetSpec</a> is the specification of a MachineSet.</p>
+<pre><code class="language-go">type MachineSetSpec struct {
+	Replicas int32 
+	Selector *metav1.LabelSelector 
+	MinReadySeconds int32 
+	MachineClass ClassSpec 
+	Template MachineTemplateSpec // Am I used ?
+}
+type ClassSpec struct {
+	APIGroup string 
+	Kind string 
+	Name string 
+}
+type MachineTemplateSpec struct { 
+	metav1.ObjectMeta 
+	Spec MachineSpec
+}
+</code></pre>
+<ul>
+<li><code>MachineSetSpec.Replicas</code> is the number of desired replicas.</li>
+<li><code>MachineSetSpec.Selector</code> is a label query over machines that should match the replica count. See <a href="https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors">Label Selectors</a></li>
+<li><code>MachineSetSpec.MinReadySeconds</code> - TODO: unsure ? Mininum number of seconds for which a newly created <code>Machine</code> should be ready for it to be considered as available ? (guessing here - can't find the code using this). Usually specified as <code>500</code> (ie in the YAML)</li>
+<li><code>MachineSetSpec.MachineClass</code> is an instance of type <code>ClassSpec</code> which is a reference type to the <a href="mcm_facilities.html#machineclass">MachineClass</a>.</li>
+<li>TODO: Discuss whether needed. <code>MachineSetSpec.Template</code> is an instance of <code>MachineTemplateSpec</code> which is an encapsulation over <a href="mcm_facilities.html#machinespec">MachineSpec</a>. I don't see this used since <code>MachineSetSpec.MachineClass</code> is already a reference to a <code>MachineClass</code> which by definition is a template.</li>
+</ul>
+<h4 id="example-machineset-yaml"><a class="header" href="#example-machineset-yaml">Example MachineSet YAML</a></h4>
+<details>
+<summary>AWs MachineSet YAML</summary>
+<pre><code class="language-yaml">apiVersion: machine.sapcloud.io/v1alpha1
+kind: MachineSet
+metadata:
+  annotations:
+    deployment.kubernetes.io/desired-replicas: &quot;1&quot;
+    deployment.kubernetes.io/max-replicas: &quot;2&quot;
+    deployment.kubernetes.io/revision: &quot;1&quot;
+  creationTimestamp: &quot;2022-10-20T13:53:01Z&quot;
+  finalizers:
+  - machine.sapcloud.io/machine-controller-manager
+  generation: 1
+  labels:
+    machine-template-hash: &quot;2415498538&quot;
+    name: shoot--i034796--tre-worker-q3rb4-z1
+  name: shoot--i034796--tre-worker-q3rb4-z1-68598
+  namespace: shoot--i034796--tre
+  ownerReferences:
+  - apiVersion: machine.sapcloud.io/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: MachineDeployment
+    name: shoot--i034796--tre-worker-q3rb4-z1
+    uid: f20cba25-2fdb-4315-9e38-d301f5f08459
+  resourceVersion: &quot;38510891&quot;
+  uid: b0f12abc-2d19-4a6e-a69d-4bf4aa12d02b
+spec:
+  minReadySeconds: 500
+  replicas: 1
+  selector:
+    matchLabels:
+      machine-template-hash: &quot;2415498538&quot;
+      name: shoot--i034796--tre-worker-q3rb4-z1
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        machine-template-hash: &quot;2415498538&quot;
+        name: shoot--i034796--tre-worker-q3rb4-z1
+    spec:
+      class:
+        kind: MachineClass
+        name: shoot--i034796--tre-worker-q3rb4-z1-30c4a
+      nodeTemplate:
+        metadata:
+          creationTimestamp: null
+          labels:
+            kubernetes.io/arch: amd64
+            networking.gardener.cloud/node-local-dns-enabled: &quot;true&quot;
+            node.kubernetes.io/role: node
+            topology.ebs.csi.aws.com/zone: eu-west-1b
+            worker.garden.sapcloud.io/group: worker-q3rb4
+            worker.gardener.cloud/cri-name: containerd
+            worker.gardener.cloud/pool: worker-q3rb4
+            worker.gardener.cloud/system-components: &quot;true&quot;
+        spec: {}
+status:
+  availableReplicas: 1
+  fullyLabeledReplicas: 1
+  lastOperation:
+    lastUpdateTime: &quot;2022-10-20T13:55:23Z&quot;
+  observedGeneration: 1
+  readyReplicas: 1
+  replicas: 1
+</code></pre>
+</details>
 <h3 id="machinedeployment"><a class="header" href="#machinedeployment">MachineDeployment</a></h3>
+<p>A <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineDeployment">MachineDeployment</a> is to a <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSet">MachineSet</a> in an analogue of what a <a href="https://pkg.go.dev/k8s.io/api/apps/v1#Deployment">Deployment</a> is to a <a href="https://pkg.go.dev/k8s.io/api/apps/v1#ReplicaSet">ReplicaSet</a>. </p>
+<p>A <code>MachineDeployment</code> manages MachineSets and enables declarative updates for the machines in MachineSets. </p>
+<h4 id="example-machinedeployment-yaml"><a class="header" href="#example-machinedeployment-yaml">Example MachineDeployment YAML</a></h4>
+<details>
+<summary>MachineDeployment YAML</summary>
+<pre><code class="language-yaml">apiVersion: machine.sapcloud.io/v1alpha1
+kind: MachineDeployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: &quot;1&quot;
+  creationTimestamp: &quot;2022-10-20T13:53:01Z&quot;
+  finalizers:
+  - machine.sapcloud.io/machine-controller-manager
+  generation: 1
+  name: shoot--i034796--tre-worker-q3rb4-z1
+  namespace: shoot--i034796--tre
+  resourceVersion: &quot;38510892&quot;
+  uid: f20cba25-2fdb-4315-9e38-d301f5f08459
+spec:
+  minReadySeconds: 500
+  replicas: 1
+  selector:
+    matchLabels:
+      name: shoot--i034796--tre-worker-q3rb4-z1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        name: shoot--i034796--tre-worker-q3rb4-z1
+    spec:
+      class:
+        kind: MachineClass
+        name: shoot--i034796--tre-worker-q3rb4-z1-30c4a
+      nodeTemplate:
+        metadata:
+          creationTimestamp: null
+          labels:
+            kubernetes.io/arch: amd64
+            networking.gardener.cloud/node-local-dns-enabled: &quot;true&quot;
+            node.kubernetes.io/role: node
+            topology.ebs.csi.aws.com/zone: eu-west-1b
+            worker.garden.sapcloud.io/group: worker-q3rb4
+            worker.gardener.cloud/cri-name: containerd
+            worker.gardener.cloud/pool: worker-q3rb4
+            worker.gardener.cloud/system-components: &quot;true&quot;
+        spec: {}
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: &quot;2022-10-20T13:55:23Z&quot;
+    lastUpdateTime: &quot;2022-10-20T13:55:23Z&quot;
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: &quot;True&quot;
+    type: Available
+  observedGeneration: 1
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1
+</code></pre>
+</details>
 <h3 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h3>
 <p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node (specified in <code>VolumeAttachmentSpec.NodeName</code>).</p>
 <pre><code class="language-go">type VolumeAttachment struct {

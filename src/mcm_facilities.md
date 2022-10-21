@@ -15,7 +15,10 @@
 			- [SecretRef and CredentialsSecretRef](#secretref-and-credentialssecretref)
 			- [NodeTemplate](#nodetemplate)
 		- [MachineSet](#machineset)
+			- [MachineSetSpec](#machinesetspec)
+			- [Example MachineSet YAML](#example-machineset-yaml)
 		- [MachineDeployment](#machinedeployment)
+			- [Example MachineDeployment YAML](#example-machinedeployment-yaml)
 		- [VolumeAttachment](#volumeattachment)
 		- [VolumeAttachmentSpec](#volumeattachmentspec)
 	- [Utilities](#utilities)
@@ -461,8 +464,10 @@ nodeTemplate:
 ```
 ### MachineSet
 
-A [MachineSet](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSet) is to a [Machine](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#Machine) in an analogue of what a [ReplicaSet](https://pkg.go.dev/k8s.io/api/apps/v1#ReplicaSet) is to a [Pod](https://pkg.go.dev/k8s.io/api/core/v1#Pod). A `MachineSet` ensures that the specified number of `Machines` are running at any given time. A `MachineSet` is rarely rarely created directly. It is generated owned by its parent [MachineDeployment](#machinedeployment)
+A [MachineSet](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSet) is to a [Machine](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#Machine) in an analogue of what a [ReplicaSet](https://pkg.go.dev/k8s.io/api/apps/v1#ReplicaSet) is to a [Pod](https://pkg.go.dev/k8s.io/api/core/v1#Pod). A `MachineSet` ensures that the specified number of `Machines` are running at any given time. A `MachineSet` is rarely rarely created directly. It is generally owned by its parent [MachineDeployment](#machinedeployment) and its `ObjectMetadata.OwnerReferenes` slice has a reference to the parent deployment.
 
+
+`MachineSet` struct is defined as follows:
 ```go
 type MachineSet struct {
 	metav1.ObjectMeta 
@@ -473,7 +478,181 @@ type MachineSet struct {
 }
 ```
 
+#### MachineSetSpec
+[MachineSetSpec](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSetSpec) is the specification of a MachineSet.
+```go
+type MachineSetSpec struct {
+	Replicas int32 
+	Selector *metav1.LabelSelector 
+	MinReadySeconds int32 
+	MachineClass ClassSpec 
+	Template MachineTemplateSpec // Am I used ?
+}
+type ClassSpec struct {
+	APIGroup string 
+	Kind string 
+	Name string 
+}
+type MachineTemplateSpec struct { 
+	metav1.ObjectMeta 
+	Spec MachineSpec
+}
+```
+- `MachineSetSpec.Replicas` is the number of desired replicas.
+- `MachineSetSpec.Selector` is a label query over machines that should match the replica count. See [Label Selectors](https://kubernetes.io/docs/concepts/overview/working-with-objects/labels/#label-selectors)
+- `MachineSetSpec.MinReadySeconds` - TODO: unsure ? Mininum number of seconds for which a newly created `Machine` should be ready for it to be considered as available ? (guessing here - can't find the code using this). Usually specified as `500` (ie in the YAML)
+- `MachineSetSpec.MachineClass` is an instance of type `ClassSpec` which is a reference type to the [MachineClass](#machineclass).
+- TODO: Discuss whether needed. `MachineSetSpec.Template` is an instance of `MachineTemplateSpec` which is an encapsulation over [MachineSpec](#machinespec). I don't see this used since `MachineSetSpec.MachineClass` is already a reference to a `MachineClass` which by definition is a template.  
+
+#### Example MachineSet YAML
+
+<details>
+<summary>AWs MachineSet YAML</summary>
+
+```yaml
+apiVersion: machine.sapcloud.io/v1alpha1
+kind: MachineSet
+metadata:
+  annotations:
+    deployment.kubernetes.io/desired-replicas: "1"
+    deployment.kubernetes.io/max-replicas: "2"
+    deployment.kubernetes.io/revision: "1"
+  creationTimestamp: "2022-10-20T13:53:01Z"
+  finalizers:
+  - machine.sapcloud.io/machine-controller-manager
+  generation: 1
+  labels:
+    machine-template-hash: "2415498538"
+    name: shoot--i034796--tre-worker-q3rb4-z1
+  name: shoot--i034796--tre-worker-q3rb4-z1-68598
+  namespace: shoot--i034796--tre
+  ownerReferences:
+  - apiVersion: machine.sapcloud.io/v1alpha1
+    blockOwnerDeletion: true
+    controller: true
+    kind: MachineDeployment
+    name: shoot--i034796--tre-worker-q3rb4-z1
+    uid: f20cba25-2fdb-4315-9e38-d301f5f08459
+  resourceVersion: "38510891"
+  uid: b0f12abc-2d19-4a6e-a69d-4bf4aa12d02b
+spec:
+  minReadySeconds: 500
+  replicas: 1
+  selector:
+    matchLabels:
+      machine-template-hash: "2415498538"
+      name: shoot--i034796--tre-worker-q3rb4-z1
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        machine-template-hash: "2415498538"
+        name: shoot--i034796--tre-worker-q3rb4-z1
+    spec:
+      class:
+        kind: MachineClass
+        name: shoot--i034796--tre-worker-q3rb4-z1-30c4a
+      nodeTemplate:
+        metadata:
+          creationTimestamp: null
+          labels:
+            kubernetes.io/arch: amd64
+            networking.gardener.cloud/node-local-dns-enabled: "true"
+            node.kubernetes.io/role: node
+            topology.ebs.csi.aws.com/zone: eu-west-1b
+            worker.garden.sapcloud.io/group: worker-q3rb4
+            worker.gardener.cloud/cri-name: containerd
+            worker.gardener.cloud/pool: worker-q3rb4
+            worker.gardener.cloud/system-components: "true"
+        spec: {}
+status:
+  availableReplicas: 1
+  fullyLabeledReplicas: 1
+  lastOperation:
+    lastUpdateTime: "2022-10-20T13:55:23Z"
+  observedGeneration: 1
+  readyReplicas: 1
+  replicas: 1
+```
+</details>
+
+   
 ### MachineDeployment
+
+A [MachineDeployment](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineDeployment) is to a [MachineSet](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSet) in an analogue of what a [Deployment](https://pkg.go.dev/k8s.io/api/apps/v1#Deployment) is to a [ReplicaSet](https://pkg.go.dev/k8s.io/api/apps/v1#ReplicaSet). 
+
+A `MachineDeployment` manages MachineSets and enables declarative updates for the machines in MachineSets. 
+
+
+#### Example MachineDeployment YAML
+<details>
+<summary>MachineDeployment YAML</summary>
+
+```yaml
+apiVersion: machine.sapcloud.io/v1alpha1
+kind: MachineDeployment
+metadata:
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+  creationTimestamp: "2022-10-20T13:53:01Z"
+  finalizers:
+  - machine.sapcloud.io/machine-controller-manager
+  generation: 1
+  name: shoot--i034796--tre-worker-q3rb4-z1
+  namespace: shoot--i034796--tre
+  resourceVersion: "38510892"
+  uid: f20cba25-2fdb-4315-9e38-d301f5f08459
+spec:
+  minReadySeconds: 500
+  replicas: 1
+  selector:
+    matchLabels:
+      name: shoot--i034796--tre-worker-q3rb4-z1
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        name: shoot--i034796--tre-worker-q3rb4-z1
+    spec:
+      class:
+        kind: MachineClass
+        name: shoot--i034796--tre-worker-q3rb4-z1-30c4a
+      nodeTemplate:
+        metadata:
+          creationTimestamp: null
+          labels:
+            kubernetes.io/arch: amd64
+            networking.gardener.cloud/node-local-dns-enabled: "true"
+            node.kubernetes.io/role: node
+            topology.ebs.csi.aws.com/zone: eu-west-1b
+            worker.garden.sapcloud.io/group: worker-q3rb4
+            worker.gardener.cloud/cri-name: containerd
+            worker.gardener.cloud/pool: worker-q3rb4
+            worker.gardener.cloud/system-components: "true"
+        spec: {}
+status:
+  availableReplicas: 1
+  conditions:
+  - lastTransitionTime: "2022-10-20T13:55:23Z"
+    lastUpdateTime: "2022-10-20T13:55:23Z"
+    message: Deployment has minimum availability.
+    reason: MinimumReplicasAvailable
+    status: "True"
+    type: Available
+  observedGeneration: 1
+  readyReplicas: 1
+  replicas: 1
+  updatedReplicas: 1
+```
+</details>
+
+
+
 
 ### VolumeAttachment
 
