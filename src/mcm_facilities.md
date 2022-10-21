@@ -18,6 +18,8 @@
 			- [MachineSetSpec](#machinesetspec)
 			- [Example MachineSet YAML](#example-machineset-yaml)
 		- [MachineDeployment](#machinedeployment)
+			- [MachineDeploymentSpec](#machinedeploymentspec)
+			- [MachineDeploymentStrategy](#machinedeploymentstrategy)
 			- [Example MachineDeployment YAML](#example-machinedeployment-yaml)
 		- [VolumeAttachment](#volumeattachment)
 		- [VolumeAttachmentSpec](#volumeattachmentspec)
@@ -583,10 +585,74 @@ A [MachineDeployment](https://pkg.go.dev/github.com/gardener/machine-controller-
 
 A `MachineDeployment` manages MachineSets and enables declarative updates for the machines in MachineSets. 
 
+`MachineDeployment` struct is defined as follows
+
+```go
+type MachineDeployment struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+	Spec MachineDeploymentSpec 
+	// Most recently observed status of the MachineDeployment.
+	// +optional
+	Status MachineDeploymentStatus 
+```
+#### MachineDeploymentSpec
+
+[MachineDeploymentSpec](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineDeploymentSpec) is the is the specification of the desired behavior of the MachineDeployment.
+
+```go
+type MachineDeploymentSpec struct {
+	Replicas int32 
+	Selector *metav1.LabelSelector
+	Template MachineTemplateSpec 
+	MinReadySeconds int32 
+	Paused bool 
+	ProgressDeadlineSeconds *int32 
+	Strategy MachineDeploymentStrategy 
+}
+```
+- `Replicas` is number of desired machines.
+- `Selector`is label selector for machines. Usually a `name` label to select machines with a given name matching the deployment name. 
+- `Template` of type [MachineTemplateSpec](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineTemplateSpec) which is an encapsulation over [MachineSpec](#machinespec).
+- `MinReadySeconds` is the Minimum number of seconds for which a newly created machine should be ready without any of its container crashing, for it to be considered available.
+- `Paused` indicates that the `MachineDeployment` is paused and will not be processed by the MCM controller.
+- `Strategy` is the MachineDeploymentStrategy strategy to use to replace existing machines with new ones.
+- `ProgressDeadlineSeconds` maximum time in seconds for a MachineDeployment to make progress before it is considered to be failed. The MachineDeployment controller will continue to  process failed MachineDeployments and a condition with a ProgressDeadlineExceeded  reason will be surfaced in the MachineDeployment status.
+ 
+#### MachineDeploymentStrategy
+
+[MachineDeploymentStrategy](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineDeploymentStrategy) describes how to replace existing machines with new ones.
+
+```go
+type MachineDeploymentStrategy struct {
+	Type MachineDeploymentStrategyType
+	RollingUpdate *RollingUpdateMachineDeployment
+}
+
+type MachineDeploymentStrategyType string
+const (
+	RecreateMachineDeploymentStrategyType MachineDeploymentStrategyType = "Recreate"
+	RollingUpdateMachineDeploymentStrategyType MachineDeploymentStrategyType = "RollingUpdate"
+)
+
+type RollingUpdateMachineDeployment struct {
+	MaxUnavailable *intstr.IntOrString
+	MaxSurge *intstr.IntOrString
+}
+
+```
+1. `Type`is one of the `MachineDeploymentStrategyType` constants
+	1. `RecreateMachineDeploymentStrategyType` is strategy to Kill all existing machines before creating new ones. 
+	2. `RollingUpdateMachineDeploymentStrategyType` is strategy to replace the old machines by new one using rolling update i.e gradually scale down the old machines and scale up the new one.
+2. `RollingUpdate` is the rolling update config params represented by `RollingUpdateMachineDeployment`. This is analogous to [k8s.io/api/apps/v1.RollingUpdateDeployment](https://pkg.go.dev/k8s.io/api/apps/v1#RollingUpdateDeployment) which also has `MaxUnavailable` and `MaxSurge`.
+	1.  [RollingUpdateMachineDeployment.MaxUnavailable](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#RollingUpdateMachineDeployment.MaxUnavailable) is the maximum number of machines that can be unavailable during the update. 
+	2.  [RollingUpdateMachineDeployment.MaxSurge](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#RollingUpdateMachineDeployment.MaxSurge) is the maximum number of machines that can be scheduled above the desired number of
+	machines.
+
 
 #### Example MachineDeployment YAML
 <details>
-<summary>MachineDeployment YAML</summary>
+<summary>AWS MchineDeployment YAML</summary>
 
 ```yaml
 apiVersion: machine.sapcloud.io/v1alpha1
