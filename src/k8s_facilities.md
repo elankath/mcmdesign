@@ -27,8 +27,6 @@
 				- [NodeSystemInfo](#nodesysteminfo)
 				- [Images](#images)
 				- [Attached Volumes](#attached-volumes)
-			- [VolumeAttachment](#volumeattachment)
-			- [VolumeAttachmentSpec](#volumeattachmentspec)
 		- [Pod](#pod)
 			- [Pod Eviction](#pod-eviction)
 			- [Pod Disruption Budget](#pod-disruption-budget)
@@ -340,7 +338,6 @@ See [Node status](https://kubernetes.io/docs/concepts/architecture/nodes/#node-s
 
 ```go
 type NodeStatus struct {
-	// Capacity represents the total resources of a node.
 	Capacity ResourceList 
 	// Allocatable represents the resources of a node that are available for scheduling. Defaults to Capacity.
 	Allocatable ResourceList
@@ -444,6 +441,7 @@ const (
 See [Node Addresses](https://kubernetes.io/docs/concepts/architecture/nodes/#addresses)
 	
 [k8s.io/api/core/v1.NodeAddress](https://pkg.go.dev/k8s.io/api/core/v1#NodeAddress) contains information for the node's address.
+
 ```go
 type NodeAddress struct {
 	// Node address type, one of Hostname, ExternalIP or InternalIP.
@@ -486,14 +484,13 @@ A slice of [k8s.io/api/core/v1.ContainerImage](https://pkg.go.dev/k8s.io/api/cor
 
 ```go
 type ContainerImage struct {
-  // Names by which this image is known.
-	// e.g. ["kubernetes.example/hyperkube:v1.0.7", 
-  // "cloud-vendor.registry.example/cloud-vendor/hyperkube:v1.0.7"]
 	Names []string 
-	// The size of the image in bytes.
 	SizeBytes int64 
 }
 ```
+- Names is the names by which this image is known.
+	 e.g. `["kubernetes.example/hyperkube:v1.0.7", "cloud-vendor.registry.example/cloud-vendor/hyperkube:v1.0.7"]`
+- `SizeBytes` is the size of the image in bytes.
 
 ##### Attached Volumes
 
@@ -502,50 +499,12 @@ type ContainerImage struct {
 ```go
 type UniqueVolumeName string
 type AttachedVolume struct {
-	// Name of the attached volume
 	Name UniqueVolumeName 
-	// DevicePath represents the device path where the volume should be available
 	DevicePath string 
 }
 ```
-
-#### VolumeAttachment
-
-A [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.
-
-```go
-type VolumeAttachment struct {
-	metav1.TypeMeta 
-	metav1.ObjectMeta 
-
-	// Specification of the desired attach/detach volume behavior.
-	// Populated by the Kubernetes system.
-	Spec VolumeAttachmentSpec 
-
-	// Status of the VolumeAttachment request.
-	// Populated by the entity completing the attach or detach
-	// operation, i.e. the external-attacher.
-	Status VolumeAttachmentStatus 
-}
-```
- 
-####  VolumeAttachmentSpec
-
-A [k8s.ip/api/storage/v1.VolumeAttachmentSpec](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec)is the specification of a VolumeAttachment request.
-```go
-type VolumeAttachmentSpec struct {
-	// Attacher indicates the name of the volume driver that MUST handle this
-	// request. Same as CSI Plugin name
-	Attacher string 
-
-	// Source represents the volume that should be attached.
-	Source VolumeAttachmentSource 
-
-	// The node that the volume should be attached to.
-	NodeName string
-}
-```
-See [Storage V1 Docs](https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1) for further elaboration. 
+- `Name` is the Name of the attached volume. `UniqueVolumeName` is just a typedef for a Go string.
+- `DevicePath` represents the device path where the volume should be available
 
 
 ### Pod 
@@ -554,8 +513,7 @@ See [Storage V1 Docs](https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1) for furt
 
 ```go
 type Pod struct {
-	metav1.TypeMeta `json:",inline"`
-	// Standard object's metadata.
+	metav1.TypeMeta
 	metav1.ObjectMeta
 
 	// Specification of the desired behavior of the pod.

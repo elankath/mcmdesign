@@ -253,11 +253,11 @@ flowchart TB
 <li><input disabled="" type="checkbox" checked=""/>
 14th Oct 2022. Machine Health Reconciliation.</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 21th: Reconcile Machine Safety Orphan VM's.</li>
+TODO - PLANNED 23th: Reconcile Machine Safety Orphan VM's.</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 21th: reconcileClusterMachineSafetyAPIServer </li>
+TODO - PLANNED 23th: reconcileClusterMachineSafetyAPIServer </li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 21th: Machine Status Diagram with actions/transitions (complicated due to concurrency)</li>
+TODO - PLANNED 23th: Machine Status Diagram with actions/transitions (complicated due to concurrency)</li>
 <li><input disabled="" type="checkbox"/>
 TODO - PLANNED 31th: Machine Deployment Controller</li>
 <li><input disabled="" type="checkbox"/>
@@ -322,8 +322,6 @@ TODO - evictPodsWithPVInternal (complicated due to concurrent flow)</li>
 <li><a href="k8s_facilities.html#attached-volumes">Attached Volumes</a></li>
 </ul>
 </li>
-<li><a href="k8s_facilities.html#volumeattachment">VolumeAttachment</a></li>
-<li><a href="k8s_facilities.html#volumeattachmentspec">VolumeAttachmentSpec</a></li>
 </ul>
 </li>
 <li><a href="k8s_facilities.html#pod">Pod</a>
@@ -590,7 +588,6 @@ spec:
 <p>See <a href="https://kubernetes.io/docs/concepts/architecture/nodes/#node-status">Node status</a></p>
 <p><a href="https://pkg.go.dev/k8s.io/api/core/v1#NodeStatus">k8s.io/api/core/v1.NodeStatus</a> represents the current status of a node and is an encapsulation illustrated below:</p>
 <pre><code class="language-go">type NodeStatus struct {
-	// Capacity represents the total resources of a node.
 	Capacity ResourceList 
 	// Allocatable represents the resources of a node that are available for scheduling. Defaults to Capacity.
 	Allocatable ResourceList
@@ -713,60 +710,31 @@ const (
 <h5 id="images"><a class="header" href="#images">Images</a></h5>
 <p>A slice of <a href="https://pkg.go.dev/k8s.io/api/core/v1#ContainerImage">k8s.io/api/core/v1.ContainerImage</a> which describes a contianer image.</p>
 <pre><code class="language-go">type ContainerImage struct {
-  // Names by which this image is known.
-	// e.g. [&quot;kubernetes.example/hyperkube:v1.0.7&quot;, 
-  // &quot;cloud-vendor.registry.example/cloud-vendor/hyperkube:v1.0.7&quot;]
 	Names []string 
-	// The size of the image in bytes.
 	SizeBytes int64 
 }
 </code></pre>
+<ul>
+<li>Names is the names by which this image is known.
+e.g. <code>[&quot;kubernetes.example/hyperkube:v1.0.7&quot;, &quot;cloud-vendor.registry.example/cloud-vendor/hyperkube:v1.0.7&quot;]</code></li>
+<li><code>SizeBytes</code> is the size of the image in bytes.</li>
+</ul>
 <h5 id="attached-volumes"><a class="header" href="#attached-volumes">Attached Volumes</a></h5>
 <p><a href="https://pkg.go.dev/k8s.io/api/core/v1#AttachedVolume">k8s.io/api/core/v1.AttachedVolume</a> describes a volume attached to a node.</p>
 <pre><code class="language-go">type UniqueVolumeName string
 type AttachedVolume struct {
-	// Name of the attached volume
 	Name UniqueVolumeName 
-	// DevicePath represents the device path where the volume should be available
 	DevicePath string 
 }
 </code></pre>
-<h4 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h4>
-<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node.</p>
-<pre><code class="language-go">type VolumeAttachment struct {
-	metav1.TypeMeta 
-	metav1.ObjectMeta 
-
-	// Specification of the desired attach/detach volume behavior.
-	// Populated by the Kubernetes system.
-	Spec VolumeAttachmentSpec 
-
-	// Status of the VolumeAttachment request.
-	// Populated by the entity completing the attach or detach
-	// operation, i.e. the external-attacher.
-	Status VolumeAttachmentStatus 
-}
-</code></pre>
-<h4 id="volumeattachmentspec"><a class="header" href="#volumeattachmentspec">VolumeAttachmentSpec</a></h4>
-<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec">k8s.ip/api/storage/v1.VolumeAttachmentSpec</a>is the specification of a VolumeAttachment request.</p>
-<pre><code class="language-go">type VolumeAttachmentSpec struct {
-	// Attacher indicates the name of the volume driver that MUST handle this
-	// request. Same as CSI Plugin name
-	Attacher string 
-
-	// Source represents the volume that should be attached.
-	Source VolumeAttachmentSource 
-
-	// The node that the volume should be attached to.
-	NodeName string
-}
-</code></pre>
-<p>See <a href="https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1">Storage V1 Docs</a> for further elaboration. </p>
+<ul>
+<li><code>Name</code> is the Name of the attached volume. <code>UniqueVolumeName</code> is just a typedef for a Go string.</li>
+<li><code>DevicePath</code> represents the device path where the volume should be available</li>
+</ul>
 <h3 id="pod"><a class="header" href="#pod">Pod</a></h3>
 <p><a href="k8s.io/api/core/v1#Pod">k8s.io/api/core/v1.Pod</a> struct represents a k8s <a href="https://kubernetes.io/docs/concepts/workloads/pods/">Pod</a> which a collection of containers that can run on a host. This resource is created by clients and scheduled onto hosts.</p>
 <pre><code class="language-go">type Pod struct {
-	metav1.TypeMeta `json:&quot;,inline&quot;`
-	// Standard object's metadata.
+	metav1.TypeMeta
 	metav1.ObjectMeta
 
 	// Specification of the desired behavior of the pod.
@@ -1073,11 +1041,14 @@ AddEventHandler[&quot;machineInformer.Informer().AddEventHandler(cache.ResourceE
 </li>
 <li><a href="mcm_facilities.html#machineclass">MachineClass</a>
 <ul>
+<li><a href="mcm_facilities.html#secretref-and-credentialssecretref">SecretRef and CredentialsSecretRef</a></li>
 <li><a href="mcm_facilities.html#nodetemplate">NodeTemplate</a></li>
 </ul>
 </li>
 <li><a href="mcm_facilities.html#machineset">MachineSet</a></li>
 <li><a href="mcm_facilities.html#machinedeployment">MachineDeployment</a></li>
+<li><a href="mcm_facilities.html#volumeattachment">VolumeAttachment</a></li>
+<li><a href="mcm_facilities.html#volumeattachmentspec">VolumeAttachmentSpec</a></li>
 </ul>
 </li>
 <li><a href="mcm_facilities.html#utilities">Utilities</a>
@@ -1442,9 +1413,38 @@ secretRef:
 <p>Notes</p>
 <ul>
 <li>As can be seen above , the provider specific configuration to create a node is specified in <code>MachineClass.ProviderSpec</code> and this is of extensible custom type <a href="./k8s_facilities.html#rawextension">runtime.RawExtension</a>. This permits instances of different structure types like AWS <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager-provider-aws@v0.14.0/pkg/aws/apis#AWSProviderSpec">aws/api/AWSProviderSpec</a> or <a href="https://github.com/gardener/machine-controller-manager-provider-azure/blob/v0.9.0/pkg/azure/apis/azure_provider_spec.go#L38">azure/apis.AzureProviderSpec</a> to be held within a single type.</li>
-<li><code>MachineClass.SecretRef</code> stores the necessary secrets such as cloud credentials or userdata (holding bootstrap tokens) 
+</ul>
+<h4 id="secretref-and-credentialssecretref"><a class="header" href="#secretref-and-credentialssecretref">SecretRef and CredentialsSecretRef</a></h4>
+<p>Both these fields in the MachineClass are of type <a href="https://pkg.go.dev/k8s.io/api/core/v1#SecretReference">k8s.io/api/core/v1.SecretReference</a>.</p>
+<p>Generally, When there is some operation to be performed on the machine, the K8s secret objects are obtained using the <a href="https://pkg.go.dev/k8s.io/client-go/listers/core/v1#SecretLister">k8s.io/client-go/listers/core/v1.SecretLister</a>. The corresponding <a href="https://pkg.go.dev/k8s.io/api/core/v1#Secret.Data">Secret.Data</a> map fields are retrieved and then merged into a single map. (Design TODO: Why do we do this and why can't use just one secret ?)</p>
+<p>Snippet of AWS MachineClass containing <code>CredentialsSecretRef</code> and <code>SecretRef</code></p>
+<pre><code class="language-yaml">apiVersion: machine.sapcloud.io/v1alpha1
+kind: MachineClass
+credentialsSecretRef:
+  name: cloudprovider
+  namespace: shoot--i034796--tre
+secretRef:
+  name: shoot--i034796--tre-worker-q3rb4-z1-30c4a
+  namespace: shoot--i034796--tre
+//...
+</code></pre>
 <ul>
-<li><code>MachineClass.CredentialsSecretRef</code> can optionally store the credentials if it is not set in the secret ref. (TODO: Unsure why)</li>
+<li><code>MachineClass.CredentialsSecretRef</code> is a reference to a secret that generally holds the cloud provider credentials. For the example above the corresponding <code>Secret</code> holds the <code>accessKeyID</code> and <code>secretAccessKey</code>. 
+<code>k get secret cloudprovider -n shoot--i034796--tre -oyaml</code></li>
+</ul>
+<pre><code class="language-yaml">apiVersion: v1
+kind: Secret
+data:
+accessKeyID: QUtJQTZ...
+secretAccessKey: dm52MX...
+</code></pre>
+<ul>
+<li><code>MachineClass.SecretRef</code> points to a <code>Secret</code> whose <code>Secret.Data</code> contains a <code>userData</code> entry that has a <em>lot</em> of info.
+<ul>
+<li>The <a href="https://kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/">Bootstrap Token</a> which is generated by the MCM. See <a href="https://github.com/gardener/gardener/issues/3898">Bootstrap Tokens Per Shoot Worker Machine</a>.</li>
+<li>shoot api server address.</li>
+<li>kubeconfig to contact shoot api server.</li>
+<li>TODO: Discuss this. Why so much info in one secret field?</li>
 </ul>
 </li>
 <li><code>MachineClass.Provider</code> is specified as the combination of name and location of cloud-specific drivers. (Unsure if this is being actually being followed as for AWS&amp;Azure this is set to simply <code>AWS</code> and <code>Azure</code> respectively)</li>
@@ -1476,7 +1476,47 @@ secretRef:
 
 </code></pre>
 <h3 id="machineset"><a class="header" href="#machineset">MachineSet</a></h3>
+<p>A <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSet">MachineSet</a> is to a <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#Machine">Machine</a> in an analogue of what a <a href="https://pkg.go.dev/k8s.io/api/apps/v1#ReplicaSet">ReplicaSet</a> is to a <a href="https://pkg.go.dev/k8s.io/api/core/v1#Pod">Pod</a>. A <code>MachineSet</code> ensures that the specified number of <code>Machines</code> are running at any given time. A <code>MachineSet</code> is rarely rarely created directly. It is generated owned by its parent <a href="mcm_facilities.html#machinedeployment">MachineDeployment</a></p>
+<pre><code class="language-go">type MachineSet struct {
+	metav1.ObjectMeta 
+	metav1.TypeMeta
+
+	Spec MachineSetSpec 
+	Status MachineSetStatus 
+}
+</code></pre>
 <h3 id="machinedeployment"><a class="header" href="#machinedeployment">MachineDeployment</a></h3>
+<h3 id="volumeattachment"><a class="header" href="#volumeattachment">VolumeAttachment</a></h3>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced object that captures the intent to attach or detach the specified volume to/from the specified node (specified in <code>VolumeAttachmentSpec.NodeName</code>).</p>
+<pre><code class="language-go">type VolumeAttachment struct {
+	metav1.TypeMeta 
+	metav1.ObjectMeta 
+
+	// Specification of the desired attach/detach volume behavior.
+	// Populated by the Kubernetes system.
+	Spec VolumeAttachmentSpec 
+
+	// Status of the VolumeAttachment request.
+	// Populated by the entity completing the attach or detach
+	// operation, i.e. the external-attacher.
+	Status VolumeAttachmentStatus 
+}
+</code></pre>
+<h3 id="volumeattachmentspec"><a class="header" href="#volumeattachmentspec">VolumeAttachmentSpec</a></h3>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachmentSpec">k8s.ip/api/storage/v1.VolumeAttachmentSpec</a>is the specification of a VolumeAttachment request.</p>
+<pre><code class="language-go">type VolumeAttachmentSpec struct {
+	// Attacher indicates the name of the volume driver that MUST handle this
+	// request. Same as CSI Plugin name
+	Attacher string 
+
+	// Source represents the volume that should be attached.
+	Source VolumeAttachmentSource 
+
+	// The node that the volume should be attached to.
+	NodeName string
+}
+</code></pre>
+<p>See <a href="https://pkg.go.dev/k8s.io/api@v0.25.2/storage/v1">Storage V1 Docs</a> for further elaboration. </p>
 <h2 id="utilities"><a class="header" href="#utilities">Utilities</a></h2>
 <h3 id="nodeops"><a class="header" href="#nodeops">NodeOps</a></h3>
 <h4 id="nodeopsgetnodecondition"><a class="header" href="#nodeopsgetnodecondition">nodeops.GetNodeCondition</a></h4>
