@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html" class="active">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">4.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html" class="active">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -152,7 +152,7 @@
 <li><a href="#change-log">Change Log</a></li>
 </ul>
 <p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>. </p>
-<p>(🚧 Please see <a href="#change-log">Change Log</a> for new additions/corrections.Please Check on Oct 21th for v1.1 release!🏗)</p>
+<p>(🚧 Please see <a href="#change-log">Change Log</a> for new additions/corrections.Please Check on Dec 7th for v2.0 release!🏗)</p>
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
 <p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines, machine-classes machine-sets and machine deployments. All these objects are custom resources.</p>
@@ -252,15 +252,15 @@ flowchart TB
 <li><input disabled="" type="checkbox" checked=""/>
 14th Oct 2022. Machine Health Reconciliation.</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 23th: Reconcile Machine Safety Orphan VM's.</li>
+TODO - PLANNED 1rst Dec: Reconcile Machine Safety Orphan VM's.</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 23th: reconcileClusterMachineSafetyAPIServer </li>
+TODO - PLANNED 1rst Dec: reconcileClusterMachineSafetyAPIServer </li>
 <li><input disabled="" type="checkbox"/>
 TODO - PLANNED 23th: Machine Status Diagram with actions/transitions (complicated due to concurrency)</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 31th: Machine Deployment Controller</li>
+TODO - PLANNED 4th Dec: Machine Deployment Controller</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 31th: AWS, Azure Drivers</li>
+TODO - PLANNED 7th Dec: AWS, Azure Drivers</li>
 <li><input disabled="" type="checkbox"/>
 TODO - evictPodsWithPVInternal (complicated due to concurrent flow)</li>
 </ul>

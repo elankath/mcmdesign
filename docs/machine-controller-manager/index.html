@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Reconcile Cluster Secret - Machine Controller Manager Design</title>
+        <title>Machine Controller Manager - Machine Controller Manager Design</title>
 
 
         <!-- Custom HTML head -->
@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html" class="active"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="../machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="../machine-controller-manager/index.html" class="active"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -142,61 +142,28 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="reconcile-cluster-secret"><a class="header" href="#reconcile-cluster-secret">Reconcile Cluster Secret</a></h1>
-<p><code>reconcileClusterSecretKey</code> reconciles an secret due to controller resync
-or an event on the secret</p>
-<pre><code class="language-go">func (c *controller) reconcileClusterSecretKey(key string) error 
-// which looks up secret and delegates to
-func (c *controller) reconcileClusterSecret(ctx context.Context, secret *corev1.Secret) error 
-</code></pre>
-<h2 id="usage"><a class="header" href="#usage">Usage</a></h2>
-<p>Worker go-routines are created for this as below</p>
-<pre><code class="language-go">createWorker(c.secretQueue, 
-    &quot;ClusterSecret&quot;, 
-    maxRetries, 
-    true, 
-    c.reconcileClusterSecretKey,
-     stopCh, 
-     &amp;waitGroup)
-</code></pre>
-<h2 id="flow"><a class="header" href="#flow">Flow</a></h2>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/secret.go#L37">controller.reconcileClusterSecretkey</a>
-basically adds the <a href="../mcm_facilities.html#finalizers">MCFinalizerName</a>  (value: <code>machine.sapcloud.io/machine-controller</code>) to the list of finalizers for all secrets that are referenced by machine classes within the same namespace.</p>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
-
-flowchart TD
-
-a[ns, name = cache.splitmetanamespacekey]
-b[&quot;sec=secretLister.secrets(ns).get(name)&quot;]
-c[&quot;machineclasses=findMachineClassForsecret(name)
-// gets the set of MachineClasses referring to the passed secret
-&quot;]
-d{machineclasses empty?}
-e[&quot;updateSecretFinalizers(sec)&quot;] 
-f[&quot;secretq.addafter(key,10min)&quot;]
-z((&quot;end&quot;))
-a--&gt;b
-b--&gt;c
-c--&gt;d
-d--yes--&gt;z
-d--no--&gt;e
-e--err--&gt;f
-e--success--&gt;z
-f--&gt;z
-</pre>
-<h3 id="updatesecretfinalizers"><a class="header" href="#updatesecretfinalizers">updateSecretFinalizers</a></h3>
-<pre><code class="language-go">func (c *controller) updateSecretFinalizers(ctx context.Context, secret *corev1.Secret, finalizers []string) error 
-</code></pre>
+                        <ul>
+<li><a href="#machine-controller-manager">Machine Controller Manager</a>
+<ul>
+<li><a href="#mcm-launch">MCM Launch</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="machine-controller-manager"><a class="header" href="#machine-controller-manager">Machine Controller Manager</a></h1>
+<p>The Machine Controller Manager handles reconciliation of <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineDeployment">MachineDeployment</a> and <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSet">MachineSet</a> objects.</p>
+<p>Ideally this should be the called <code>machine-deployment-controller</code> but the current name is a legacy holdover when all controllers were in one project module.</p>
+<p>The Machine Controller Manager Entry Point is at <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/cmd/machine-controller-manager/controller_manager.go#L40">github.com/gardener/machine-controller-manager/cmd/machine-controller-manager/controller_manager.go</a></p>
+<h2 id="mcm-launch"><a class="header" href="#mcm-launch">MCM Launch</a></h2>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../machine-controller/reconcile-cluster-machine-class.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../machine-controller/node_drain.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="../machine-controller/cluster_machine_reconcile.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next" href="../machine-controller-manager/reconcile-cluster-machine-deployment.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -206,11 +173,11 @@ f--&gt;z
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../machine-controller/reconcile-cluster-machine-class.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../machine-controller/node_drain.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="../machine-controller/cluster_machine_reconcile.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next" href="../machine-controller-manager/reconcile-cluster-machine-deployment.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

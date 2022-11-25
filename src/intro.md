@@ -5,7 +5,7 @@
 
  Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/). 
 
-(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on Oct 21th for v1.1 release!🏗)
+(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on Dec 7th for v2.0 release!🏗)
 
 # Introduction
 
@@ -110,9 +110,9 @@ Container command configured on AWS
 # Change Log
 
 - [x] 14th Oct 2022. Machine Health Reconciliation.
-- [ ] TODO - PLANNED 23th: Reconcile Machine Safety Orphan VM's.
-- [ ] TODO - PLANNED 23th: reconcileClusterMachineSafetyAPIServer 
+- [ ] TODO - PLANNED 1rst Dec: Reconcile Machine Safety Orphan VM's.
+- [ ] TODO - PLANNED 1rst Dec: reconcileClusterMachineSafetyAPIServer 
 - [ ] TODO - PLANNED 23th: Machine Status Diagram with actions/transitions (complicated due to concurrency)
-- [ ] TODO - PLANNED 31th: Machine Deployment Controller
-- [ ] TODO - PLANNED 31th: AWS, Azure Drivers
+- [ ] TODO - PLANNED 4th Dec: Machine Deployment Controller
+- [ ] TODO - PLANNED 7th Dec: AWS, Azure Drivers
 - [ ] TODO - evictPodsWithPVInternal (complicated due to concurrent flow)

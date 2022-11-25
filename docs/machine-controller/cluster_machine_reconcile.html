@@ -81,7 +81,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html" class="active"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">4.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html" class="active"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="../machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -380,7 +380,8 @@ style InitFailedOp text-align:left
 
 </pre>
 <h3 id="controlleraddbootstraptokentouserdata"><a class="header" href="#controlleraddbootstraptokentouserdata">controller.addBootstrapTokenToUserData</a></h3>
-<p>This method is responsible for adding the bootstrap token for the machine. Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific <code>SecretType</code>: <code>bootstrap.kubernetes.io/token</code> and live in the <code>kube-system</code> namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server</p>
+<p>This method is responsible for adding the bootstrap token for the machine.</p>
+<p>Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific <code>SecretType</code>: <code>bootstrap.kubernetes.io/token</code> and live in the <code>kube-system</code> namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server</p>
 <p>Reference</p>
 <ul>
 <li><a href="https://kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/">Bootstrap Tokens</a></li>
@@ -791,25 +792,18 @@ style SetUnknown text-align:left
 <li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
 <li>If the timoeut HAS expired 
 <ol>
-<li>Get the machine deployment name <code>machine.Labels['name']</code></li>
-<li>Register ONE permit with this name. See <a href="../mcm_facilities.html#permitspermitgiver">Permit Giver</a></li>
+<li>Get the machine deployment name <code>machineDeployName := machine.Labels['name']</code> corresponding to this machine</li>
+<li>Register ONE permit with this with <code>machineDeployName</code>. See <a href="../mcm_facilities.html#permitspermitgiver">Permit Giver</a>. Q: Why do we do this ?</li>
+<li>Attempt to get ONE permit for <code>machineDeployName</code> using a <code>lockAcquireTimeout</code> of 1s
+<ol>
+<li>Change the last operation state to <code>Failed</code> (seems WRONG to me), presere the last operation type, change machine phase to <code>Failed</code>. Update the machine status. See <code>c.updateMachineToFailedState</code></li>
 </ol>
 </li>
 </ol>
 </li>
 </ol>
-<pre><code>    machineClone.Status.CurrentStatus = CurrentStatus {
-      Phase: MachineUnknown,
-      LastUpdateTime: Now(),
-    };
-    machineClone.Status.LastOperation = LastOperation{
-        Description:    statusDesc,
-        State:          MachineStateProcessing,
-        Type:           MachineOperationHealthCheck,
-        LastUpdateTime: Now(),
-    }
-    cloneDirty = true
-</code></pre>
+</li>
+</ol>
 <h3 id="health-check-doubts"><a class="header" href="#health-check-doubts">Health Check Doubts</a></h3>
 <ol>
 <li>TODO: Why don't we check the machine health using the <code>Driver.GetMachineStatus</code> in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)</li>

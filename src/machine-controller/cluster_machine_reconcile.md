@@ -237,7 +237,11 @@ style InitFailedOp text-align:left
 
 ### controller.addBootstrapTokenToUserData
 
-This method is responsible for adding the bootstrap token for the machine. Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific `SecretType`: `bootstrap.kubernetes.io/token` and live in the `kube-system` namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server
+
+This method is responsible for adding the bootstrap token for the machine.
+
+Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific `SecretType`: `bootstrap.kubernetes.io/token` and live in the `kube-system` namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server
+
 
 Reference
 - [Bootstrap Tokens](https://kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/)
@@ -657,22 +661,11 @@ style SetUnknown text-align:left
 6. If the current machine phase is `Unknown`, get the effective machine health timeout and check. 
    1. If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. 
    2. If the timoeut HAS expired 
-      1. Get the machine deployment name `machine.Labels['name']`
-      2. Register ONE permit with this name. See [Permit Giver](../mcm_facilities.md#permitspermitgiver)
+      1. Get the machine deployment name `machineDeployName := machine.Labels['name']` corresponding to this machine
+      2. Register ONE permit with this with `machineDeployName`. See [Permit Giver](../mcm_facilities.md#permitspermitgiver). Q: Why do we do this ?
+      3. Attempt to get ONE permit for `machineDeployName` using a `lockAcquireTimeout` of 1s
+         1. Change the last operation state to `Failed` (seems WRONG to me), presere the last operation type, change machine phase to `Failed`. Update the machine status. See `c.updateMachineToFailedState`
 
-```
-    machineClone.Status.CurrentStatus = CurrentStatus {
-      Phase: MachineUnknown,
-      LastUpdateTime: Now(),
-    };
-    machineClone.Status.LastOperation = LastOperation{
-        Description:    statusDesc,
-        State:          MachineStateProcessing,
-        Type:           MachineOperationHealthCheck,
-        LastUpdateTime: Now(),
-    }
-    cloneDirty = true
-```
 ### Health Check Doubts
 
 1. TODO: Why don't we check the machine health using the `Driver.GetMachineStatus` in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)

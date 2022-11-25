@@ -82,7 +82,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">4.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -153,7 +153,7 @@
 <li><a href="intro.html#change-log">Change Log</a></li>
 </ul>
 <p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>. </p>
-<p>(🚧 Please see <a href="intro.html#change-log">Change Log</a> for new additions/corrections.Please Check on Oct 21th for v1.1 release!🏗)</p>
+<p>(🚧 Please see <a href="intro.html#change-log">Change Log</a> for new additions/corrections.Please Check on Dec 7th for v2.0 release!🏗)</p>
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
 <p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines, machine-classes machine-sets and machine deployments. All these objects are custom resources.</p>
@@ -253,15 +253,15 @@ flowchart TB
 <li><input disabled="" type="checkbox" checked=""/>
 14th Oct 2022. Machine Health Reconciliation.</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 23th: Reconcile Machine Safety Orphan VM's.</li>
+TODO - PLANNED 1rst Dec: Reconcile Machine Safety Orphan VM's.</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 23th: reconcileClusterMachineSafetyAPIServer </li>
+TODO - PLANNED 1rst Dec: reconcileClusterMachineSafetyAPIServer </li>
 <li><input disabled="" type="checkbox"/>
 TODO - PLANNED 23th: Machine Status Diagram with actions/transitions (complicated due to concurrency)</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 31th: Machine Deployment Controller</li>
+TODO - PLANNED 4th Dec: Machine Deployment Controller</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 31th: AWS, Azure Drivers</li>
+TODO - PLANNED 7th Dec: AWS, Azure Drivers</li>
 <li><input disabled="" type="checkbox"/>
 TODO - evictPodsWithPVInternal (complicated due to concurrent flow)</li>
 </ul>
@@ -3140,7 +3140,8 @@ style InitFailedOp text-align:left
 
 </pre>
 <h3 id="controlleraddbootstraptokentouserdata"><a class="header" href="#controlleraddbootstraptokentouserdata">controller.addBootstrapTokenToUserData</a></h3>
-<p>This method is responsible for adding the bootstrap token for the machine. Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific <code>SecretType</code>: <code>bootstrap.kubernetes.io/token</code> and live in the <code>kube-system</code> namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server</p>
+<p>This method is responsible for adding the bootstrap token for the machine.</p>
+<p>Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific <code>SecretType</code>: <code>bootstrap.kubernetes.io/token</code> and live in the <code>kube-system</code> namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server</p>
 <p>Reference</p>
 <ul>
 <li><a href="https://kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/">Bootstrap Tokens</a></li>
@@ -3551,25 +3552,18 @@ style SetUnknown text-align:left
 <li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
 <li>If the timoeut HAS expired 
 <ol>
-<li>Get the machine deployment name <code>machine.Labels['name']</code></li>
-<li>Register ONE permit with this name. See <a href="machine-controller/../mcm_facilities.html#permitspermitgiver">Permit Giver</a></li>
+<li>Get the machine deployment name <code>machineDeployName := machine.Labels['name']</code> corresponding to this machine</li>
+<li>Register ONE permit with this with <code>machineDeployName</code>. See <a href="machine-controller/../mcm_facilities.html#permitspermitgiver">Permit Giver</a>. Q: Why do we do this ?</li>
+<li>Attempt to get ONE permit for <code>machineDeployName</code> using a <code>lockAcquireTimeout</code> of 1s
+<ol>
+<li>Change the last operation state to <code>Failed</code> (seems WRONG to me), presere the last operation type, change machine phase to <code>Failed</code>. Update the machine status. See <code>c.updateMachineToFailedState</code></li>
 </ol>
 </li>
 </ol>
 </li>
 </ol>
-<pre><code>    machineClone.Status.CurrentStatus = CurrentStatus {
-      Phase: MachineUnknown,
-      LastUpdateTime: Now(),
-    };
-    machineClone.Status.LastOperation = LastOperation{
-        Description:    statusDesc,
-        State:          MachineStateProcessing,
-        Type:           MachineOperationHealthCheck,
-        LastUpdateTime: Now(),
-    }
-    cloneDirty = true
-</code></pre>
+</li>
+</ol>
 <h3 id="health-check-doubts"><a class="header" href="#health-check-doubts">Health Check Doubts</a></h3>
 <ol>
 <li>TODO: Why don't we check the machine health using the <code>Driver.GetMachineStatus</code> in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)</li>
@@ -4299,6 +4293,170 @@ PopPodVolInfoMap--done--&gt;Return((&quot;return podVolumeInfoMap&quot;))
         getPodFn func(string, string) (*corev1.Pod, error)
     ) (pendingPods []*corev1.Pod, err error) 
 </code></pre>
+<div style="break-before: page; page-break-before: always;"></div><ul>
+<li><a href="machine-controller-manager/index.html#machine-controller-manager">Machine Controller Manager</a>
+<ul>
+<li><a href="machine-controller-manager/index.html#mcm-launch">MCM Launch</a></li>
+</ul>
+</li>
+</ul>
+<h1 id="machine-controller-manager"><a class="header" href="#machine-controller-manager">Machine Controller Manager</a></h1>
+<p>The Machine Controller Manager handles reconciliation of <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineDeployment">MachineDeployment</a> and <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineSet">MachineSet</a> objects.</p>
+<p>Ideally this should be the called <code>machine-deployment-controller</code> but the current name is a legacy holdover when all controllers were in one project module.</p>
+<p>The Machine Controller Manager Entry Point is at <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/cmd/machine-controller-manager/controller_manager.go#L40">github.com/gardener/machine-controller-manager/cmd/machine-controller-manager/controller_manager.go</a></p>
+<h2 id="mcm-launch"><a class="header" href="#mcm-launch">MCM Launch</a></h2>
+<div style="break-before: page; page-break-before: always;"></div><ul>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#reconcile-cluster-machine-deployment">Reconcile Cluster Machine Deployment</a>
+<ul>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#rollout-rolling">Rollout Rolling</a>
+<ul>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#1-get-new-machine-set-corresponding-to-machine-deployment-and-old-machine-sets">1. Get new machine set corresponding to machine deployment and old machine sets</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#2-taint-the-nodes-backing-the-old-machine-sets">2. Taint the nodes backing the old machine sets.</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#3-add-autoscaler-scale-down-annotations-to-nodes-of-old-machine-sets">3. Add AutoScaler Scale-Down annotations to Nodes of Old Machine Sets</a></li>
+</ul>
+</li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#helper-methods">Helper Methods</a>
+<ul>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#get-machine-sets-for-machine-deployment">Get Machine Sets for Machine Deployment</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#get-machine-map-for-machine-deployment">Get Machine Map for Machine Deployment</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#terminate-machine-sets-of-machine-edeployment">Terminate Machine Sets of Machine eDeployment</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#sync-deployment-status">Sync Deployment Status</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#gets-new-and-old-machinesets-and-sync-revision">Gets New and Old MachineSets and Sync Revision</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#overview">Overview</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#detail">Detail</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#annotate-nodes-backing-machine-sets">Annotate Nodes Backing Machine Sets</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h1 id="reconcile-cluster-machine-deployment"><a class="header" href="#reconcile-cluster-machine-deployment">Reconcile Cluster Machine Deployment</a></h1>
+<pre><code class="language-go">func (dc *controller) reconcileClusterMachineDeployment(key string) error 
+</code></pre>
+<ul>
+<li>Gets the deployment name.</li>
+<li>Gets the <code>MachineDeployment</code></li>
+<li>TODO: WEIRD: freeze labels and deletion timestamp</li>
+<li>TODO: unclear why we do this</li>
+</ul>
+<pre><code class="language-go">	// Resync the MachineDeployment after 10 minutes to avoid missing out on missed out events
+	defer dc.enqueueMachineDeploymentAfter(deployment, 10*time.Minute)
+</code></pre>
+<ul>
+<li>Add finalizers if deletion time stamp is nil</li>
+<li>TODO: Why is observed generation only updated conditionally in the below ? Shouldn't it be done always </li>
+</ul>
+<pre><code class="language-go">everything := metav1.LabelSelector{}
+	if reflect.DeepEqual(d.Spec.Selector, &amp;everything) {
+		dc.recorder.Eventf(d, v1.EventTypeWarning, &quot;SelectingAll&quot;, &quot;This deployment is selecting all machines. A non-empty selector is required.&quot;)
+		if d.Status.ObservedGeneration &lt; d.Generation {
+			d.Status.ObservedGeneration = d.Generation
+			dc.controlMachineClient.MachineDeployments(d.Namespace).UpdateStatus(ctx, d, metav1.UpdateOptions{})
+		}
+		return nil
+	}
+</code></pre>
+<ul>
+<li>Get <code>[]*v1alpha1.MachineSet</code> for this deployment using <code>getMachineSetsForMachineDeployment</code> and assign to <code>machineSets</code></li>
+<li>if <code>deployment.DeletionTimestamp != nil</code> 
+<ul>
+<li>if there are no finalizers on deployment return nil</li>
+<li>if <code>len(machineSets) == 0</code> delete the machine deployment finalizers and return nil</li>
+<li>Call <code>dc.terminateMachineSets(ctx, machineSets)</code></li>
+</ul>
+</li>
+</ul>
+<h2 id="rollout-rolling"><a class="header" href="#rollout-rolling">Rollout Rolling</a></h2>
+<pre><code class="language-go">func (dc *controller) rolloutRolling(ctx context.Context, 
+    d *v1alpha1.MachineDeployment, 
+    msList []*v1alpha1.MachineSet, 
+    machineMap map[types.UID]*v1alpha1.MachineList) error 
+</code></pre>
+<h3 id="1-get-new-machine-set-corresponding-to-machine-deployment-and-old-machine-sets"><a class="header" href="#1-get-new-machine-set-corresponding-to-machine-deployment-and-old-machine-sets">1. Get new machine set corresponding to machine deployment and old machine sets</a></h3>
+<pre><code class="language-go">newMS, oldMSs, err := dc.getAllMachineSetsAndSyncRevision(ctx, d, msList, machineMap, true)
+allMSs := append(oldMSs, newMS)
+</code></pre>
+<h3 id="2-taint-the-nodes-backing-the-old-machine-sets"><a class="header" href="#2-taint-the-nodes-backing-the-old-machine-sets">2. Taint the nodes backing the old machine sets.</a></h3>
+<p>This is a preference - the k8s scheduler will try to avoid placing a pod that does not tolerate thee taint on the node. Q: Why don't we use <code>NoSchedule</code> instead ? Any pods scheduled on this node will need to be drained - more work to be done.</p>
+<pre><code class="language-go">dc.taintNodesBackingMachineSets(
+		ctx,
+		oldISs, &amp;v1.Taint{
+			Key:    PreferNoScheduleKey,
+			Value:  &quot;True&quot;,
+			Effect: &quot;PreferNoSchedule&quot;,
+		},
+	)
+</code></pre>
+<h3 id="3-add-autoscaler-scale-down-annotations-to-nodes-of-old-machine-sets"><a class="header" href="#3-add-autoscaler-scale-down-annotations-to-nodes-of-old-machine-sets">3. Add AutoScaler Scale-Down annotations to Nodes of Old Machine Sets</a></h3>
+<ol>
+<li>Create the map. (TODO: Q: Why do we add 2 annotations ?)
+<pre><code class="language-go"> clusterAutoscalerScaleDownAnnotations := make(map[string]string)
+ clusterAutoscalerScaleDownAnnotations[&quot;cluster-autoscaler.kubernetes.io/scale-down-disabled&quot;]=&quot;true&quot;
+ clusterAutoscalerScaleDownAnnotations[&quot;cluster-autoscaler.kubernetes.io/scale-down-disabled-by-mcm&quot;]=&quot;true&quot;
+</code></pre>
+</li>
+<li>Call <code>annotateNodesBackingMachineSets(ctx, allMSs, clusterAutoscalerScaleDownAnnotations)</code></li>
+<li></li>
+</ol>
+<h2 id="helper-methods"><a class="header" href="#helper-methods">Helper Methods</a></h2>
+<h3 id="get-machine-sets-for-machine-deployment"><a class="header" href="#get-machine-sets-for-machine-deployment">Get Machine Sets for Machine Deployment</a></h3>
+<pre><code class="language-go">func (dc *controller) getMachineSetsForMachineDeployment(ctx context.Context, 
+        d *v1alpha1.MachineDeployment) 
+    ([]*v1alpha1.MachineSet, error) 
+</code></pre>
+<ul>
+<li>Get all machine sets using machine set lister.</li>
+<li><code>NewMachineSetControllerRefManager</code> unclear</li>
+</ul>
+<h3 id="get-machine-map-for-machine-deployment"><a class="header" href="#get-machine-map-for-machine-deployment">Get Machine Map for Machine Deployment</a></h3>
+<p>Returns a map from MachineSet UID to a list of Machines controlled by that MS, according to the Machine's ControllerRef.</p>
+<pre><code class="language-go">func (dc *controller) 
+    getMachineMapForMachineDeployment(d *v1alpha1.MachineDeployment, 
+        machineSets []*v1alpha1.MachineSet) 
+     (map[types.UID]*v1alpha1.MachineList, error) {
+</code></pre>
+<h3 id="terminate-machine-sets-of-machine-edeployment"><a class="header" href="#terminate-machine-sets-of-machine-edeployment">Terminate Machine Sets of Machine eDeployment</a></h3>
+<pre><code class="language-go">
+func (dc *controller) terminateMachineSets(ctx context.Context, machineSets []*v1alpha1.MachineSet) 
+
+</code></pre>
+<h3 id="sync-deployment-status"><a class="header" href="#sync-deployment-status">Sync Deployment Status</a></h3>
+<pre><code class="language-go">func (dc *controller) syncStatusOnly(ctx context.Context, 
+    d *v1alpha1.MachineDeployment, 
+    msList []*v1alpha1.MachineSet, 
+    machineMap map[types.UID]*v1alpha1.MachineList) error 
+</code></pre>
+<h3 id="gets-new-and-old-machinesets-and-sync-revision"><a class="header" href="#gets-new-and-old-machinesets-and-sync-revision">Gets New and Old MachineSets and Sync Revision</a></h3>
+<pre><code class="language-go">func (dc *controller) getAllMachineSetsAndSyncRevision(ctx context.Context, 
+    d *v1alpha1.MachineDeployment, 
+    msList []*v1alpha1.MachineSet, 
+    machineMap map[types.UID]*v1alpha1.MachineList, 
+    createIfNotExisted bool) 
+        (*v1alpha1.MachineSet, []*v1alpha1.MachineSet, error) 
+</code></pre>
+<h3 id="overview"><a class="header" href="#overview">Overview</a></h3>
+<p><code>getAllMachineSetsAndSyncRevision</code> does the following:</p>
+<ol>
+<li>Get all old <code>MachineSets</code> the <code>MachineDeployment:</code> <code>d</code> targets, and calculate the max revision number among them (<code>maxOldV</code>).</li>
+<li>Get new <code>MachineSet</code> this deployment targets ie whose machine template matches the deployment's and updates new machine set's revision number to (<code>maxOldV + 1</code>),
+This is done only if its revision number is smaller than <code>(maxOldV + 1)</code>.  If this step failed, we'll update it in the next deployment sync loop.</li>
+<li>Copy new <code>MachineSet</code>'s revision number to the <code>MachineDeployment</code> (update deployment's revision). If this step failed, we'll update it in the next deployment sync loop. </li>
+</ol>
+<h3 id="detail"><a class="header" href="#detail">Detail</a></h3>
+<ul>
+<li>TODO: describe me</li>
+</ul>
+<h3 id="annotate-nodes-backing-machine-sets"><a class="header" href="#annotate-nodes-backing-machine-sets">Annotate Nodes Backing Machine Sets</a></h3>
+<pre><code class="language-go">func (dc *controller) annotateNodesBackingMachineSets(
+    ctx context.Context, 
+    machineSets []*v1alpha1.MachineSet, 
+    annotations map[string]string) error 
+</code></pre>
+<ol>
+<li>Iterate through the <code>machineSets</code>. Loop variable: <code>machineSet</code></li>
+<li>Get the Selector for the Machine Set</li>
+<li></li>
+</ol>
 <div style="break-before: page; page-break-before: always;"></div><p>🚧 WIP at the moment. Lot more material to be added here from notes. Please do not read presently.</p>
 <ul>
 <li><a href="issues.html#issues">Issues</a>
