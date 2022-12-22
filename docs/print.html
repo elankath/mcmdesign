@@ -251,17 +251,15 @@ flowchart TB
 <h1 id="change-log"><a class="header" href="#change-log">Change Log</a></h1>
 <ul>
 <li><input disabled="" type="checkbox" checked=""/>
-14th Oct 2022. Machine Health Reconciliation.</li>
+14th Nov 2022. Machine Health Reconciliation.</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 1rst Dec: Reconcile Machine Safety Orphan VM's.</li>
+TODO - PLANNED 30th Dec: Reconcile Machine Safety Orphan VM's.</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 1rst Dec: reconcileClusterMachineSafetyAPIServer </li>
+TODO - PLANNED 30th Dec: reconcileClusterMachineSafetyAPIServer </li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 23th: Machine Status Diagram with actions/transitions (complicated due to concurrency)</li>
+TODO - PLANNED 4th Jan: Machine Deployment Controller</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED 4th Dec: Machine Deployment Controller</li>
-<li><input disabled="" type="checkbox"/>
-TODO - PLANNED 7th Dec: AWS, Azure Drivers</li>
+TODO - PLANNED 7th Jan: AWS, Azure Drivers</li>
 <li><input disabled="" type="checkbox"/>
 TODO - evictPodsWithPVInternal (complicated due to concurrent flow)</li>
 </ul>
@@ -4313,10 +4311,12 @@ PopPodVolInfoMap--done--&gt;Return((&quot;return podVolumeInfoMap&quot;))
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#1-get-new-machine-set-corresponding-to-machine-deployment-and-old-machine-sets">1. Get new machine set corresponding to machine deployment and old machine sets</a></li>
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#2-taint-the-nodes-backing-the-old-machine-sets">2. Taint the nodes backing the old machine sets.</a></li>
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#3-add-autoscaler-scale-down-annotations-to-nodes-of-old-machine-sets">3. Add AutoScaler Scale-Down annotations to Nodes of Old Machine Sets</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#4-reconcile-new-machine-set-by-calling-reconcilenewmachineset">4. Reconcile New Machine Set by calling <code>reconcileNewMachineSet</code></a></li>
 </ul>
 </li>
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#helper-methods">Helper Methods</a>
 <ul>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#scalemachineset">scaleMachineSet</a></li>
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#get-machine-sets-for-machine-deployment">Get Machine Sets for Machine Deployment</a></li>
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#get-machine-map-for-machine-deployment">Get Machine Map for Machine Deployment</a></li>
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#terminate-machine-sets-of-machine-edeployment">Terminate Machine Sets of Machine eDeployment</a></li>
@@ -4325,6 +4325,16 @@ PopPodVolInfoMap--done--&gt;Return((&quot;return podVolumeInfoMap&quot;))
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#overview">Overview</a></li>
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#detail">Detail</a></li>
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#annotate-nodes-backing-machine-sets">Annotate Nodes Backing Machine Sets</a></li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#claim-machines">Claim Machines</a>
+<ul>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#summary">Summary</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#helper-functions">Helper Functions</a>
+<ul>
+<li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#compute-new-machine-set-new-replicas">Compute New Machine Set New Replicas</a></li>
 </ul>
 </li>
 </ul>
@@ -4396,9 +4406,34 @@ allMSs := append(oldMSs, newMS)
 </code></pre>
 </li>
 <li>Call <code>annotateNodesBackingMachineSets(ctx, allMSs, clusterAutoscalerScaleDownAnnotations)</code></li>
-<li></li>
+</ol>
+<h3 id="4-reconcile-new-machine-set-by-calling-reconcilenewmachineset"><a class="header" href="#4-reconcile-new-machine-set-by-calling-reconcilenewmachineset">4. Reconcile New Machine Set by calling <code>reconcileNewMachineSet</code></a></h3>
+<pre><code class="language-go">	scaledUp, err := dc.reconcileNewMachineSet(ctx, allISs, newIS, d)
+</code></pre>
+<pre><code class="language-go">func (dc *controller) reconcileNewMachineSet(ctx context.Context, 
+allMSs[]*v1alpha1.MachineSet, 
+newMS *v1alpha1.MachineSet, 
+deployment *v1alpha1.MachineDeployment) 
+    (bool, error) 
+</code></pre>
+<ol>
+<li>if <code>newMS.Spec.Replicates == deployment.spec.Replicates</code> return</li>
+<li>if <code>newMS.Spec.Replicas &gt; deployment.Spec.Replicas</code>, we need to scale down. call <code>dc.scaleMachineSet(ctx, newMS, deployment.Spec.Replicas, &quot;down&quot;)</code></li>
+<li>Compute <code>newReplicasCount</code> using <code>NewMSNewReplicas(deployment, allMSs, newMS)</code>.</li>
+<li>Call <code>dc.scaleMachineSet(ctx, newMS, newReplicasCount, &quot;up&quot;)</code></li>
 </ol>
 <h2 id="helper-methods"><a class="header" href="#helper-methods">Helper Methods</a></h2>
+<h3 id="scalemachineset"><a class="header" href="#scalemachineset">scaleMachineSet</a></h3>
+<pre><code class="language-go">func (dc *controller) scaleMachineSet(ctx context.Context, 
+    ms *v1alpha1.MachineSet, 
+    newScale int32, 
+    deployment *v1alpha1.MachineDeployment, 
+    scalingOperation string) 
+        (bool, *v1alpha1.MachineSet, error) {
+sizeNeedsUpdate := (ms.Spec.Replicas) != newScale
+}
+</code></pre>
+<p>TODO: fill me in.</p>
 <h3 id="get-machine-sets-for-machine-deployment"><a class="header" href="#get-machine-sets-for-machine-deployment">Get Machine Sets for Machine Deployment</a></h3>
 <pre><code class="language-go">func (dc *controller) getMachineSetsForMachineDeployment(ctx context.Context, 
         d *v1alpha1.MachineDeployment) 
@@ -4454,8 +4489,83 @@ This is done only if its revision number is smaller than <code>(maxOldV + 1)</co
 </code></pre>
 <ol>
 <li>Iterate through the <code>machineSets</code>. Loop variable: <code>machineSet</code></li>
+<li>List all the machines. TODO: EXPENSIVE ??</li>
+</ol>
+<pre><code class="language-go">allMachines, err := dc.machineLister.List(labels.Everything())
+</code></pre>
+<ol start="3">
 <li>Get the Selector for the Machine Set</li>
-<li></li>
+</ol>
+<pre><code class="language-go">   	selector, err := metav1.LabelSelectorAsSelector(machineSet.Spec.Selector)
+</code></pre>
+<ol start="4">
+<li>Claim the Machines for the given <code>machineSet</code> using the selector</li>
+</ol>
+<pre><code class="language-go">    filteredMachines, err = dc.claimMachines(ctx, machineSet, selector, allMachines)
+</code></pre>
+<ol start="5">
+<li>Iterate through <code>filteredMachines</code>, loop variable: <code>machine</code> and if <code>Node</code> is not empty, add or update annotations on node.</li>
+</ol>
+<pre><code class="language-go">if machine.Status.Node != &quot;&quot; {
+err = AddOrUpdateAnnotationOnNode(
+    ctx,
+    dc.targetCoreClient,
+    machine.Status.Node,
+    annotations,
+    )
+}
+</code></pre>
+<h3 id="claim-machines"><a class="header" href="#claim-machines">Claim Machines</a></h3>
+<p>Basically sets or unsets the owner reference of the machines matching selector to the deployment controller.</p>
+<pre><code class="language-go">func (c *controller) claimMachines(ctx context.Context, 
+    machineSet *v1alpha1.MachineSet, 
+    selector labels.Selector, 
+    allMachines []*v1alpha1.Machine) 
+    ([]*v1alpha1.Machine, error) {
+</code></pre>
+<p>TODO: delegates to <code>MachineControllerRefManager.claimMachines</code></p>
+<p>Sets or un-sets the owner reference of the machine object to the deployment controller. </p>
+<h4 id="summary-2"><a class="header" href="#summary-2">Summary</a></h4>
+<ul>
+<li>iterates through <code>allMachines</code>. Checks if <code>selector</code> matches the machine labels: <code>m.Selector.Matches(labels.Set(machine.Labels)</code></li>
+<li>Gets the <code>controllerRef</code> of the machine using <code>metav1.GetControllerOf(machine)</code></li>
+<li>If <code>controllerRef</code> is not nil and  the <code>controllerRef.UID</code> matches the </li>
+<li>If so, then this is an adoption and calls <code>AdoptMachine</code> which patches the machines owner reference using the below:</li>
+</ul>
+<pre><code class="language-go">addControllerPatch := fmt.Sprintf(
+		`{&quot;metadata&quot;:{&quot;ownerReferences&quot;:[{&quot;apiVersion&quot;:&quot;machine.sapcloud.io/v1alpha1&quot;,&quot;kind&quot;:&quot;%s&quot;,&quot;name&quot;:&quot;%s&quot;,&quot;uid&quot;:&quot;%s&quot;,&quot;controller&quot;:true,&quot;blockOwnerDeletion&quot;:true}],&quot;uid&quot;:&quot;%s&quot;}}`,
+		m.controllerKind.Kind,
+		m.Controller.GetName(), m.Controller.GetUID(), machine.UID)
+	err := m.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addControllerPatch))
+err := m.machineControl.PatchMachine(ctx, machine.Namespace, machine.Name, []byte(addControllerPatch))
+</code></pre>
+<h2 id="helper-functions"><a class="header" href="#helper-functions">Helper Functions</a></h2>
+<h3 id="compute-new-machine-set-new-replicas"><a class="header" href="#compute-new-machine-set-new-replicas">Compute New Machine Set New Replicas</a></h3>
+<p><code>NewMSNewReplicas</code> calculates the number of replicas a deployment's new machine set <em>should</em> have.</p>
+<ol>
+<li>The new MS is saturated: newMS's replicas == deployment's replicas</li>
+<li>Max number of machines allowed is reached: deployment's replicas + maxSurge == allMS's replicas</li>
+</ol>
+<pre><code class="language-go">func NewMSNewReplicas(deployment *v1alpha1.MachineDeployment, 
+    allMSs []*v1alpha1.MachineSet, 
+    newMS *v1alpha1.MachineSet) (int32, error) 
+    // MS was called IS earlier (instance set)
+</code></pre>
+<ol>
+<li>Get the <code>maxSurge</code></li>
+</ol>
+<pre><code class="language-go">maxSurge, err = intstr.GetValueFromIntOrPercent(
+    deployment.Spec.Strategy.RollingUpdate.MaxSurge,
+    int(deployment.Spec.Replicas),
+    true
+)
+</code></pre>
+<ol start="2">
+<li>Compute the <code>currentMachineCount</code>: iterate through all machine sets and sum up <code>machineset.Status.Replicas</code></li>
+<li><code>maxTotalMachines = deployment.Spec.Replicas + maxSurge</code></li>
+<li><code>if currentMachineCount &gt;= maxTotalMachines return newMS.Spec.Replicas</code> // cannot scale up.</li>
+<li>Compute	<code>scaleUpCount := maxTotalMachines - currentMachineCount</code></li>
+<li>Make sure <code>scaleUpCount</code> does not exceed desired deployment replicas	<code>scaleUpCount = int32(integer.IntMin(int(scaleUpCount), int(deployment.Spec.Replicas -newMS.Spec.Replicas))</code></li>
 </ol>
 <div style="break-before: page; page-break-before: always;"></div><p>🚧 WIP at the moment. Lot more material to be added here from notes. Please do not read presently.</p>
 <ul>

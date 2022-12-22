@@ -109,10 +109,9 @@ Container command configured on AWS
 
 # Change Log
 
-- [x] 14th Oct 2022. Machine Health Reconciliation.
-- [ ] TODO - PLANNED 1rst Dec: Reconcile Machine Safety Orphan VM's.
-- [ ] TODO - PLANNED 1rst Dec: reconcileClusterMachineSafetyAPIServer 
-- [ ] TODO - PLANNED 23th: Machine Status Diagram with actions/transitions (complicated due to concurrency)
-- [ ] TODO - PLANNED 4th Dec: Machine Deployment Controller
-- [ ] TODO - PLANNED 7th Dec: AWS, Azure Drivers
+- [x] 14th Nov 2022. Machine Health Reconciliation.
+- [ ] TODO - PLANNED 30th Dec: Reconcile Machine Safety Orphan VM's.
+- [ ] TODO - PLANNED 30th Dec: reconcileClusterMachineSafetyAPIServer 
+- [ ] TODO - PLANNED 4th Jan: Machine Deployment Controller
+- [ ] TODO - PLANNED 7th Jan: AWS, Azure Drivers
 - [ ] TODO - evictPodsWithPVInternal (complicated due to concurrent flow)
