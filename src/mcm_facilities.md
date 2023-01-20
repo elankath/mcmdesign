@@ -167,8 +167,6 @@ type MachineConfiguration struct {
 [pkg/apis/machine/v1alpha1.MachineStatus](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/apis/machine/v1alpha1/machine_types.go#L97) represents the most recently observed status of Machine.
 ```go
 type MachineStatus struct {
-	// Node string. 
-	Node string // TODO: describe me more
 
 	// Conditions of this machine, same as NodeStatus.Conditions
 	Conditions []NodeCondition 

@@ -1,7 +1,10 @@
 - [Machine Controller](#machine-controller)
 	- [MC Launch](#mc-launch)
-		- [Dev Launch](#dev-launch)
-		- [Prod Launch](#prod-launch)
+		- [Dev](#dev)
+			- [Build](#build)
+			- [Launch](#launch)
+		- [Prod](#prod)
+			- [Build](#build-1)
 		- [Launch Flow](#launch-flow)
 			- [Summary](#summary)
 	- [Machine Controller Loop](#machine-controller-loop)
@@ -27,35 +30,49 @@
 			- [4. reconciliation functions executed by worker](#4-reconciliation-functions-executed-by-worker)
 # Machine Controller
 
-The Machine Controller handles reconciliation of [Machine](./../mcm_facilities.md#machine) and [MachineClass](./../mcm_facilities.md#machineclass) objects.
+The [Machine Controller]() handles reconciliation of [Machine](./../mcm_facilities.md#machine) and [MachineClass](./../mcm_facilities.md#machineclass) objects. 
 
 The Machine Controller Entry Point for any provider is at 
 `machine-controller-manager-provider-<name>/cmd/machine-controller/main.go`
 
 ## MC Launch
 
-### Dev Launch
-A `Makefile` launches the entry point with the given flags below.
+### Dev 
+
+#### Build
+A `Makefile` in the root of `machine-controller-manager-provider-<name>` builds the provider specific machine controller  for linux with CGO enabled. The `make build` target invokes the shell script [.ci/build](https://github.com/gardener/machine-controller-manager-provider-aws/blob/master/.ci/build) to do this.
+
+```
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+  -a \
+  -v \
+  -o ${BINARY_PATH}/rel/machine-controller \
+  cmd/machine-controller/main.goo
+```
+
+#### Launch
+Assuming one has initialized the variables using `make download-kubeconfigs`, one can then use `make start` target which launches the MC with flags as shown below.
 Most of these timeout flags are redundant since exact same values are 
 given in [machine-controller-manager/pkg/util/provider/app/options.NewMCServer]()
 ```
-go run -mod=vendor cmd/machine-controller/main.go \
-			--control-kubeconfig=$(control_kubeconfig) \
-			--target-kubeconfig=$(target_kubeconfig) \
-			--namespace=$(control_namespace) \
-			--machine-creation-timeout=20m \
-			--machine-drain-timeout=5m \
-			--machine-health-timeout=10m \
-			--machine-pv-detach-timeout=2m \
-			--machine-safety-apiserver-statuscheck-timeout=30s \
-			--machine-safety-apiserver-statuscheck-period=1m \
-			--machine-safety-orphan-vms-period=30m \
-			--leader-elect=$(leader_elect) \
-			--v=3
-
+go run -mod=vendor 
+    cmd/machine-controller/main.go 
+    --control-kubeconfig=$(CONTROL_KUBECONFIG) 
+    --target-kubeconfig=$(TARGET_KUBECONFIG) 
+    --namespace=$(CONTROL_NAMESPACE) 
+    --machine-creation-timeout=20m 
+    --machine-drain-timeout=5m 
+    --machine-health-timeout=10m 
+    --machine-pv-detach-timeout=2m 
+    --machine-safety-apiserver-statuscheck-timeout=30s 
+    --machine-safety-apiserver-statuscheck-period=1m 
+    --machine-safety-orphan-vms-period=30m 
+    --leader-elect=$(LEADER_ELECT) 
+    --v=3
 ```
-### Prod Launch
+### Prod 
 
+#### Build
 A `Dockerfile` builds the provider specific machine controller and launches it directly with no CLI arguments. Hence uses coded defaults
 
 ```Dockerfile
@@ -66,6 +83,19 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
       cmd/machine-controller/main.go
 COPY --from=builder /usr/local/bin/machine-controller /machine-controller
 ENTRYPOINT ["/machine-controller"]
+```
+
+The `machine-controller-manager` deployment usually launches both the MC in a Pod with following arguments
+```
+./machine-controller
+         --control-kubeconfig=inClusterConfig
+         --machine-creation-timeout=20m
+         --machine-drain-timeout=2h
+         --machine-health-timeout=10m
+         --namespace=shoot--i034796--tre
+         --port=10259
+         --target-kubeconfig=/var/run/secrets/gardener.cloud/shoot/generic-kubeconfig/kubeconfig
+         --v=3
 ```
 
 ### Launch Flow
@@ -101,25 +131,31 @@ AppRun-->End(("if err != nil
 os.Exit(1)"))
 ```
 #### Summary
-- Creates [machine-controller-manager/pkg/util/provider/app/options.MCServer](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/app/options#MCServer) using `options.NewMCServer` which is the main context object for the machinecontroller that embeds a
-[options.MachineControllerConfiguration](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/options#MachineControllerManagerConfiguration) 
-  - `options.NewMCServer` initializes `options.MCServer` struct with default values for 
+1. Creates [machine-controller-manager/pkg/util/provider/app/options.MCServer](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/app/options#MCServer) using `options.NewMCServer` which is the main context object for the machinecontroller that embeds a
+[options.MachineControllerConfiguration](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/options#MachineControllerManagerConfiguration).
+
+   `options.NewMCServer` initializes `options.MCServer` struct with default values for 
     - `Port: 10258`, 
     - `Namespace: default`, 
     - `ConcurrentNodeSyncs: 50`: number of worker go-routines that are used to process items from a work queue. See [Worker](#31-createworker) below
-    - `NodeConditions: "kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable"` (failure node conditions that mark a machine as un-healthy)
+    - `NodeConditions: "KernelDeadLock,ReadonlyFilesystem,DiskPressure,NetworkUnavailable"` (failure node conditions that indicate that a machine is un-healthy)
     - `MinResyncPeriod: 12 hours`, `KubeAPIQPS: 20`, `KubeAPIBurst:30`: config params for k8s clients. See [rest.Config](https://pkg.go.dev/k8s.io/client-go@v0.25.3/rest#Config)
 
-- calls `MCServer.AddFlags` which defines all parsing flags for the machine controller into fields of `MCServer` instance created in the last step.
-- calls `k8s.io/component-base/logs.NewOptions` and then `options.AddFlags` for logging options. 
-  - TODO: Should get rid of this when moving to `logr`.) 
+1. calls `MCServer.AddFlags` which defines all parsing flags for the machine controller into fields of `MCServer` instance created in the last step.
+1. calls `k8s.io/component-base/logs.NewOptions` and then `options.AddFlags` for logging options. 
+  TODO: Should get rid of this when moving to `logr`.) 
     - See [Logging In Gardener Components](https://github.com/gardener/gardener/blob/master/docs/development/logging.md). 
     - Then use the [logcheck](https://github.com/gardener/gardener/tree/master/hack/tools/logcheck)tool.
-- Driver initialization code various according to the provider type.
-- Local Driver:
-  - calls `NewDriver` with control kube config that creates a controller runtime client (`sigs.k8s.io/controller-runtime/pkg/client`) which then calls `pkg/local/driver.NewDriver` passing the controlloer-runtime client which constructs a `localdriver` encapsulating the passed in client.
-  - the `localdriver` implements [driver](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/driver/driver.go#l28) is the facade for creation/deletion of vm's
-- calls [app.Run](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l77) passing in the previously created `MCServer` and `Driver` instances.
+1. Driver initialization code varies according to the provider type.
+	- Local Driver
+      - calls `NewDriver` with control kube config that creates a controller runtime client (`sigs.k8s.io/controller-runtime/pkg/client`) which then calls `pkg/local/driver.NewDriver` passing the controlloer-runtime client which constructs a `localdriver` encapsulating the passed in client.
+      - `driver := local.NewDriver(c)`
+      - the `localdriver` implements [Driver](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/driver/driver.go#l28) is the facade for creation/deletion of vm's
+    - Provider Specific Driver Example
+      - `driver := aws.NewAWSDriver(&spi.PluginSPIImpl{})`
+      - `driver := cp.NewAzureDriver(&spi.PluginSPIImpl{})`
+      - `spi.PluginSPIImpl` is a struct that implements a provider specific interface that initializes a provider session.
+2. calls [app.Run](https://github.com/gardener/machine-controller-manager/blob/master/pkg/util/provider/app/app.go#l77) passing in the previously created `MCServer` and `Driver` instances.
 
 ## Machine Controller Loop
 
@@ -127,46 +163,47 @@ os.Exit(1)"))
 
 `app.Run` is the function that setups the main control loop of the machine controller server. 
 
-```go
-func Run(s *options.MCServer, driver driver.Driver) error
-```
-
-```mermaid
-%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
-flowchart TB
-
-Begin((" "))
-```
 
 #### Summary
-- [app.Run(s *options.MCServer, driver driver.Driver)](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L77) is the common run loop for all provider Machine Controllers.
-- Creates `targetkubeconfig` and `controlkubeconfig` of type `k8s.io/client-go/rest.config` from the target kube config path using `clientcmd.BuildConfigFromFlags`
-- set fields such as `config.QPS` and `config.Burst`  in both `targetkubeconfig` and `controlkubeconfig` from the `options.newmcserver`
-- create `kubeclientcontrol` from the `controlkubeconfig` using the standard client-go client factory metohd: `kubernetes.newforconfig` that returns a `client-go/kubernetes.clientset`
-- similarly create another `clientset` named `leaderelectionclient` using `controlkubeconfig`
-- start a go routine using the function `starthttp` that registers a bunch of http handlers for the go profiler, prometheus metrics and the health check.
-- call `createrecorder` passing the `kubeclientcontrol` client set instance that returns a [client-go/tools/record.eventrecorder](https://github.com/kubernetes/client-go/blob/master/tools/record/event.go#l91)
-  - creates a new `eventbroadcaster` of type [event.eventbroadcaster](https://github.com/kubernetes/client-go/blob/master/tools/record/event.go#l113)
-  - set the logging function of the broadcaster to `klog.infof`.
-  - sets the event slink using `startrecordingtoslink` passing the event interface as `kubeclient.corev1().restclient()).events("")`. effectively events will be published remotely.
-  - returns the `record.eventrecorder` associated with the `eventbroadcaster` using `eventbroadcaster.newrecorder`
-  - constructs the `run` anonmous function assigned to `run` variable which does the following:
-    - initializes a `stop` receive channel.
-    - creates a `controlmachineclientbuilder` using `machineclientbuilder.simpleclientbuilder` using the `controlkubeconfig`.
-    - creates a `controlcoreclientbuidler` using `coreclientbuilder.simplecontrollerclientbuilder` wrapping `controlkubeconfig`.
-    - creates `targetcoreclientbuilder` using `coreclientbuilder.simplecontrollerclientbuilder` wrapping `controlkubeconfig`.
-    - // imho far too many clients created
-    - call the `startcontrollers` function passing the `mcserver`, `driver`, `controlkubeconfig`, `targetkubeconfig`, `controlmachineclientbuilder`, `controlcoreclientbuilder`, `targetcoreclientbuilder`, `recorder` and `stop` channel.
-      - // ?: if you are going to pass the controlkubeconfig and targetkubeconfig - why not create the client builders inside the startcontrollers ?
-      - if `startcontrollers` return an error panic and exit `run`.
-  - use [leaderelection.runordie](https://github.com/kubernetes/client-go/blob/master/tools/leaderelection/leaderelection.go#l218) to start a leader election and pass the previously created `run` function to the leader callbacks for `onstartedleading`. `onstartedleading` is called when a leaderelector client starts leading.
+1. [app.Run(options *options.MCServer, driver driver.Driver)](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L77) is the common run loop for all provider Machine Controllers.
+1. Creates `targetkubeconfig` and `controlkubeconfig` of type `k8s.io/client-go/rest.Config` from the target kube config path using `clientcmd.BuildConfigFromFlags`
+1. Set fields such as `config.QPS` and `config.Burst`  in both `targetkubeconfig` and `controlkubeconfig` from the passed in `options.MCServer`
+1. Create `kubeClientControl` from the `controlkubeconfig` using the standard client-go client factory metohd: `kubernetes.NewForConfig` that returns a `client-go/kubernetes.Clientset`
+1. Similarly create another `Clientset` named `leaderElectionClient` using `controlkubeconfig`
+1. Start a go routine using the function `startHTTP` that registers a bunch of http handlers for the go profiler, prometheus metrics and the health check.
+1. Call `createRecorder` passing the `kubeClientControl` client set instance that returns a [client-go/tools/record.EventRecorder](https://github.com/kubernetes/client-go/blob/master/tools/record/event.go#L91)
+	1. Creates a new `eventBroadcaster` of type [event.EventBroadcaster](https://github.com/kubernetes/client-go/blob/master/tools/record/event.go#l113)
+	1. Set the logging function of the broadcaster to `klog.Infof`.
+	1. Sets the event sink using `eventBroadcaster.StartRecordingToSink` passing the event interface as `kubeClient.CoreV1().RESTClient()).Events("")`. Effectively events will be published remotely.
+	1. Returns the `record.EventRecorder` associated with the `eventBroadcaster` using `eventBroadcaster.NewRecorder` 
+1. Constructs an anonymous function assigned to `run` variable which does the following:
+	1. initializes a `stop` receive channel.
+	1. creates a `controlMachineClientBuilder` using `machineclientbuilder.SimpleClientBuilder` using the `controlkubeconfig`.
+	1. creates a `controlCoreClientBuidler` using `coreclientbuilder.SimpleControllerClientBuilder` wrapping `controlkubeconfig`.
+	1. creates `targetCoreClientBuilder` using `coreclientbuilder.SimpleControllerClientBuilder` wrapping `controlkubeconfig`.
+	1. call the `app.StartControllers` function passing the `options`, `driver`, `controlkubeconfig`, `targetkubeconfig`, `controlMachineClientBuilder`, `controlCoreClientBuilder`, `targetCoreClientBuilder`, `recorder` and `stop` channel.
+    	- // Q: if you are going to pass the controlkubeconfig and targetkubeconfig - why not create the client builders inside the startcontrollers ?
+	1.  if `app.StartcOntrollers` return an error panic and exit `run`.
+  1. use [leaderelection.RunOrDie](https://github.com/kubernetes/client-go/blob/master/tools/leaderelection/leaderelection.go#L218) to start a leader election and pass the previously created `run` function to as the callback for `OnStartedLeading`. `OnStartedLeading` callback is invoked when a leaderelector client starts leading.
 
 ### app.StartControllers
 [app.StartControllers](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L202) starts all controller loops which are part of the machine controller. 
-- calls `GetAvailableResources` using the `controlcoreclientbuilder` that returns a `map[schema.groupversionresource]bool]` assigned to `availableresources`
-  - `getavailableresources` waits till the api server is running by checking its `/healthz` using `wait.pollimmediate`. keeps re-creating the client using `clientbuilder.client` method. 
-  - then uses `clientset.interface.discovery.serverresources` to get a `[]*metav1.apiresourcelist` (which encapsulates a `[]apiresources`) and then converts that to a `map[schema.groupversionresource]bool]` `
-- creates a `controlmachineclient` which is a client for the controller crd types (type: `versioned.interface`) using `controlmachineclientbuilder.clientordie` using `machine-controller` as client name. this client targets the control cluster - ie the cluster holding the machine cr's.
+
+```go
+func StartControllers(s *options.MCServer,
+	controlCoreKubeconfig *rest.Config,
+	targetCoreKubeconfig *rest.Config,
+	controlMachineClientBuilder machineclientbuilder.ClientBuilder,
+	controlCoreClientBuilder coreclientbuilder.ClientBuilder,
+	targetCoreClientBuilder coreclientbuilder.ClientBuilder,
+	driver driver.Driver,
+	recorder record.EventRecorder,
+	stop <-chan struct{}) error
+```
+1. calls `getAvailableResources` using the `controlCoreClientBuilder` that returns a `map[schema.GroupVersionResource]bool` assigned to `availableresources`
+	- `getAvailableResources` waits till the api server is running by checking its `/healthz` using `wait.PollImmediate`. keeps re-creating the client using `clientbuilder.Client` method. 
+	- then uses `client.Discovery().ServerResources` which returns returns the supported resources for all groups and versions as a slice of [*metav1.APIResourceList](https://github.com/kubernetes/apimachinery/blob/373a5f752d44989b9829888460844849878e1b6e/pkg/apis/meta/v1/types.go#L1131) (which encapsulates a [[]APIResource](https://github.com/kubernetes/apimachinery/blob/v0.26.1/pkg/apis/meta/v1/types.go#L1081)) and then converts that to a `map[schema.GroupVersionResource]bool` `
+- creates a `controlMachineClient` which is a client for the controller crd types (type: `versioned.interface`) using `controlmachineclientbuilder.clientordie` using `machine-controller` as client name. this client targets the control cluster - ie the cluster holding the machine cr's.
 - creates a `controlcoreclient` (of type: `kubernetes.clientset`) which is the standard k8s client-go client for accessing the k8s control cluster.
 - creates a `targetcoreclient` (of type: `kubernetes.clientset`) which is the standard k8s client-go client for accessing the k8s target cluster. 
 - obtain the target cluster k8s version using the discovery interface and preserve it in `targetkubernetesversion`
