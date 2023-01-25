@@ -8,7 +8,6 @@
 
         <!-- Custom HTML head -->
         
-        <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff" />
@@ -34,13 +33,13 @@
     </head>
     <body>
         <!-- Provide site root to javascript -->
-        <script type="text/javascript">
+        <script>
             var path_to_root = "../";
             var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "light";
         </script>
 
         <!-- Work around some values being stored in localStorage wrapped in quotes -->
-        <script type="text/javascript">
+        <script>
             try {
                 var theme = localStorage.getItem('mdbook-theme');
                 var sidebar = localStorage.getItem('mdbook-sidebar');
@@ -56,7 +55,7 @@
         </script>
 
         <!-- Set the theme before any content is loaded, prevents flash -->
-        <script type="text/javascript">
+        <script>
             var theme;
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
@@ -68,7 +67,7 @@
         </script>
 
         <!-- Hide / unhide sidebar before it is displayed -->
-        <script type="text/javascript">
+        <script>
             var html = document.querySelector('html');
             var sidebar = 'hidden';
             if (document.body.clientWidth >= 1080) {
@@ -99,7 +98,7 @@
                             <i class="fa fa-paint-brush"></i>
                         </button>
                         <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
-                            <li role="none"><button role="menuitem" class="theme" id="light">Light (default)</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
                             <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
@@ -132,7 +131,7 @@
                 </div>
 
                 <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
-                <script type="text/javascript">
+                <script>
                     document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
                     document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
                     Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
@@ -173,25 +172,42 @@
 </ul>
 </li>
 <li><a href="#appstartcontrollers">app.StartControllers</a></li>
-<li><a href="#controller-initialization">controller initialization</a>
+<li><a href="#machine-controller-initialization">Machine Controller Initialization</a>
 <ul>
-<li><a href="#1-newcontroller-factory-func">1. newcontroller factory func</a></li>
-<li><a href="#11-create-controller-struct">1.1 create controller struct</a></li>
-<li><a href="#12-assign-listers-and-hassynced-funcs-to-controller-struct">1.2 assign listers and hassynced funcs to controller struct</a></li>
-<li><a href="#13-register-controller-event-handlers-on-informers">1.3 register controller event handlers on informers.</a></li>
-<li><a href="#14-event-handler-functions">1.4 event handler functions</a>
+<li><a href="#1-newcontroller-factory-func">1. NewController factory func</a></li>
+<li><a href="#11-init-controller-struct">1.1 Init Controller Struct</a></li>
+<li><a href="#12-assign-listers-and-hassynced-funcs-to-controller-struct">1.2 Assign Listers and HasSynced funcs to controller struct</a></li>
+<li><a href="#13-register-controller-event-handlers-on-informers">1.3 Register Controller Event Handlers on Informers.</a>
 <ul>
-<li><a href="#141-adding-secrets-keys-to-secretsqueue">1.4.1 adding secrets keys to secretsqueue</a></li>
-<li><a href="#142-adding-machine-class-names-and-keys-to-machineclassqueue">1.4.2 adding machine class names and keys to machineclassqueue</a></li>
-<li><a href="#143-adding-machine-keys-to-machinequeue">1.4.3 adding machine keys to machinequeue</a></li>
+<li><a href="#131-secret-informer-callback">1.3.1 Secret Informer Callback</a></li>
+<li><a href="#132-machine-class-informer-callbacks">1.3.2 Machine Class Informer Callbacks</a>
+<ul>
+<li><a href="#machineclass-adddelete-callback-1">MachineClass Add/Delete Callback 1</a></li>
+<li><a href="#machineclass-update-callback-1">MachineClass Update Callback 1</a></li>
+<li><a href="#machineclass-adddeleteupdate-callback-2">MachineClass Add/Delete/Update Callback 2</a></li>
+</ul>
+</li>
+<li><a href="#132-machine-informer-callbacks">1.3.2 Machine Informer Callbacks</a>
+<ul>
+<li><a href="#machine-addupdatedelete-callbacks-1">Machine Add/Update/Delete Callbacks 1</a></li>
+<li><a href="#machine-updatedelete-callbacks-2">Machine Update/Delete Callbacks 2</a></li>
+</ul>
+</li>
+<li><a href="#133-node-informer-callbacks">1.3.3 Node Informer Callbacks</a>
+<ul>
+<li><a href="#node-add-callback">Node Add Callback</a></li>
+<li><a href="#node-delete-callback">Node Delete Callback</a></li>
+<li><a href="#node-update-callback">Node Update Callback</a></li>
 </ul>
 </li>
 </ul>
 </li>
-<li><a href="#machinecontrollerrun">machinecontroller.run</a>
+</ul>
+</li>
+<li><a href="#machine-controller-run">Machine Controller Run</a>
 <ul>
-<li><a href="#1-wait-for-informer-caches-to-sync">1. wait for informer caches to sync</a></li>
-<li><a href="#2-register-metrics">2. register metrics</a>
+<li><a href="#1-wait-for-informer-caches-to-sync">1. Wait for Informer Caches to Sync</a></li>
+<li><a href="#2-register-prometheus-metrics">2. Register Prometheus Metrics</a>
 <ul>
 <li><a href="#21-controllerdescribe">2.1 controller.describe</a></li>
 <li><a href="#21-controllercollect">2.1 controller.collect</a></li>
@@ -348,7 +364,7 @@ TODO: Should get rid of this when moving to <code>logr</code>.) </p>
 <p><code>app.Run</code> is the function that setups the main control loop of the machine controller server. </p>
 <h4 id="summary-1"><a class="header" href="#summary-1">Summary</a></h4>
 <ol>
-<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L77">app.Run(options *options.MCServer, driver driver.Driver)</a> is the common run loop for all provider Machine Controllers.</li>
+<li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/app/app.go#L77">app.Run(options *options.MCServer, driver driver.Driver)</a> is the common run loop for all provider Machine Controllers.</li>
 <li>Creates <code>targetkubeconfig</code> and <code>controlkubeconfig</code> of type <code>k8s.io/client-go/rest.Config</code> from the target kube config path using <code>clientcmd.BuildConfigFromFlags</code></li>
 <li>Set fields such as <code>config.QPS</code> and <code>config.Burst</code>  in both <code>targetkubeconfig</code> and <code>controlkubeconfig</code> from the passed in <code>options.MCServer</code></li>
 <li>Create <code>kubeClientControl</code> from the <code>controlkubeconfig</code> using the standard client-go client factory metohd: <code>kubernetes.NewForConfig</code> that returns a <code>client-go/kubernetes.Clientset</code></li>
@@ -364,11 +380,11 @@ TODO: Should get rid of this when moving to <code>logr</code>.) </p>
 </li>
 <li>Constructs an anonymous function assigned to <code>run</code> variable which does the following:
 <ol>
-<li>initializes a <code>stop</code> receive channel.</li>
-<li>creates a <code>controlMachineClientBuilder</code> using <code>machineclientbuilder.SimpleClientBuilder</code> using the <code>controlkubeconfig</code>.</li>
-<li>creates a <code>controlCoreClientBuidler</code> using <code>coreclientbuilder.SimpleControllerClientBuilder</code> wrapping <code>controlkubeconfig</code>.</li>
-<li>creates <code>targetCoreClientBuilder</code> using <code>coreclientbuilder.SimpleControllerClientBuilder</code> wrapping <code>controlkubeconfig</code>.</li>
-<li>call the <code>app.StartControllers</code> function passing the <code>options</code>, <code>driver</code>, <code>controlkubeconfig</code>, <code>targetkubeconfig</code>, <code>controlMachineClientBuilder</code>, <code>controlCoreClientBuilder</code>, <code>targetCoreClientBuilder</code>, <code>recorder</code> and <code>stop</code> channel.
+<li>Initializes a <code>stop</code> receive channel.</li>
+<li>Creates a <code>controlMachineClientBuilder</code> using <code>machineclientbuilder.SimpleClientBuilder</code> using the <code>controlkubeconfig</code>.</li>
+<li>Creates a <code>controlCoreClientBuidler</code> using <code>coreclientbuilder.SimpleControllerClientBuilder</code> wrapping <code>controlkubeconfig</code>.</li>
+<li>Creates <code>targetCoreClientBuilder</code> using <code>coreclientbuilder.SimpleControllerClientBuilder</code> wrapping <code>controlkubeconfig</code>.</li>
+<li>Call the <code>app.StartControllers</code> function passing the <code>options</code>, <code>driver</code>, <code>controlkubeconfig</code>, <code>targetkubeconfig</code>, <code>controlMachineClientBuilder</code>, <code>controlCoreClientBuilder</code>, <code>targetCoreClientBuilder</code>, <code>recorder</code> and <code>stop</code> channel.
 <ul>
 <li>// Q: if you are going to pass the controlkubeconfig and targetkubeconfig - why not create the client builders inside the startcontrollers ?</li>
 </ul>
@@ -376,11 +392,11 @@ TODO: Should get rid of this when moving to <code>logr</code>.) </p>
 <li>if <code>app.StartcOntrollers</code> return an error panic and exit <code>run</code>.</li>
 </ol>
 </li>
-<li>use <a href="https://github.com/kubernetes/client-go/blob/master/tools/leaderelection/leaderelection.go#L218">leaderelection.RunOrDie</a> to start a leader election and pass the previously created <code>run</code> function to as the callback for <code>OnStartedLeading</code>. <code>OnStartedLeading</code> callback is invoked when a leaderelector client starts leading.</li>
+<li>use <a href="https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/app/app.go#L186">leaderelection.RunOrDie</a> to start a leader election and pass the previously created <code>run</code> function to as the callback for <code>OnStartedLeading</code>. <code>OnStartedLeading</code> callback is invoked when a leaderelector client starts leading.</li>
 </ol>
 <h3 id="appstartcontrollers"><a class="header" href="#appstartcontrollers">app.StartControllers</a></h3>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L202">app.StartControllers</a> starts all controller loops which are part of the machine controller. </p>
-<pre><code class="language-go">func StartControllers(s *options.MCServer,
+<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/app/app.go#L202">app.StartControllers</a> starts all controller loops which are part of the machine controller. </p>
+<pre><code class="language-go">func StartControllers(options *options.MCServer,
 	controlCoreKubeconfig *rest.Config,
 	targetCoreKubeconfig *rest.Config,
 	controlMachineClientBuilder machineclientbuilder.ClientBuilder,
@@ -391,320 +407,325 @@ TODO: Should get rid of this when moving to <code>logr</code>.) </p>
 	stop &lt;-chan struct{}) error
 </code></pre>
 <ol>
-<li>calls <code>getAvailableResources</code> using the <code>controlCoreClientBuilder</code> that returns a <code>map[schema.GroupVersionResource]bool</code> assigned to <code>availableresources</code>
+<li>Calls <code>getAvailableResources</code> using the <code>controlCoreClientBuilder</code> that returns a <code>map[schema.GroupVersionResource]bool</code> assigned to <code>availableresources</code>
 <ul>
 <li><code>getAvailableResources</code> waits till the api server is running by checking its <code>/healthz</code> using <code>wait.PollImmediate</code>. keeps re-creating the client using <code>clientbuilder.Client</code> method. </li>
 <li>then uses <code>client.Discovery().ServerResources</code> which returns returns the supported resources for all groups and versions as a slice of <a href="https://github.com/kubernetes/apimachinery/blob/373a5f752d44989b9829888460844849878e1b6e/pkg/apis/meta/v1/types.go#L1131">*metav1.APIResourceList</a> (which encapsulates a <a href="https://github.com/kubernetes/apimachinery/blob/v0.26.1/pkg/apis/meta/v1/types.go#L1081">[]APIResource</a>) and then converts that to a <code>map[schema.GroupVersionResource]bool</code> `</li>
 </ul>
 </li>
+<li>Creates a <code>controlMachineClient</code> using <code>controlMachineClientBuilder.ClientOrDie(&quot;machine-controller&quot;).MachineV1alpha1()</code> which is a client of type <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachineV1alpha1Interface">MachineV1alpha1Interface</a>. This interface is a composition of <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachinesGetter">MachineGetter</a>,<a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachineClassesGetter">MachineClassesGetter</a>, <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachineDeploymentsGetter">MachineDeploymentsGetter</a> and <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachineSetsGetter">MachineSetsGetter</a> allowing access to CRUD interface for machines, machine classes, machine deployments and machine sets. This client targets the control cluster - ie the cluster holding the machine crd's.</li>
+<li>creates a <code>controlCoreClient</code> (of type: <a href="https://pkg.go.dev/k8s.io/client-go@v0.26.1/kubernetes#Clientset">kubernetes.Clientset</a> which is the standard k8s client-go client for accessing the k8s control cluster.</li>
+<li>creates a <code>targetCoreClient</code> (of type: <a href="https://pkg.go.dev/k8s.io/client-go@v0.26.1/kubernetes#Clientset">kubernetes.Clientset</a>) which is the standard k8s client-go client for accessing the target cluster - in which machines will be spawned.</li>
+<li>obtain the target cluster k8s version using the discovery interface and preserve it in <code>targetKubernetesVersion</code></li>
+<li>if the <code>availableResources</code> does not contain the machine GVR,  exit <code>app.StartControllers</code> with error.</li>
+<li>creates the following informer factories:</li>
 </ol>
 <ul>
-<li>creates a <code>controlMachineClient</code> which is a client for the controller crd types (type: <code>versioned.interface</code>) using <code>controlmachineclientbuilder.clientordie</code> using <code>machine-controller</code> as client name. this client targets the control cluster - ie the cluster holding the machine cr's.</li>
-<li>creates a <code>controlcoreclient</code> (of type: <code>kubernetes.clientset</code>) which is the standard k8s client-go client for accessing the k8s control cluster.</li>
-<li>creates a <code>targetcoreclient</code> (of type: <code>kubernetes.clientset</code>) which is the standard k8s client-go client for accessing the k8s target cluster. </li>
-<li>obtain the target cluster k8s version using the discovery interface and preserve it in <code>targetkubernetesversion</code></li>
-<li>if the <code>availableresources</code> does not contain the <code>machinegvr</code> exit this loop with error.</li>
-<li>creates the following informer factories:
+<li><code>controlMachineInformerfactory</code> using the generated <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/informers/externalversions.NewFilteredSharedInformerFactory">pkg/client/informers/externalversions#NewFilteredSharedInformerFactory</a> passing the conrol machine client, the configured min resync period and control namespace.</li>
+<li>Create <code>controlCoreInformerfactory</code> using the client-go core <a href="https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers#NewFilteredSharedInformerFactory">informers#NewFilteredSharedInformerFactory</a> passing in the control core client, min resync period and control namespace.</li>
+<li>Similarly create <code>targetCoreInformerFactory</code></li>
+<li>Get the controller's <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/informers/externalversions/machine/v1alpha1#Interface">Machine Informers Facade</a> using <code>controlMachineInformerfactory.Machine().V1alpha1()</code> and assign to <code>machinesharedinformers</code></li>
+</ul>
+<ol start="8">
+<li>Now create the <code>machinecontroller</code> using <a href="https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/machinecontroller/controller.go#L77">machinecontroller.NewController</a> factory function, passing the below:
 <ul>
-<li><code>controlmachineinformerfactory</code> using the generated <code>client/informers/externalversions.newfilteredsharedinformerfactory</code> passing the conrol machine client, the configured min resync period and control namespace obtained from mcserver.</li>
-<li><code>controlcoreinformerfactory</code> using the standard k8s client-go <code>k8s.io/client-go/informers.newfilteredsharedinformerfactory</code> method passing in the k8s client for the , the control cluster, configured min resync period and control namespace obtained from mcserver.</li>
-<li><code>targetcoreinformerfactory</code> using the standard k8s client-go <code>k8s.io/client-go/informers.newfilteredsharedinformerfactory</code> method passing in the k8s core client for the target cluster, the configured min resync period and control namespace obtained from mcserver.</li>
-<li>get the controller's informer access facade <code>v1alpha1.interface</code> using <code>controlmachineinformerfactory.machine().v1alpha1()</code> and assign to <code>machinesharedinformers</code></li>
-<li>now create the <code>machinecontroller</code> using <code>pkg/util/provider/machinecontroller/controller.newcontroller</code> factory function, passing the below:
-<ul>
-<li>control namespace from <code>mcserver.namespace</code></li>
-<li><code>safetyoptions</code> from <code>mcserver.safetyoptions</code></li>
-<li><code>nodeconditions</code> from <code>mcserver.nodeconditions</code>. (by default these would be : &quot;kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable&quot;)</li>
-<li>clients: <code>controlmachineclient</code>, <code>controlcoreclient</code>, <code>targetcoreclient</code></li>
+<li>control namespace from <code>options.MCServer.Namespace</code></li>
+<li><code>SafetyOptions</code> from <code>options.MCServer.SafetyOptions</code></li>
+<li><code>NodeConditions</code> from <code>options.MCserver.NodeConditions</code>. (by default these would be : &quot;KernelDeadlock,ReadonlyFilesystem,DiskPressure,NetworkUnavailable&quot;)</li>
+<li>clients: <code>controlMachineClient</code>, <code>controlCoreClient</code>, <code>targetCoreClient</code></li>
 <li>the <code>driver</code> </li>
-<li>target cluster informers: <code>nodeinformer</code>, <code>persistentvolumeclaimsinformer</code>, <code>persistentvolumeinformer</code>, <code>volumeattachmentinformer</code> and <code>poddisruptionbudgetinformer</code> obtained from <code>targetcoreinformerfactory</code></li>
-<li>control cluster informers: 
+<li>Target Cluster Informers obtained from <code>targetCoreInformerfactory</code>:
 <ul>
-<li><code>secretinformer</code> from <code>controlcoreinformerfactory</code></li>
-<li><code>machineclassinformer</code>, <code>machineinformer</code> from <code>machinesharedinformers</code></li>
+<li><a href="https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/core/v1#PersistentVolumeClaimInformer">PersistentVolumeClaimInformer</a></li>
+<li><a href="https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/core/v1#PersistentVolumeInformer">PersistentVolumeInformer</a>, </li>
+<li><a href="https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/storage/v1#VolumeAttachmentInformer">VolumeAttachmentsInformer</a> </li>
+<li><a href="https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/policy/v1#PodDisruptionBudgetInformer">PodDisruptionBudgetInformer</a></li>
 </ul>
 </li>
-<li>event recorder</li>
-<li><code>targetkubernetesversion</code></li>
+<li>Control Cluster Informers obtained from <code>controlCoreInformerFactory</code> 
+<ul>
+<li><a href="https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/core/v1#SecretInformer">SecretInformer</a></li>
 </ul>
 </li>
-<li>start all informers by calling <code>sharedinformerfactory.start(stopch &lt;-chan struct{})</code> for <code>controlmachineinformerfactory</code>, <code>controlcoreinformerfactory</code> and <code>targetcoreinformerfactory</code> passing teh <code>stop</code> channel</li>
-<li>launches the <code>machinecontroller</code> in new go-routine by invoking: <code>go machinecontroller.run(mcserver.concurrentnodesyncs, stop)</code></li>
+<li><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/informers/externalversions/machine/v1alpha1#MachineClassInformer">MachineClassInformer</a>, <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/informers/externalversions/machine/v1alpha1#MachineInformer">MachineInformer</a> using <code>machinesharedinformers.MachineClasses()</code> and <code>machinesharedinformers.Machines()</code></li>
+<li>The event recorder created earlier</li>
+<li><code>targetKubernetesVersion</code></li>
 </ul>
 </li>
-</ul>
-<h3 id="controller-initialization"><a class="header" href="#controller-initialization">controller initialization</a></h3>
-<p>the machine controller is constructed using
-<code>machine-controller-manager/pkg/util/provider/machinecontroller/controller.newcontroller</code> factory function which initializes the <code>controller</code> struct.</p>
-<h4 id="1-newcontroller-factory-func"><a class="header" href="#1-newcontroller-factory-func">1. newcontroller factory func</a></h4>
+<li>Start <code>controlMachineInformerFactory</code>, <code>controlCoreInformerFactory</code> and <code>targetCoreInformerFactory</code> by calling <a href="https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers#SharedInformerFactory">SharedInformerfactory.Start</a> passing the <code>stop</code> channel. </li>
+<li>Launches the <a href="https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/machinecontroller/controller.go#L302">machinecontroller.Run</a> in new go-routine passing the stop channel.</li>
+<li>Block forever using a <code>select{}</code></li>
+</ol>
+<h3 id="machine-controller-initialization"><a class="header" href="#machine-controller-initialization">Machine Controller Initialization</a></h3>
+<p>the machine controller is constructed using <a href="https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/machinecontroller/controller.go#L77">controller.NewController</a>
+factory function which initializes the <code>controller</code> struct.</p>
+<h4 id="1-newcontroller-factory-func"><a class="header" href="#1-newcontroller-factory-func">1. NewController factory func</a></h4>
 <p>mc is constructed using the factory function below:</p>
 <pre><code class="language-go">func NewController(
 	namespace string,
-	controlmachineclient machineapi.machinev1alpha1interface,
-	controlcoreclient kubernetes.interface,
-	targetcoreclient kubernetes.interface,
-	driver driver.driver,
-	pvcinformer coreinformers.persistentvolumeclaiminformer,
-	pvinformer coreinformers.persistentvolumeinformer,
-	secretinformer coreinformers.secretinformer,
-	nodeinformer coreinformers.nodeinformer,
-	pdbinformer policyinformers.poddisruptionbudgetinformer,
-	volumeattachmentinformer storageinformers.volumeattachmentinformer,
-	machineclassinformer machineinformers.machineclassinformer,
-	machineinformer machineinformers.machineinformer,
-	recorder record.eventrecorder,
-	safetyoptions options.safetyoptions,
-	nodeconditions string,
-	bootstraptokenauthextragroups string,
-) (controller, error) {
-	// etc
+	controlMachineClient machineapi.MachineV1alpha1Interface,
+	controlCoreClient kubernetes.Interface,
+	targetCoreClient kubernetes.Interface,
+	driver driver.Driver,
+	pvcInformer coreinformers.PersistentVolumeClaimInformer,
+	pvInformer coreinformers.PersistentVolumeInformer,
+	secretInformer coreinformers.SecretInformer,
+	nodeInformer coreinformers.NodeInformer,
+	pdbV1beta1Informer policyv1beta1informers.PodDisruptionBudgetInformer,
+	pdbV1Informer policyv1informers.PodDisruptionBudgetInformer,
+	volumeAttachmentInformer storageinformers.VolumeAttachmentInformer,
+	machineClassInformer machineinformers.MachineClassInformer,
+	machineInformer machineinformers.MachineInformer,
+	recorder record.EventRecorder,
+	safetyOptions options.SafetyOptions,
+	nodeConditions string,
+	bootstrapTokenAuthExtraGroups string,
+	targetKubernetesVersion *semver.Version,
+) (Controller, error) 
 
+</code></pre>
+<h4 id="11-init-controller-struct"><a class="header" href="#11-init-controller-struct">1.1 Init Controller Struct</a></h4>
+<p>Create and Initialize the Controller struct initializing rate-limiting work queues for secrets: <code>controller.secretQueue</code>,  nodes: <code>controller.nodeQueue</code>, machines: <code>controller.machineQueue</code>, machineclass: <code>controller.machineClassQueue</code>. Along with 2 work queues used by safety controllers: <code>controller.machineSafetyOrphanVMsQueue</code> and <code>controller.machineSafetyAPIServerQueue</code></p>
+<p>Example: </p>
+<pre><code class="language-go">controller := &amp;controller {
+	//...
+ secretQueue:                   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), &quot;secret&quot;),
+ machineQueue=workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), &quot;machine&quot;),
+	//...
 }
 </code></pre>
-<h4 id="11-create-controller-struct"><a class="header" href="#11-create-controller-struct">1.1 create controller struct</a></h4>
-<p>create the controller struct initializing rate-limiting work queues for all relevant resources</p>
-<pre><code class="language-go">	controller := &amp;controller{
-		namespace:                     namespace,
-		controlmachineclient:          controlmachineclient,
-		controlcoreclient:             controlcoreclient,
-		targetcoreclient:              targetcoreclient,
-		recorder:                      recorder,
-		secretqueue:                   workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;secret&quot;),
-		nodequeue:                     workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;node&quot;),
-		machineclassqueue:             workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;machineclass&quot;),
-		machinequeue:                  workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;machine&quot;),
-		machinesafetyorphanvmsqueue:   workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;machinesafetyorphanvms&quot;),
-		machinesafetyapiserverqueue:   workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), &quot;machinesafetyapiserver&quot;),
-		safetyoptions:                 safetyoptions,
-		nodeconditions:                nodeconditions,
-		driver:                        driver,
-		bootstraptokenauthextragroups: bootstraptokenauthextragroups,
-		volumeattachmenthandler:       nil,
-		permitgiver:                   permits.newpermitgiver(permitgiverstaleentrytimeout, janitorfreq),
-	}
-
-
-</code></pre>
-<h4 id="12-assign-listers-and-hassynced-funcs-to-controller-struct"><a class="header" href="#12-assign-listers-and-hassynced-funcs-to-controller-struct">1.2 assign listers and hassynced funcs to controller struct</a></h4>
+<h4 id="12-assign-listers-and-hassynced-funcs-to-controller-struct"><a class="header" href="#12-assign-listers-and-hassynced-funcs-to-controller-struct">1.2 Assign Listers and HasSynced funcs to controller struct</a></h4>
 <pre><code class="language-go">	// initialize controller listers from the passed-in shared informers (8 listers)
-	controller.pvclister = pvcinformer
-	controller.pvlister = pvinformer.lister()
-    controller.machinelister = machineinformer.lister()
-	// etc
-	// assign the hassynced function from the passed-in shared informers
-	controller.pvcsynced = pvcinformer.informer().hassynced
-	controller.pvsynced = pvinformer.informer().hassynced
-    controller.machinesynced = machineinformer.informer().hassynced
+	controller.pvcLister = pvcInformer
+	controller.pvLister = pvinformer.Lister()
+    controller.machineLister = machineinformer.lister()
+
+	controller.pdbV1Lister = pdbV1Informer.Lister()
+	controller.pdbV1Synced = pdbV1Informer.Informer().HasSynced
+
+	// ...
+
+	// assign the HasSynced function from the passed-in shared informers
+	controller.pvcSynced = pvcInformer.Informer().HasSynced
+	controller.pvSynced = pvInformer.Informer().HasSynced
+    controller.machineSynced = machineInformer.Informer().HasSynced
 </code></pre>
-<h4 id="13-register-controller-event-handlers-on-informers"><a class="header" href="#13-register-controller-event-handlers-on-informers">1.3 register controller event handlers on informers.</a></h4>
-<p>an informer invokes registered event handler when a k8s object changes. event handlers are registered using <code>&lt;type&gt;informer().addeventhandler(resourceeventhandler)</code> function. the controller initialization registers event handlers: on control-cluster <code>secretinformer</code>, control-cluster <code>machineclassinformer</code>, control-cluster <code>machineinformer</code> and target-cluster <code>nodeinformer</code>.</p>
-<pre><code class="language-go">   // event handlers added for control-cluster secret add/delete
-	secretinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.secretadd,
-		deletefunc: controller.secretdelete,
-	})
-
-   // 2 event handlers added for controlcluster machineclass add/update/delete
-	machineclassinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.machineclasstosecretadd,
-		updatefunc: controller.machineclasstosecretupdate,
-		deletefunc: controller.machineclasstosecretdelete,
-	})
-
-	machineclassinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.machineclassadd,
-		updatefunc: controller.machineclassupdate,
-		deletefunc: controller.machineclassdelete,
-	})
-
-   // 3 event handlers added for control-cluster machine add/update/delete
-	machineinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.machinetomachineclassadd,
-		updatefunc: controller.machinetomachineclassupdate,
-		deletefunc: controller.machinetomachineclassdelete,
-	})
-	machineinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.addmachine,
-		updatefunc: controller.updatemachine,
-		deletefunc: controller.deletemachine,
-	})
-
-	machineinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		// updatemachinetosafety makes sure that orphan vm handler is invoked on some specific machine obj updates
-		updatefunc: controller.updatemachinetosafety,
-		// deletemachinetosafety makes sure that orphan vm handler is invoked on any machine deletion
-		deletefunc: controller.deletemachinetosafety,
-	})
-
-    // event handler registered for target-cluster node add/update/delete
-	nodeinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.addnodetomachine,
-		updatefunc: controller.updatenodetomachine,
-		deletefunc: controller.deletenodetomachine,
-	}		
-
-	// event handler added for target-cluster volume attachments is handled by
-	// utility volumeattachmenthandler that can distribute incoming volueattachment 
-	// add/updates to a bunch of workers.
-	controller.volumeattachmenthandler = drain.newvolumeattachmenthandler()
-	volumeattachmentinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.volumeattachmenthandler.addvolumeattachment,
-		updatefunc: controller.volumeattachmenthandler.updatevolumeattachment,
-	})
+<h4 id="13-register-controller-event-handlers-on-informers"><a class="header" href="#13-register-controller-event-handlers-on-informers">1.3 Register Controller Event Handlers on Informers.</a></h4>
+<p>An informer invokes registered event handler when a k8s object changes. </p>
+<p>Event handlers are registered using <code>&lt;ResourceType&gt;Informer().AddEventhandler</code> function. </p>
+<p>The controller initialization registers add//delete event handlers for secrets. add/update/delete event handlers for MachineClass, Machine and Node informers.</p>
+<p>The event handlers generally add the object keys to the appropriate work queues which are later picked up and reconciled in processing in <code>controller.Run</code>.</p>
+<p>The work queue is used to separate the delivery of the object from its processing. resource event handler functions extract the key of the delivered object and add it to the relevant work queue for future processing. (in <code>controller.Run</code>) </p>
+<p>Example</p>
+<pre><code class="language-go">secretInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	AddFunc:    controller.secretAdd,
+	DeleteFunc: controller.secretDelete,
+})
 </code></pre>
-<h4 id="14-event-handler-functions"><a class="header" href="#14-event-handler-functions">1.4 event handler functions</a></h4>
-<p>controller informer event handlers generally add the object keys to the appropriate work queues which are later picked up and reconciled in processing in <code>controller.run</code>.</p>
-<p>the work queue is used to separate the delivery of the object from its processing. resource event handler functions extract the key of the delivered object and add it to the relevant work queue for future processing. (in <code>controller.run</code>) </p>
-<h5 id="141-adding-secrets-keys-to-secretsqueue"><a class="header" href="#141-adding-secrets-keys-to-secretsqueue">1.4.1 adding secrets keys to secretsqueue</a></h5>
-<p><code>controller.secretadd(obj interfade{})</code> which is the <code>addfunc</code> callback registered for the <code>secretinformer</code> extracts the secret <code>key</code> using <code>cache.deletionhandlingmetanamespacekeyfunc(obj)</code> and then adds this <code>key</code> to the <code>secretqueue</code>.</p>
-<pre><code class="language-go">func (c *controller) secretadd(obj interface{}) {
-// confusing. should just use metanamespacekeyfunc(obj)
-	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj) 
-	if err != nil {
-		c.secretqueue.add(key)
+<h5 id="131-secret-informer-callback"><a class="header" href="#131-secret-informer-callback">1.3.1 Secret Informer Callback</a></h5>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TB
+
+SecretInformerAddCallback
+--&gt;SecretAdd[&quot;controller.secretAdd(obj)&quot;]
+--&gt;GetSecretKey[&quot;key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)&quot;]
+--&gt;AddSecretQ[&quot;if err != nil c.secretQueue.Add(key)&quot;]
+
+SecretInformeDeleteCallback
+--&gt;SecretAdd
+</pre>
+<p>We must check for the <a href="https://pkg.go.dev/k8s.io/client-go/tools/cache#DeletedFinalStateUnknown">DeletedFinalStateUnknown</a> state of that secret in the cache before enqueuing its key. The <code>DeletedFinalStateUnknown</code> state means that the object has been deleted but that the watch deletion event was missed while disconnected from apiserver and the controller didn't react accordingly. Hence if there is no error, we can add the key to the queue.</p>
+<h5 id="132-machine-class-informer-callbacks"><a class="header" href="#132-machine-class-informer-callbacks">1.3.2 Machine Class Informer Callbacks</a></h5>
+<h6 id="machineclass-adddelete-callback-1"><a class="header" href="#machineclass-adddelete-callback-1">MachineClass Add/Delete Callback 1</a></h6>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TB
+MachineClassInformerAddCallback1
+--&gt;
+MachineAdd[&quot;controller.machineClassToSecretAdd(obj)&quot;]
+--&gt;CastMC[&quot;
+	mc, ok := obj.(*v1alpha1.MachineClass)
+&quot;]
+--&gt;EnqueueSecret[&quot;
+	c.secretQueue.Add(mc.SecretRef.Namespace + '/' + 
+	mc.SecretRef.Name)
+	c.secretQueue.Add(mc.CredentialSecretRef.Namespace + '/' + mc.CredentialSecretRef.Namespace.Name)
+&quot;]
+
+MachineClassToSecretDeleteCallback1
+--&gt;MachineAdd
+</pre>
+<h6 id="machineclass-update-callback-1"><a class="header" href="#machineclass-update-callback-1">MachineClass Update Callback 1</a></h6>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TB
+MachineClassInformerUpdateCallback1
+--&gt;
+MachineAdd[&quot;controller.machineClassToSecretUpdate(oldObj, newObj)&quot;]
+--&gt;CastMC[&quot;
+	old, ok := oldObj.(*v1alpha1.MachineClass)
+	new, ok := newObj.(*v1alpha1.MachineClass)
+&quot;]
+--&gt;RefNotEqual{&quot;old.SecretRef != 
+	new.SecretRef?&quot;}
+--Yes--&gt;EnqueueSecret[&quot;
+	c.secretQueue.Add(old.SecretRef.Namespace + '/' + old.SecretRef.Name)
+	c.secretQueue.Add(new.SecretRef.Namespace + '/' + new.SecretRef.Name)
+&quot;]
+--&gt;CredRefNotEqual{&quot;old.CredentialsSecretRef!=
+new.CredentialsSecretRef?&quot;}
+--Yes--&gt;EnqueueCredSecretRef[&quot;
+c.secretQueue.Add(old.CredentialsSecretRef.Namespace + '/' + old.CredentialsSecretRef.Name)
+c.secretQueue.Add(new.CredentialsSecretRef.Namespace + '/' + new.CredentialsSecretRef.Name)
+&quot;]
+</pre>
+<h6 id="machineclass-adddeleteupdate-callback-2"><a class="header" href="#machineclass-adddeleteupdate-callback-2">MachineClass Add/Delete/Update Callback 2</a></h6>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TB
+MachineClassInformerAddCallback2
+--&gt;
+MachineAdd[&quot;controller.machineClassAdd(obj)&quot;]
+--&gt;CastMC[&quot;
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil c.machineClassQueue.Add(key)
+&quot;]
+MachineClassInformerDeleteCallback2
+--&gt;MachineAdd
+
+MachineClassInformeUpdateCallback2
+--&gt;MachineUpdate[&quot;controller.machineClassUpdate(oldObj,obj)&quot;]
+--&gt;MachineAdd
+</pre>
+<h5 id="132-machine-informer-callbacks"><a class="header" href="#132-machine-informer-callbacks">1.3.2 Machine Informer Callbacks</a></h5>
+<h6 id="machine-addupdatedelete-callbacks-1"><a class="header" href="#machine-addupdatedelete-callbacks-1">Machine Add/Update/Delete Callbacks 1</a></h6>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TB
+MachineAddCallback1
+--&gt;AddMachine[&quot;controller.addMachine(obj)&quot;]
+--&gt;EnqueueMachine[&quot;
+	key, err := cache.MetaNamespaceKeyFunc(obj)
+	//Q: why don't we use DeletionHandlingMetaNamespaceKeyFunc here ?
+	if err!=nil c.machineQueue.Add(key)
+&quot;]
+MachineUpdateCallback1--&gt;AddMachine
+MachineDeleteCallback1--&gt;AddMachine
+</pre>
+<h6 id="machine-updatedelete-callbacks-2"><a class="header" href="#machine-updatedelete-callbacks-2">Machine Update/Delete Callbacks 2</a></h6>
+<p>DISCUSS THIS.</p>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TB
+MachineUpdateCallback2
+--&gt;UpdateMachineToSafety[&quot;controller.updateMachineToSafety(oldObj, newObj)&quot;]
+--&gt;EnqueueSafetyQ[&quot;
+	newM := newObj.(*v1alpha1.Machine)
+	if multipleVMsBackingMachineFound(newM) {
+		c.machineSafetyOrphanVMsQueue.Add('')
 	}
-}
-func (c *controller) secretdelete(obj interface{}) {
-	c.secretadd(obj) // dont like this delegation
-}
-</code></pre>
-<p>in the case of <code>controller.secretdelete</code>, we must check for the <a href="https://pkg.go.dev/k8s.io/client-go/tools/cache#deletedfinalstateunknown">deletedfinalstateunknown</a> state of that secret in the cache before enqueuing its key. the <code>deletedfinalstateunknown</code> state means that the object has been deleted but that the watch deletion event was missed while disconnected from apiserver and the controller didn't react accordingly, hence we need to add to the secretqueue for processing.</p>
-<p><code>controller.machineclasstosecretadd</code>  is the <code>addfunc</code> callback registered for the <code>machineclassinformer</code> adds the key (namespace/name) of the secret obtained from the newly added <code>machineclass</code> object.</p>
-<pre><code class="language-go">func (c *controller) machineclasstosecretadd(obj interface{}) {
-	machineclass, ok := obj.(*v1alpha1.machineclass)
-	// if error or nil ref return
-	secretrefs := []*corev1.secretreference{machineclass.secretref, machineclass.credentialssecretref}
-	for _, secretref := range secretrefs {
-		if secretref != nil {
-			queue.add(secretref.namespace + &quot;/&quot; + secretref.name)
-		}
-	}
-}
-</code></pre>
-<p><code>controller.machineclasstosecretupdate</code> is the <code>updatefunc</code> callback registered for the <code>machine classinformer</code> which adds the key (namespace/name) of the secret obtained from the old/new machine class if its <code>secretref</code> is not nil.</p>
-<pre><code class="language-go">func (c *controller) machineclasstosecretupdate(oldobj interface{}, newobj interface{}) {
-	oldmachineclass, ok := oldobj.(*v1alpha1.machineclass)
-	newmachineclass, ok := newobj.(*v1alpha1.machineclass)
-	// if error or nil refs return
-	secretqueue.add(oldmachineclass.secretref.namespace + &quot;/&quot; + oldmachineclass.secretref.name)
-	secretqueue.add(newmachineclass.secretref.namespace + &quot;/&quot; + newmachineclass.secretref.name)
-}
-</code></pre>
-<h5 id="142-adding-machine-class-names-and-keys-to-machineclassqueue"><a class="header" href="#142-adding-machine-class-names-and-keys-to-machineclassqueue">1.4.2 adding machine class names and keys to machineclassqueue</a></h5>
-<p><code>controller.machineclassadd</code>is specified as both the <code>addfunc</code> and <code>deletefunc</code> callback registered on the <code>machineclassinformer</code>. it gets the object key <code>namespace/name</code> for the machine class <code>obj</code> and adds the key to the <code>machineclassqueue</code></p>
-<p><code>controller.machineclassupdate</code> just delegates to <code>controller.machineclassadd(newobj)</code>.</p>
-<pre><code class="language-go">func (c *controller) machineclassadd(obj interface{}) {
-	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj)
-	// log &amp; return on err != nil
-	c.machineclassqueue.add(key)
-}
-func (c *controller) machineclassupdate(oldobj, newobj interface{}) {
-	old, ok := oldobj.(*v1alpha1.machineclass)
-	if old == nil || !ok {
-		return
-	}
-	new, ok := newobj.(*v1alpha1.machineclass)
-	if new == nil || !ok {
-		return
-	}
+&quot;]
+MachineDeleteCallback2
+--&gt;DeleteMachineToSafety[&quot;deleteMachineToSafety(obj)&quot;]
+--&gt;EnqueueSafetyQ1[&quot;
+	c.machineSafetyOrphanVMsQueue.Add('')
+&quot;]
+</pre>
+<h5 id="133-node-informer-callbacks"><a class="header" href="#133-node-informer-callbacks">1.3.3 Node Informer Callbacks</a></h5>
+<h6 id="node-add-callback"><a class="header" href="#node-add-callback">Node Add Callback</a></h6>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 
-	c.machineclassadd(newobj)
-}
-</code></pre>
-<p><code>controller.machinetomachineclassadd</code> is both an <code>addfunc</code> and <code>deletefunc</code> callback registered on the <code>machineinfomer</code> . this simply adds the machine spec class name to the <code>machineclassqueue</code>. </p>
-<pre><code class="language-go">
-func (c *controller) machinetomachineclassadd(obj interface{}) {
-	c.machineclassqueue.add(machine.spec.class.name)
-}
-</code></pre>
-<p><code>controller.machinetomachineclassupdate</code> is the <code>updatefunc</code> callback registered on the <code>machineinformer</code>.  it enqueues the <code>newmacine</code> spec class name if there are no changes in the machine class name, otherwise it adds both the old and new machine classnames to the `machineclassqueue'.</p>
-<pre><code class="language-go">func (c *controller) machinetomachineclassupdate(oldobj, newobj interface{}) {
-	oldmachine, ok := oldobj.(*v1alpha1.machine)
-	newmachine, ok := newobj.(*v1alpha1.machine)
-	// return if nil or not ok
-	if oldmachine.spec.class.kind == newmachine.spec.class.kind {
-		c.machineclassqueue.add(newmachine.spec.class.name)
-	} else {
-		c.machineclassqueue.add(oldmachine.spec.class.name)
-		c.machineclassqueue.add(newmachine.spec.class.name)
-	}
-}
-</code></pre>
-<p>so, the <code>machineclassqueue</code> effectively holds machine-class keys (ns/name) and plain class names (name)
-for added/updated/delete machine classes.</p>
-<h5 id="143-adding-machine-keys-to-machinequeue"><a class="header" href="#143-adding-machine-keys-to-machinequeue">1.4.3 adding machine keys to machinequeue</a></h5>
-<p><code>controller.addmachine</code>, <code>controller.updatemachine</code> and <code>controller.deletemachine</code> all just deletgate the newly added/newly updated and newly delete machine obj to <code>controller.enqueuemachine</code> which simpy gets the object key for the machine and adds it to the <code>machinequeue</code>.</p>
-<pre><code class="language-go">func (c *controller) enqueuemachine(obj interface{}) {
-	key, err := cache.metanamespacekeyfunc(obj)
-	// return if err
-	c.machinequeue.add(key)
-}
-</code></pre>
-<p><code>controller.addnodetomachine</code> is specified as the <code>addfunc</code> registered for the <code>nodeinformer</code>.  basically, when a new node is created, the corresponding <code>machine</code> obj is obtained for the <code>node</code> and if the <code>machine.status.conditions</code>  does not match the <code>nodestatusconditions</code> then the machine <code>key</code> is added to the <code>machinequeue</code> for reconciliation.</p>
-<p>snippet shown be below with error handling+logging omitted.</p>
-<pre><code class="language-go">func (c *controller) addnodetomachine(obj interface{}) {
-	// if err != nil log err and return
-	node := obj.(*corev1.node)
-	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj)
-	machine, err := c.getmachinefromnode(key) // leverages machinelister and gets machine whose 'node' label matches key
-	if machine.status.currentstatus.phase != v1alpha1.machinecrashloopbackoff &amp;&amp; nodeconditionshavechanged(machine.status.conditions, node.status.conditions) {
-		macinekey, err = cache.metanamespacekeyfunc(obj)
-		c.machinequeue.add(key)
-	}
-}
+flowchart TB
+NodeaAddCallback
+--&gt;InvokeAddNodeToMachine[&quot;controller.addNodeToMachine(obj)&quot;]
+--&gt;AddNodeToMachine[&quot;
+	node := obj.(*corev1.Node)
+	if node.ObjectMeta.Annotations has NotManagedByMCM return;
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil return
+&quot;]
+--&gt;GetMachineFromNode[&quot;
+	machine := (use machineLister to get first machine whose 'node' label equals key)
+&quot;]
+--&gt;ChkMachine{&quot;
+machine.Status.CurrentStatus.Phase != 'CrashLoopBackOff'
+&amp;&amp;
+nodeConditionsHaveChanged(
+  machine.Status.Conditions, 
+  node.Status.Conditions) ?
+&quot;}
+--Yes--&gt;EnqueueMachine[&quot;
+	mKey, err := cache.MetaNamespaceKeyFunc(obj)
+	if err != nil return
+	controller.machineQueue.Add(mKey)
+&quot;]
 
-</code></pre>
-<p><code>controller.updatenodetomachine</code> is specified as <code>updatefunc</code> registered for the <code>nodeinformer</code>. in a nutshell, it simply delegates to <code>addnodetomachine(newobj)</code> except if the node has the annotation <code>machineutils.triggerdeletionbymcm</code> (value: <code>node.machine.sapcloud.io/trigger-deletion-by-mcm</code>), in which case get the <code>machine</code> obj corresponding to the node and then leverages the <code>controlmachineclient</code> to delete the machine object.</p>
-<p>todo: who sets this annotation ?? can't find the guy.</p>
-<p>snippet shown be below without error handling+logging omitted.</p>
-<pre><code class="language-go">func (c *controller) updatenodetomachine(oldobj, newobj interface{}) {
+</pre>
+<h6 id="node-delete-callback"><a class="header" href="#node-delete-callback">Node Delete Callback</a></h6>
+<p>This is straightforward - it checks that the node has an associated machine and if so, enqueues the machine on the <code>machineQueue</code></p>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+
+flowchart TB
+NodeDeleteCallback
+--&gt;InvokeDeleteNodeToMachine[&quot;controller.deleteNodeToMachine(obj)&quot;]
+--&gt;DeleteNodeToMachine[&quot;
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil return
+&quot;]
+--&gt;GetMachineFromNode[&quot;
+	machine := (use machineLister to get first machine whose 'node' label equals key)
+	if err != nil return
+&quot;]
+--&gt;EnqueueMachine[&quot;
+	mKey, err := cache.MetaNamespaceKeyFunc(obj)
+	if err != nil return
+	controller.machineQueue.Add(mKey)
+&quot;]
+</pre>
+<h6 id="node-update-callback"><a class="header" href="#node-update-callback">Node Update Callback</a></h6>
+<p><code>controller.updateNodeTomachine</code> is specified as <code>UpdateFunc</code> registered for the <code>nodeInformer</code>. </p>
+<p>In a nutshell, it simply delegates to <code>AddNodeTomachine(newobj)</code> described earlier, <em>except</em> if the node has the annotation <code>machineutils.TriggerDeletionByMCM</code> (value: <code>node.machine.sapcloud.io/trigger-deletion-by-mcm</code>).  In this case it gets the <code>machine</code> obj corresponding to the node and then leverages <code>controller.controlMachineClient</code> to delete the machine object.</p>
+<p>NOTE:  This annotation was introduced for the user to add on the node. This gives them an indirect way to delete the machine object because they don’t have access to control plane.</p>
+<p>Snippet shown below with error handling+logging omitted.</p>
+<pre><code class="language-go">func (c *controller) updateNodeToMachine(oldobj, newobj interface{}) {
 	node := newobj.(*corev1.node)
 	// check for the triggerdeletionbymcm annotation on the node object
 	// if it is present then mark the machine object for deletion
-	if value, ok := node.annotations[machineutils.triggerdeletionbymcm]; ok &amp;&amp; value == &quot;true&quot; {
-		machine, err := c.getmachinefromnode(node.name)
+	if value, ok := node.annotations[machineutils.TriggerDeletionByMCM]; ok &amp;&amp; value == &quot;true&quot; {
+		machine, err := c.getMachineFromnOde(node.name)
 		if machine.deletiontimestamp == nil {
 			c.controlmachineclient
-			.machines(c.namespace)
-			.delete(context.background(), machine.name, metav1.deleteoptions{});		
+			.Machines(c.namespace)
+			.Delete(context.Background(), machine.Name, metav1.Deleteoptions{});		
 		} 
 	}  else {
-		c.addnodetomachine(newobj)
+		c.addnodeToMachine(newobj)
 	}
 }
 </code></pre>
-<p><code>controller.deletenodetomachine</code> is specified as <code>deletefunc</code> registered for the <code>nodeinformer</code> and is quite simple. it just finds the corresponding machine object and adds its key to the <code>machinequeue</code></p>
-<p>snippet shown be below without error handling+logging omitted.</p>
-<pre><code class="language-go">func (c *controller) deletenodetomachine(obj interface{}) {
-	// if err != nil log error and return for statements below
-	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj)
-	machine, err := c.getmachinefromnode(key) // leverages machinelister and gets machine whose 'node' label matches key
-	macinekey, err = cache.metanamespacekeyfunc(obj)
-	c.machinequeue.add(key)
-}
-
-</code></pre>
-<h3 id="machinecontrollerrun"><a class="header" href="#machinecontrollerrun">machinecontroller.run</a></h3>
-<pre><code class="language-go">func (c *controller) run(workers int, stopch &lt;-chan struct{}) {
+<h3 id="machine-controller-run"><a class="header" href="#machine-controller-run">Machine Controller Run</a></h3>
+<pre><code class="language-go">func (c *controller) Run(workers int, stopch &lt;-chan struct{}) {
 	// ...
 }
 
 </code></pre>
-<h4 id="1-wait-for-informer-caches-to-sync"><a class="header" href="#1-wait-for-informer-caches-to-sync">1. wait for informer caches to sync</a></h4>
-<p>when an informer starts, it will build a cache of all resources it currently watches which is lost when the application
-restarts. this means that on startup, each of your handler functions will be invoked as the initial state is built. if this
-is not desirable for your use case, you can wait until the caches are synced before performing any updates using the
-<code>cache.waitforcachesync</code> function:</p>
-<pre><code class="language-go">if !cache.waitforcachesync(stopch, c.secretsynced, c.pvcsynced, c.pvsynced, c.pdbsynced, c.volumeattachementsynced, c.nodesynced, c.machineclasssynced, c.machinesynced) {
-		runtimeutil.handleerror(fmt.errorf(&quot;timed out waiting for caches to sync&quot;))
-		return
+<h4 id="1-wait-for-informer-caches-to-sync"><a class="header" href="#1-wait-for-informer-caches-to-sync">1. Wait for Informer Caches to Sync</a></h4>
+<p>When an informer starts, it will build a cache of all resources it currently watches which is lost when the application
+restarts. This means that on startup, each of your handler functions will be invoked as the initial state is built. If this
+is not desirable, one should wait until the caches are synced before performing any updates. This can be done using the
+<a href="https://pkg.go.dev/k8s.io/client-go/tools/cache#WaitForCacheSync">cache.WaitForCacheSync</a> function.</p>
+<pre><code class="language-go">if !cache.WaitForCacheSync(stopCh, c.secretSynced, c.pvcSynced, c.pvSynced, c.volumeAttachementSynced, c.nodeSynced, c.machineClassSynced, c.machineSynced) {
+	runtimeutil.HandleError(fmt.Errorf(&quot;Timed out waiting for caches to sync&quot;))
+	return
 }
+
 </code></pre>
-<h4 id="2-register-metrics"><a class="header" href="#2-register-metrics">2. register metrics</a></h4>
-<p>the controller struct implements the <a href="https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#collector">prometheus.collector</a> interface and can therefore
+<h4 id="2-register-prometheus-metrics"><a class="header" href="#2-register-prometheus-metrics">2. Register Prometheus Metrics</a></h4>
+<p>The Machine controller struct implements the <a href="https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#Collector">prometheus.Collector</a> interface and can therefore
 be registered on prometheus metrics registry. </p>
 <p>collectors which are added to the registry will collect metrics to expose them via the metrics endpoint of the mcm every time when the endpoint is called.</p>
-<pre><code class="language-go">prometheus.mustregister(c)
+<pre><code class="language-go">prometheus.MustRegister(controller)
 </code></pre>
 <h5 id="21-controllerdescribe"><a class="header" href="#21-controllerdescribe">2.1 controller.describe</a></h5>
 <p>all <a href="https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#metric">promethueus.metric</a> that are collected must first be described using a <a href="https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#desc">prometheus.desc</a> which is the <em>meta-data</em> about a metric.</p>
@@ -837,22 +858,22 @@ added to the wait group when started and marked done when finished.</p>
 
 
 
-        <script type="text/javascript">
+        <script>
             window.playground_copyable = true;
         </script>
 
 
-        <script src="../elasticlunr.min.js" type="text/javascript" charset="utf-8"></script>
-        <script src="../mark.min.js" type="text/javascript" charset="utf-8"></script>
-        <script src="../searcher.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../elasticlunr.min.js"></script>
+        <script src="../mark.min.js"></script>
+        <script src="../searcher.js"></script>
 
-        <script src="../clipboard.min.js" type="text/javascript" charset="utf-8"></script>
-        <script src="../highlight.js" type="text/javascript" charset="utf-8"></script>
-        <script src="../book.js" type="text/javascript" charset="utf-8"></script>
+        <script src="../clipboard.min.js"></script>
+        <script src="../highlight.js"></script>
+        <script src="../book.js"></script>
 
         <!-- Custom JS scripts -->
-        <script type="text/javascript" src="../mermaid.min.js"></script>
-        <script type="text/javascript" src="../mermaid-init.js"></script>
+        <script src="../mermaid.min.js"></script>
+        <script src="../mermaid-init.js"></script>
 
 
     </body>

@@ -11,18 +11,26 @@
 		- [app.Run](#apprun)
 			- [Summary](#summary-1)
 		- [app.StartControllers](#appstartcontrollers)
-		- [controller initialization](#controller-initialization)
-			- [1. newcontroller factory func](#1-newcontroller-factory-func)
-			- [1.1 create controller struct](#11-create-controller-struct)
-			- [1.2 assign listers and hassynced funcs to controller struct](#12-assign-listers-and-hassynced-funcs-to-controller-struct)
-			- [1.3 register controller event handlers on informers.](#13-register-controller-event-handlers-on-informers)
-			- [1.4 event handler functions](#14-event-handler-functions)
-				- [1.4.1 adding secrets keys to secretsqueue](#141-adding-secrets-keys-to-secretsqueue)
-				- [1.4.2 adding machine class names and keys to machineclassqueue](#142-adding-machine-class-names-and-keys-to-machineclassqueue)
-				- [1.4.3 adding machine keys to machinequeue](#143-adding-machine-keys-to-machinequeue)
-		- [machinecontroller.run](#machinecontrollerrun)
-			- [1. wait for informer caches to sync](#1-wait-for-informer-caches-to-sync)
-			- [2. register metrics](#2-register-metrics)
+		- [Machine Controller Initialization](#machine-controller-initialization)
+			- [1. NewController factory func](#1-newcontroller-factory-func)
+			- [1.1 Init Controller Struct](#11-init-controller-struct)
+			- [1.2 Assign Listers and HasSynced funcs to controller struct](#12-assign-listers-and-hassynced-funcs-to-controller-struct)
+			- [1.3 Register Controller Event Handlers on Informers.](#13-register-controller-event-handlers-on-informers)
+				- [1.3.1 Secret Informer Callback](#131-secret-informer-callback)
+				- [1.3.2 Machine Class Informer Callbacks](#132-machine-class-informer-callbacks)
+					- [MachineClass Add/Delete Callback 1](#machineclass-adddelete-callback-1)
+					- [MachineClass Update Callback 1](#machineclass-update-callback-1)
+					- [MachineClass Add/Delete/Update Callback 2](#machineclass-adddeleteupdate-callback-2)
+				- [1.3.2 Machine Informer Callbacks](#132-machine-informer-callbacks)
+					- [Machine Add/Update/Delete Callbacks 1](#machine-addupdatedelete-callbacks-1)
+					- [Machine Update/Delete Callbacks 2](#machine-updatedelete-callbacks-2)
+				- [1.3.3 Node Informer Callbacks](#133-node-informer-callbacks)
+					- [Node Add Callback](#node-add-callback)
+					- [Node Delete Callback](#node-delete-callback)
+					- [Node Update Callback](#node-update-callback)
+		- [Machine Controller Run](#machine-controller-run)
+			- [1. Wait for Informer Caches to Sync](#1-wait-for-informer-caches-to-sync)
+			- [2. Register Prometheus Metrics](#2-register-prometheus-metrics)
 				- [2.1 controller.describe](#21-controllerdescribe)
 				- [2.1 controller.collect](#21-controllercollect)
 			- [3. create controller worker go-routines applying reconciliations](#3-create-controller-worker-go-routines-applying-reconciliations)
@@ -165,7 +173,7 @@ os.Exit(1)"))
 
 
 #### Summary
-1. [app.Run(options *options.MCServer, driver driver.Driver)](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L77) is the common run loop for all provider Machine Controllers.
+1. [app.Run(options *options.MCServer, driver driver.Driver)](https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/app/app.go#L77) is the common run loop for all provider Machine Controllers.
 1. Creates `targetkubeconfig` and `controlkubeconfig` of type `k8s.io/client-go/rest.Config` from the target kube config path using `clientcmd.BuildConfigFromFlags`
 1. Set fields such as `config.QPS` and `config.Burst`  in both `targetkubeconfig` and `controlkubeconfig` from the passed in `options.MCServer`
 1. Create `kubeClientControl` from the `controlkubeconfig` using the standard client-go client factory metohd: `kubernetes.NewForConfig` that returns a `client-go/kubernetes.Clientset`
@@ -177,20 +185,20 @@ os.Exit(1)"))
 	1. Sets the event sink using `eventBroadcaster.StartRecordingToSink` passing the event interface as `kubeClient.CoreV1().RESTClient()).Events("")`. Effectively events will be published remotely.
 	1. Returns the `record.EventRecorder` associated with the `eventBroadcaster` using `eventBroadcaster.NewRecorder` 
 1. Constructs an anonymous function assigned to `run` variable which does the following:
-	1. initializes a `stop` receive channel.
-	1. creates a `controlMachineClientBuilder` using `machineclientbuilder.SimpleClientBuilder` using the `controlkubeconfig`.
-	1. creates a `controlCoreClientBuidler` using `coreclientbuilder.SimpleControllerClientBuilder` wrapping `controlkubeconfig`.
-	1. creates `targetCoreClientBuilder` using `coreclientbuilder.SimpleControllerClientBuilder` wrapping `controlkubeconfig`.
-	1. call the `app.StartControllers` function passing the `options`, `driver`, `controlkubeconfig`, `targetkubeconfig`, `controlMachineClientBuilder`, `controlCoreClientBuilder`, `targetCoreClientBuilder`, `recorder` and `stop` channel.
+	1. Initializes a `stop` receive channel.
+	1. Creates a `controlMachineClientBuilder` using `machineclientbuilder.SimpleClientBuilder` using the `controlkubeconfig`.
+	1. Creates a `controlCoreClientBuidler` using `coreclientbuilder.SimpleControllerClientBuilder` wrapping `controlkubeconfig`.
+	1. Creates `targetCoreClientBuilder` using `coreclientbuilder.SimpleControllerClientBuilder` wrapping `controlkubeconfig`.
+	1. Call the `app.StartControllers` function passing the `options`, `driver`, `controlkubeconfig`, `targetkubeconfig`, `controlMachineClientBuilder`, `controlCoreClientBuilder`, `targetCoreClientBuilder`, `recorder` and `stop` channel.
     	- // Q: if you are going to pass the controlkubeconfig and targetkubeconfig - why not create the client builders inside the startcontrollers ?
 	1.  if `app.StartcOntrollers` return an error panic and exit `run`.
-  1. use [leaderelection.RunOrDie](https://github.com/kubernetes/client-go/blob/master/tools/leaderelection/leaderelection.go#L218) to start a leader election and pass the previously created `run` function to as the callback for `OnStartedLeading`. `OnStartedLeading` callback is invoked when a leaderelector client starts leading.
+  1. use [leaderelection.RunOrDie](https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/app/app.go#L186) to start a leader election and pass the previously created `run` function to as the callback for `OnStartedLeading`. `OnStartedLeading` callback is invoked when a leaderelector client starts leading.
 
 ### app.StartControllers
-[app.StartControllers](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/app/app.go#L202) starts all controller loops which are part of the machine controller. 
+[app.StartControllers](https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/app/app.go#L202) starts all controller loops which are part of the machine controller. 
 
 ```go
-func StartControllers(s *options.MCServer,
+func StartControllers(options *options.MCServer,
 	controlCoreKubeconfig *rest.Config,
 	targetCoreKubeconfig *rest.Config,
 	controlMachineClientBuilder machineclientbuilder.ClientBuilder,
@@ -200,364 +208,367 @@ func StartControllers(s *options.MCServer,
 	recorder record.EventRecorder,
 	stop <-chan struct{}) error
 ```
-1. calls `getAvailableResources` using the `controlCoreClientBuilder` that returns a `map[schema.GroupVersionResource]bool` assigned to `availableresources`
+1. Calls `getAvailableResources` using the `controlCoreClientBuilder` that returns a `map[schema.GroupVersionResource]bool` assigned to `availableresources`
 	- `getAvailableResources` waits till the api server is running by checking its `/healthz` using `wait.PollImmediate`. keeps re-creating the client using `clientbuilder.Client` method. 
 	- then uses `client.Discovery().ServerResources` which returns returns the supported resources for all groups and versions as a slice of [*metav1.APIResourceList](https://github.com/kubernetes/apimachinery/blob/373a5f752d44989b9829888460844849878e1b6e/pkg/apis/meta/v1/types.go#L1131) (which encapsulates a [[]APIResource](https://github.com/kubernetes/apimachinery/blob/v0.26.1/pkg/apis/meta/v1/types.go#L1081)) and then converts that to a `map[schema.GroupVersionResource]bool` `
-- creates a `controlMachineClient` which is a client for the controller crd types (type: `versioned.interface`) using `controlmachineclientbuilder.clientordie` using `machine-controller` as client name. this client targets the control cluster - ie the cluster holding the machine cr's.
-- creates a `controlcoreclient` (of type: `kubernetes.clientset`) which is the standard k8s client-go client for accessing the k8s control cluster.
-- creates a `targetcoreclient` (of type: `kubernetes.clientset`) which is the standard k8s client-go client for accessing the k8s target cluster. 
-- obtain the target cluster k8s version using the discovery interface and preserve it in `targetkubernetesversion`
-- if the `availableresources` does not contain the `machinegvr` exit this loop with error.
-- creates the following informer factories:
-  -  `controlmachineinformerfactory` using the generated `client/informers/externalversions.newfilteredsharedinformerfactory` passing the conrol machine client, the configured min resync period and control namespace obtained from mcserver.
-  -  `controlcoreinformerfactory` using the standard k8s client-go `k8s.io/client-go/informers.newfilteredsharedinformerfactory` method passing in the k8s client for the , the control cluster, configured min resync period and control namespace obtained from mcserver.
-  -  `targetcoreinformerfactory` using the standard k8s client-go `k8s.io/client-go/informers.newfilteredsharedinformerfactory` method passing in the k8s core client for the target cluster, the configured min resync period and control namespace obtained from mcserver.
-  -   get the controller's informer access facade `v1alpha1.interface` using `controlmachineinformerfactory.machine().v1alpha1()` and assign to `machinesharedinformers`
-  -  now create the `machinecontroller` using `pkg/util/provider/machinecontroller/controller.newcontroller` factory function, passing the below:
-     -  control namespace from `mcserver.namespace`
-     -  `safetyoptions` from `mcserver.safetyoptions`
-     -  `nodeconditions` from `mcserver.nodeconditions`. (by default these would be : "kerneldeadlock,readonlyfilesystem,diskpressure,networkunavailable")
-     -  clients: `controlmachineclient`, `controlcoreclient`, `targetcoreclient`
+1. Creates a `controlMachineClient` using `controlMachineClientBuilder.ClientOrDie("machine-controller").MachineV1alpha1()` which is a client of type [MachineV1alpha1Interface](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachineV1alpha1Interface). This interface is a composition of [MachineGetter](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachinesGetter),[MachineClassesGetter](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachineClassesGetter), [MachineDeploymentsGetter](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachineDeploymentsGetter) and [MachineSetsGetter](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/clientset/versioned/typed/machine/v1alpha1#MachineSetsGetter) allowing access to CRUD interface for machines, machine classes, machine deployments and machine sets. This client targets the control cluster - ie the cluster holding the machine crd's.
+1. creates a `controlCoreClient` (of type: [kubernetes.Clientset](https://pkg.go.dev/k8s.io/client-go@v0.26.1/kubernetes#Clientset) which is the standard k8s client-go client for accessing the k8s control cluster.
+1. creates a `targetCoreClient` (of type: [kubernetes.Clientset](https://pkg.go.dev/k8s.io/client-go@v0.26.1/kubernetes#Clientset)) which is the standard k8s client-go client for accessing the target cluster - in which machines will be spawned.
+1. obtain the target cluster k8s version using the discovery interface and preserve it in `targetKubernetesVersion`
+1. if the `availableResources` does not contain the machine GVR,  exit `app.StartControllers` with error.
+1. creates the following informer factories:
+  -  `controlMachineInformerfactory` using the generated [pkg/client/informers/externalversions#NewFilteredSharedInformerFactory](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/informers/externalversions.NewFilteredSharedInformerFactory) passing the conrol machine client, the configured min resync period and control namespace.
+  -  Create `controlCoreInformerfactory` using the client-go core [informers#NewFilteredSharedInformerFactory](https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers#NewFilteredSharedInformerFactory) passing in the control core client, min resync period and control namespace.
+  - Similarly create `targetCoreInformerFactory`
+  - Get the controller's [Machine Informers Facade](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/informers/externalversions/machine/v1alpha1#Interface) using `controlMachineInformerfactory.Machine().V1alpha1()` and assign to `machinesharedinformers`
+8. Now create the `machinecontroller` using [machinecontroller.NewController](https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/machinecontroller/controller.go#L77) factory function, passing the below:
+     -  control namespace from `options.MCServer.Namespace`
+     -  `SafetyOptions` from `options.MCServer.SafetyOptions`
+     -  `NodeConditions` from `options.MCserver.NodeConditions`. (by default these would be : "KernelDeadlock,ReadonlyFilesystem,DiskPressure,NetworkUnavailable")
+     -  clients: `controlMachineClient`, `controlCoreClient`, `targetCoreClient`
      -  the `driver` 
-     -  target cluster informers: `nodeinformer`, `persistentvolumeclaimsinformer`, `persistentvolumeinformer`, `volumeattachmentinformer` and `poddisruptionbudgetinformer` obtained from `targetcoreinformerfactory`
-     -  control cluster informers: 
-        - `secretinformer` from `controlcoreinformerfactory`
-        - `machineclassinformer`, `machineinformer` from `machinesharedinformers`
-     -  event recorder
-     -  `targetkubernetesversion`
-  -  start all informers by calling `sharedinformerfactory.start(stopch <-chan struct{})` for `controlmachineinformerfactory`, `controlcoreinformerfactory` and `targetcoreinformerfactory` passing teh `stop` channel
-  -  launches the `machinecontroller` in new go-routine by invoking: `go machinecontroller.run(mcserver.concurrentnodesyncs, stop)`
+     -  Target Cluster Informers obtained from `targetCoreInformerfactory`:  
+        -  [PersistentVolumeClaimInformer](https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/core/v1#PersistentVolumeClaimInformer)
+         - [PersistentVolumeInformer](https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/core/v1#PersistentVolumeInformer), 
+         - [VolumeAttachmentsInformer](https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/storage/v1#VolumeAttachmentInformer) 
+         - [PodDisruptionBudgetInformer](https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/policy/v1#PodDisruptionBudgetInformer)
+     -  Control Cluster Informers obtained from `controlCoreInformerFactory` 
+        - [SecretInformer](https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers/core/v1#SecretInformer)
+     - [MachineClassInformer](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/informers/externalversions/machine/v1alpha1#MachineClassInformer), [MachineInformer](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/client/informers/externalversions/machine/v1alpha1#MachineInformer) using `machinesharedinformers.MachineClasses()` and `machinesharedinformers.Machines()`
+     -  The event recorder created earlier
+     -  `targetKubernetesVersion`
+9. Start `controlMachineInformerFactory`, `controlCoreInformerFactory` and `targetCoreInformerFactory` by calling [SharedInformerfactory.Start](https://pkg.go.dev/k8s.io/client-go@v0.26.1/informers#SharedInformerFactory) passing the `stop` channel. 
+10.  Launches the [machinecontroller.Run](https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/machinecontroller/controller.go#L302) in new go-routine passing the stop channel.
+11.  Block forever using a `select{}`
   
-### controller initialization
- the machine controller is constructed using
-`machine-controller-manager/pkg/util/provider/machinecontroller/controller.newcontroller` factory function which initializes the `controller` struct.
+### Machine Controller Initialization
+ the machine controller is constructed using [controller.NewController](https://github.com/gardener/machine-controller-manager/blob/v0.48.0/pkg/util/provider/machinecontroller/controller.go#L77)
+ factory function which initializes the `controller` struct.
 
 
-#### 1. newcontroller factory func
+#### 1. NewController factory func
 
 mc is constructed using the factory function below:
 ```go
 func NewController(
 	namespace string,
-	controlmachineclient machineapi.machinev1alpha1interface,
-	controlcoreclient kubernetes.interface,
-	targetcoreclient kubernetes.interface,
-	driver driver.driver,
-	pvcinformer coreinformers.persistentvolumeclaiminformer,
-	pvinformer coreinformers.persistentvolumeinformer,
-	secretinformer coreinformers.secretinformer,
-	nodeinformer coreinformers.nodeinformer,
-	pdbinformer policyinformers.poddisruptionbudgetinformer,
-	volumeattachmentinformer storageinformers.volumeattachmentinformer,
-	machineclassinformer machineinformers.machineclassinformer,
-	machineinformer machineinformers.machineinformer,
-	recorder record.eventrecorder,
-	safetyoptions options.safetyoptions,
-	nodeconditions string,
-	bootstraptokenauthextragroups string,
-) (controller, error) {
-	// etc
+	controlMachineClient machineapi.MachineV1alpha1Interface,
+	controlCoreClient kubernetes.Interface,
+	targetCoreClient kubernetes.Interface,
+	driver driver.Driver,
+	pvcInformer coreinformers.PersistentVolumeClaimInformer,
+	pvInformer coreinformers.PersistentVolumeInformer,
+	secretInformer coreinformers.SecretInformer,
+	nodeInformer coreinformers.NodeInformer,
+	pdbV1beta1Informer policyv1beta1informers.PodDisruptionBudgetInformer,
+	pdbV1Informer policyv1informers.PodDisruptionBudgetInformer,
+	volumeAttachmentInformer storageinformers.VolumeAttachmentInformer,
+	machineClassInformer machineinformers.MachineClassInformer,
+	machineInformer machineinformers.MachineInformer,
+	recorder record.EventRecorder,
+	safetyOptions options.SafetyOptions,
+	nodeConditions string,
+	bootstrapTokenAuthExtraGroups string,
+	targetKubernetesVersion *semver.Version,
+) (Controller, error) 
 
+```
+
+#### 1.1 Init Controller Struct
+
+Create and Initialize the Controller struct initializing rate-limiting work queues for secrets: `controller.secretQueue`,  nodes: `controller.nodeQueue`, machines: `controller.machineQueue`, machineclass: `controller.machineClassQueue`. Along with 2 work queues used by safety controllers: `controller.machineSafetyOrphanVMsQueue` and `controller.machineSafetyAPIServerQueue`
+
+Example: 
+```go
+controller := &controller {
+	//...
+ secretQueue:                   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "secret"),
+ machineQueue=workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "machine"),
+	//...
 }
 ```
 
-#### 1.1 create controller struct
-
-create the controller struct initializing rate-limiting work queues for all relevant resources
-
-```go
-	controller := &controller{
-		namespace:                     namespace,
-		controlmachineclient:          controlmachineclient,
-		controlcoreclient:             controlcoreclient,
-		targetcoreclient:              targetcoreclient,
-		recorder:                      recorder,
-		secretqueue:                   workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), "secret"),
-		nodequeue:                     workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), "node"),
-		machineclassqueue:             workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), "machineclass"),
-		machinequeue:                  workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), "machine"),
-		machinesafetyorphanvmsqueue:   workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), "machinesafetyorphanvms"),
-		machinesafetyapiserverqueue:   workqueue.newnamedratelimitingqueue(workqueue.defaultcontrollerratelimiter(), "machinesafetyapiserver"),
-		safetyoptions:                 safetyoptions,
-		nodeconditions:                nodeconditions,
-		driver:                        driver,
-		bootstraptokenauthextragroups: bootstraptokenauthextragroups,
-		volumeattachmenthandler:       nil,
-		permitgiver:                   permits.newpermitgiver(permitgiverstaleentrytimeout, janitorfreq),
-	}
-
-
-```
-#### 1.2 assign listers and hassynced funcs to controller struct
+#### 1.2 Assign Listers and HasSynced funcs to controller struct
 
 ```go
 	// initialize controller listers from the passed-in shared informers (8 listers)
-	controller.pvclister = pvcinformer
-	controller.pvlister = pvinformer.lister()
-    controller.machinelister = machineinformer.lister()
-	// etc
-	// assign the hassynced function from the passed-in shared informers
-	controller.pvcsynced = pvcinformer.informer().hassynced
-	controller.pvsynced = pvinformer.informer().hassynced
-    controller.machinesynced = machineinformer.informer().hassynced
+	controller.pvcLister = pvcInformer
+	controller.pvLister = pvinformer.Lister()
+    controller.machineLister = machineinformer.lister()
+
+	controller.pdbV1Lister = pdbV1Informer.Lister()
+	controller.pdbV1Synced = pdbV1Informer.Informer().HasSynced
+
+	// ...
+
+	// assign the HasSynced function from the passed-in shared informers
+	controller.pvcSynced = pvcInformer.Informer().HasSynced
+	controller.pvSynced = pvInformer.Informer().HasSynced
+    controller.machineSynced = machineInformer.Informer().HasSynced
 ```
 
-#### 1.3 register controller event handlers on informers.
+#### 1.3 Register Controller Event Handlers on Informers.
 
-an informer invokes registered event handler when a k8s object changes. event handlers are registered using `<type>informer().addeventhandler(resourceeventhandler)` function. the controller initialization registers event handlers: on control-cluster `secretinformer`, control-cluster `machineclassinformer`, control-cluster `machineinformer` and target-cluster `nodeinformer`.
+An informer invokes registered event handler when a k8s object changes. 
 
+Event handlers are registered using `<ResourceType>Informer().AddEventhandler` function. 
+
+The controller initialization registers add//delete event handlers for secrets. add/update/delete event handlers for MachineClass, Machine and Node informers.
+
+The event handlers generally add the object keys to the appropriate work queues which are later picked up and reconciled in processing in `controller.Run`.
+
+The work queue is used to separate the delivery of the object from its processing. resource event handler functions extract the key of the delivered object and add it to the relevant work queue for future processing. (in `controller.Run`) 
+
+Example
 ```go
-   // event handlers added for control-cluster secret add/delete
-	secretinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.secretadd,
-		deletefunc: controller.secretdelete,
-	})
-
-   // 2 event handlers added for controlcluster machineclass add/update/delete
-	machineclassinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.machineclasstosecretadd,
-		updatefunc: controller.machineclasstosecretupdate,
-		deletefunc: controller.machineclasstosecretdelete,
-	})
-
-	machineclassinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.machineclassadd,
-		updatefunc: controller.machineclassupdate,
-		deletefunc: controller.machineclassdelete,
-	})
-
-   // 3 event handlers added for control-cluster machine add/update/delete
-	machineinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.machinetomachineclassadd,
-		updatefunc: controller.machinetomachineclassupdate,
-		deletefunc: controller.machinetomachineclassdelete,
-	})
-	machineinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.addmachine,
-		updatefunc: controller.updatemachine,
-		deletefunc: controller.deletemachine,
-	})
-
-	machineinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		// updatemachinetosafety makes sure that orphan vm handler is invoked on some specific machine obj updates
-		updatefunc: controller.updatemachinetosafety,
-		// deletemachinetosafety makes sure that orphan vm handler is invoked on any machine deletion
-		deletefunc: controller.deletemachinetosafety,
-	})
-
-    // event handler registered for target-cluster node add/update/delete
-	nodeinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.addnodetomachine,
-		updatefunc: controller.updatenodetomachine,
-		deletefunc: controller.deletenodetomachine,
-	}		
-
-	// event handler added for target-cluster volume attachments is handled by
-	// utility volumeattachmenthandler that can distribute incoming volueattachment 
-	// add/updates to a bunch of workers.
-	controller.volumeattachmenthandler = drain.newvolumeattachmenthandler()
-	volumeattachmentinformer.informer().addeventhandler(cache.resourceeventhandlerfuncs{
-		addfunc:    controller.volumeattachmenthandler.addvolumeattachment,
-		updatefunc: controller.volumeattachmenthandler.updatevolumeattachment,
-	})
+secretInformer.Informer().AddEventHandler(cache.ResourceEventHandlerFuncs{
+	AddFunc:    controller.secretAdd,
+	DeleteFunc: controller.secretDelete,
+})
 ```
 
-#### 1.4 event handler functions
+##### 1.3.1 Secret Informer Callback
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 
-controller informer event handlers generally add the object keys to the appropriate work queues which are later picked up and reconciled in processing in `controller.run`.
+flowchart TB
 
-the work queue is used to separate the delivery of the object from its processing. resource event handler functions extract the key of the delivered object and add it to the relevant work queue for future processing. (in `controller.run`) 
+SecretInformerAddCallback
+-->SecretAdd["controller.secretAdd(obj)"]
+-->GetSecretKey["key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)"]
+-->AddSecretQ["if err != nil c.secretQueue.Add(key)"]
 
-##### 1.4.1 adding secrets keys to secretsqueue 
+SecretInformeDeleteCallback
+-->SecretAdd
+```
+We must check for the [DeletedFinalStateUnknown](https://pkg.go.dev/k8s.io/client-go/tools/cache#DeletedFinalStateUnknown) state of that secret in the cache before enqueuing its key. The `DeletedFinalStateUnknown` state means that the object has been deleted but that the watch deletion event was missed while disconnected from apiserver and the controller didn't react accordingly. Hence if there is no error, we can add the key to the queue.
 
-`controller.secretadd(obj interfade{})` which is the `addfunc` callback registered for the `secretinformer` extracts the secret `key` using `cache.deletionhandlingmetanamespacekeyfunc(obj)` and then adds this `key` to the `secretqueue`.
+##### 1.3.2 Machine Class Informer Callbacks
 
-```go
-func (c *controller) secretadd(obj interface{}) {
-// confusing. should just use metanamespacekeyfunc(obj)
-	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj) 
-	if err != nil {
-		c.secretqueue.add(key)
+###### MachineClass Add/Delete Callback 1
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+
+flowchart TB
+MachineClassInformerAddCallback1
+-->
+MachineAdd["controller.machineClassToSecretAdd(obj)"]
+-->CastMC["
+	mc, ok := obj.(*v1alpha1.MachineClass)
+"]
+-->EnqueueSecret["
+	c.secretQueue.Add(mc.SecretRef.Namespace + '/' + 
+	mc.SecretRef.Name)
+	c.secretQueue.Add(mc.CredentialSecretRef.Namespace + '/' + mc.CredentialSecretRef.Namespace.Name)
+"]
+
+MachineClassToSecretDeleteCallback1
+-->MachineAdd
+```
+###### MachineClass Update Callback 1
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+
+flowchart TB
+MachineClassInformerUpdateCallback1
+-->
+MachineAdd["controller.machineClassToSecretUpdate(oldObj, newObj)"]
+-->CastMC["
+	old, ok := oldObj.(*v1alpha1.MachineClass)
+	new, ok := newObj.(*v1alpha1.MachineClass)
+"]
+-->RefNotEqual{"old.SecretRef != 
+	new.SecretRef?"}
+--Yes-->EnqueueSecret["
+	c.secretQueue.Add(old.SecretRef.Namespace + '/' + old.SecretRef.Name)
+	c.secretQueue.Add(new.SecretRef.Namespace + '/' + new.SecretRef.Name)
+"]
+-->CredRefNotEqual{"old.CredentialsSecretRef!=
+new.CredentialsSecretRef?"}
+--Yes-->EnqueueCredSecretRef["
+c.secretQueue.Add(old.CredentialsSecretRef.Namespace + '/' + old.CredentialsSecretRef.Name)
+c.secretQueue.Add(new.CredentialsSecretRef.Namespace + '/' + new.CredentialsSecretRef.Name)
+"]
+```
+
+###### MachineClass Add/Delete/Update Callback 2
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+
+flowchart TB
+MachineClassInformerAddCallback2
+-->
+MachineAdd["controller.machineClassAdd(obj)"]
+-->CastMC["
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil c.machineClassQueue.Add(key)
+"]
+MachineClassInformerDeleteCallback2
+-->MachineAdd
+
+MachineClassInformeUpdateCallback2
+-->MachineUpdate["controller.machineClassUpdate(oldObj,obj)"]
+-->MachineAdd
+```
+
+
+##### 1.3.2 Machine Informer Callbacks
+
+###### Machine Add/Update/Delete Callbacks 1
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+
+flowchart TB
+MachineAddCallback1
+-->AddMachine["controller.addMachine(obj)"]
+-->EnqueueMachine["
+	key, err := cache.MetaNamespaceKeyFunc(obj)
+	//Q: why don't we use DeletionHandlingMetaNamespaceKeyFunc here ?
+	if err!=nil c.machineQueue.Add(key)
+"]
+MachineUpdateCallback1-->AddMachine
+MachineDeleteCallback1-->AddMachine
+```
+
+###### Machine Update/Delete Callbacks 2
+
+DISCUSS THIS.
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+
+flowchart TB
+MachineUpdateCallback2
+-->UpdateMachineToSafety["controller.updateMachineToSafety(oldObj, newObj)"]
+-->EnqueueSafetyQ["
+	newM := newObj.(*v1alpha1.Machine)
+	if multipleVMsBackingMachineFound(newM) {
+		c.machineSafetyOrphanVMsQueue.Add('')
 	}
-}
-func (c *controller) secretdelete(obj interface{}) {
-	c.secretadd(obj) // dont like this delegation
-}
-```
-in the case of `controller.secretdelete`, we must check for the [deletedfinalstateunknown](https://pkg.go.dev/k8s.io/client-go/tools/cache#deletedfinalstateunknown) state of that secret in the cache before enqueuing its key. the `deletedfinalstateunknown` state means that the object has been deleted but that the watch deletion event was missed while disconnected from apiserver and the controller didn't react accordingly, hence we need to add to the secretqueue for processing.
-
-`controller.machineclasstosecretadd`  is the `addfunc` callback registered for the `machineclassinformer` adds the key (namespace/name) of the secret obtained from the newly added `machineclass` object.
-
-```go
-func (c *controller) machineclasstosecretadd(obj interface{}) {
-	machineclass, ok := obj.(*v1alpha1.machineclass)
-	// if error or nil ref return
-	secretrefs := []*corev1.secretreference{machineclass.secretref, machineclass.credentialssecretref}
-	for _, secretref := range secretrefs {
-		if secretref != nil {
-			queue.add(secretref.namespace + "/" + secretref.name)
-		}
-	}
-}
+"]
+MachineDeleteCallback2
+-->DeleteMachineToSafety["deleteMachineToSafety(obj)"]
+-->EnqueueSafetyQ1["
+	c.machineSafetyOrphanVMsQueue.Add('')
+"]
 ```
 
-`controller.machineclasstosecretupdate` is the `updatefunc` callback registered for the `machine classinformer` which adds the key (namespace/name) of the secret obtained from the old/new machine class if its `secretref` is not nil.
+##### 1.3.3 Node Informer Callbacks
 
-```go
-func (c *controller) machineclasstosecretupdate(oldobj interface{}, newobj interface{}) {
-	oldmachineclass, ok := oldobj.(*v1alpha1.machineclass)
-	newmachineclass, ok := newobj.(*v1alpha1.machineclass)
-	// if error or nil refs return
-	secretqueue.add(oldmachineclass.secretref.namespace + "/" + oldmachineclass.secretref.name)
-	secretqueue.add(newmachineclass.secretref.namespace + "/" + newmachineclass.secretref.name)
-}
-```
+###### Node Add Callback
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 
-##### 1.4.2 adding machine class names and keys to machineclassqueue
-
-`controller.machineclassadd`is specified as both the `addfunc` and `deletefunc` callback registered on the `machineclassinformer`. it gets the object key `namespace/name` for the machine class `obj` and adds the key to the `machineclassqueue`
-
-`controller.machineclassupdate` just delegates to `controller.machineclassadd(newobj)`.
-
-```go
-func (c *controller) machineclassadd(obj interface{}) {
-	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj)
-	// log & return on err != nil
-	c.machineclassqueue.add(key)
-}
-func (c *controller) machineclassupdate(oldobj, newobj interface{}) {
-	old, ok := oldobj.(*v1alpha1.machineclass)
-	if old == nil || !ok {
-		return
-	}
-	new, ok := newobj.(*v1alpha1.machineclass)
-	if new == nil || !ok {
-		return
-	}
-
-	c.machineclassadd(newobj)
-}
-```
-
-`controller.machinetomachineclassadd` is both an `addfunc` and `deletefunc` callback registered on the `machineinfomer` . this simply adds the machine spec class name to the `machineclassqueue`. 
-```go
-
-func (c *controller) machinetomachineclassadd(obj interface{}) {
-	c.machineclassqueue.add(machine.spec.class.name)
-}
-```
-`controller.machinetomachineclassupdate` is the `updatefunc` callback registered on the `machineinformer`.  it enqueues the `newmacine` spec class name if there are no changes in the machine class name, otherwise it adds both the old and new machine classnames to the `machineclassqueue'.
-
-```go
-func (c *controller) machinetomachineclassupdate(oldobj, newobj interface{}) {
-	oldmachine, ok := oldobj.(*v1alpha1.machine)
-	newmachine, ok := newobj.(*v1alpha1.machine)
-	// return if nil or not ok
-	if oldmachine.spec.class.kind == newmachine.spec.class.kind {
-		c.machineclassqueue.add(newmachine.spec.class.name)
-	} else {
-		c.machineclassqueue.add(oldmachine.spec.class.name)
-		c.machineclassqueue.add(newmachine.spec.class.name)
-	}
-}
-```
-
-so, the `machineclassqueue` effectively holds machine-class keys (ns/name) and plain class names (name)
-for added/updated/delete machine classes.
-
-##### 1.4.3 adding machine keys to machinequeue
-
-`controller.addmachine`, `controller.updatemachine` and `controller.deletemachine` all just deletgate the newly added/newly updated and newly delete machine obj to `controller.enqueuemachine` which simpy gets the object key for the machine and adds it to the `machinequeue`.
-
-```go
-func (c *controller) enqueuemachine(obj interface{}) {
-	key, err := cache.metanamespacekeyfunc(obj)
-	// return if err
-	c.machinequeue.add(key)
-}
-```
-
-`controller.addnodetomachine` is specified as the `addfunc` registered for the `nodeinformer`.  basically, when a new node is created, the corresponding `machine` obj is obtained for the `node` and if the `machine.status.conditions`  does not match the `nodestatusconditions` then the machine `key` is added to the `machinequeue` for reconciliation.
-
-snippet shown be below with error handling+logging omitted.
-```go
-func (c *controller) addnodetomachine(obj interface{}) {
-	// if err != nil log err and return
-	node := obj.(*corev1.node)
-	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj)
-	machine, err := c.getmachinefromnode(key) // leverages machinelister and gets machine whose 'node' label matches key
-	if machine.status.currentstatus.phase != v1alpha1.machinecrashloopbackoff && nodeconditionshavechanged(machine.status.conditions, node.status.conditions) {
-		macinekey, err = cache.metanamespacekeyfunc(obj)
-		c.machinequeue.add(key)
-	}
-}
+flowchart TB
+NodeaAddCallback
+-->InvokeAddNodeToMachine["controller.addNodeToMachine(obj)"]
+-->AddNodeToMachine["
+	node := obj.(*corev1.Node)
+	if node.ObjectMeta.Annotations has NotManagedByMCM return;
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil return
+"]
+-->GetMachineFromNode["
+	machine := (use machineLister to get first machine whose 'node' label equals key)
+"]
+-->ChkMachine{"
+machine.Status.CurrentStatus.Phase != 'CrashLoopBackOff'
+&&
+nodeConditionsHaveChanged(
+  machine.Status.Conditions, 
+  node.Status.Conditions) ?
+"}
+--Yes-->EnqueueMachine["
+	mKey, err := cache.MetaNamespaceKeyFunc(obj)
+	if err != nil return
+	controller.machineQueue.Add(mKey)
+"]
 
 ```
 
-`controller.updatenodetomachine` is specified as `updatefunc` registered for the `nodeinformer`. in a nutshell, it simply delegates to `addnodetomachine(newobj)` except if the node has the annotation `machineutils.triggerdeletionbymcm` (value: `node.machine.sapcloud.io/trigger-deletion-by-mcm`), in which case get the `machine` obj corresponding to the node and then leverages the `controlmachineclient` to delete the machine object.
+###### Node Delete Callback
 
-todo: who sets this annotation ?? can't find the guy.
+This is straightforward - it checks that the node has an associated machine and if so, enqueues the machine on the `machineQueue`
 
-snippet shown be below without error handling+logging omitted.
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+
+flowchart TB
+NodeDeleteCallback
+-->InvokeDeleteNodeToMachine["controller.deleteNodeToMachine(obj)"]
+-->DeleteNodeToMachine["
+	key, err := cache.DeletionHandlingMetaNamespaceKeyFunc(obj)
+	if err != nil return
+"]
+-->GetMachineFromNode["
+	machine := (use machineLister to get first machine whose 'node' label equals key)
+	if err != nil return
+"]
+-->EnqueueMachine["
+	mKey, err := cache.MetaNamespaceKeyFunc(obj)
+	if err != nil return
+	controller.machineQueue.Add(mKey)
+"]
+```
+
+
+###### Node Update Callback
+
+`controller.updateNodeTomachine` is specified as `UpdateFunc` registered for the `nodeInformer`. 
+
+In a nutshell, it simply delegates to `AddNodeTomachine(newobj)` described earlier, _except_ if the node has the annotation `machineutils.TriggerDeletionByMCM` (value: `node.machine.sapcloud.io/trigger-deletion-by-mcm`).  In this case it gets the `machine` obj corresponding to the node and then leverages `controller.controlMachineClient` to delete the machine object.
+
+NOTE:  This annotation was introduced for the user to add on the node. This gives them an indirect way to delete the machine object because they don’t have access to control plane.
+
+Snippet shown below with error handling+logging omitted.
 ```go
-func (c *controller) updatenodetomachine(oldobj, newobj interface{}) {
+func (c *controller) updateNodeToMachine(oldobj, newobj interface{}) {
 	node := newobj.(*corev1.node)
 	// check for the triggerdeletionbymcm annotation on the node object
 	// if it is present then mark the machine object for deletion
-	if value, ok := node.annotations[machineutils.triggerdeletionbymcm]; ok && value == "true" {
-		machine, err := c.getmachinefromnode(node.name)
+	if value, ok := node.annotations[machineutils.TriggerDeletionByMCM]; ok && value == "true" {
+		machine, err := c.getMachineFromnOde(node.name)
 		if machine.deletiontimestamp == nil {
 			c.controlmachineclient
-			.machines(c.namespace)
-			.delete(context.background(), machine.name, metav1.deleteoptions{});		
+			.Machines(c.namespace)
+			.Delete(context.Background(), machine.Name, metav1.Deleteoptions{});		
 		} 
 	}  else {
-		c.addnodetomachine(newobj)
+		c.addnodeToMachine(newobj)
 	}
 }
 ```
-`controller.deletenodetomachine` is specified as `deletefunc` registered for the `nodeinformer` and is quite simple. it just finds the corresponding machine object and adds its key to the `machinequeue`
 
-snippet shown be below without error handling+logging omitted.
-```go
-func (c *controller) deletenodetomachine(obj interface{}) {
-	// if err != nil log error and return for statements below
-	key, err := cache.deletionhandlingmetanamespacekeyfunc(obj)
-	machine, err := c.getmachinefromnode(key) // leverages machinelister and gets machine whose 'node' label matches key
-	macinekey, err = cache.metanamespacekeyfunc(obj)
-	c.machinequeue.add(key)
-}
-
-```
-### machinecontroller.run
+### Machine Controller Run 
 
 ```go
-func (c *controller) run(workers int, stopch <-chan struct{}) {
+func (c *controller) Run(workers int, stopch <-chan struct{}) {
 	// ...
 }
 
 ```
-#### 1. wait for informer caches to sync
+#### 1. Wait for Informer Caches to Sync
 
-when an informer starts, it will build a cache of all resources it currently watches which is lost when the application
-restarts. this means that on startup, each of your handler functions will be invoked as the initial state is built. if this
-is not desirable for your use case, you can wait until the caches are synced before performing any updates using the
-`cache.waitforcachesync` function:
+When an informer starts, it will build a cache of all resources it currently watches which is lost when the application
+restarts. This means that on startup, each of your handler functions will be invoked as the initial state is built. If this
+is not desirable, one should wait until the caches are synced before performing any updates. This can be done using the
+[cache.WaitForCacheSync](https://pkg.go.dev/k8s.io/client-go/tools/cache#WaitForCacheSync) function.
 
 ```go
-if !cache.waitforcachesync(stopch, c.secretsynced, c.pvcsynced, c.pvsynced, c.pdbsynced, c.volumeattachementsynced, c.nodesynced, c.machineclasssynced, c.machinesynced) {
-		runtimeutil.handleerror(fmt.errorf("timed out waiting for caches to sync"))
-		return
+if !cache.WaitForCacheSync(stopCh, c.secretSynced, c.pvcSynced, c.pvSynced, c.volumeAttachementSynced, c.nodeSynced, c.machineClassSynced, c.machineSynced) {
+	runtimeutil.HandleError(fmt.Errorf("Timed out waiting for caches to sync"))
+	return
 }
-```
-#### 2. register metrics
 
-the controller struct implements the [prometheus.collector](https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#collector) interface and can therefore
+```
+#### 2. Register Prometheus Metrics
+
+The Machine controller struct implements the [prometheus.Collector](https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#Collector) interface and can therefore
  be registered on prometheus metrics registry. 
  
 collectors which are added to the registry will collect metrics to expose them via the metrics endpoint of the mcm every time when the endpoint is called.
 ```go
-prometheus.mustregister(c)
+prometheus.MustRegister(controller)
 ```
 
 ##### 2.1 controller.describe
