@@ -30,9 +30,10 @@
 					- [Node Update Callback](#node-update-callback)
 		- [Machine Controller Run](#machine-controller-run)
 			- [1. Wait for Informer Caches to Sync](#1-wait-for-informer-caches-to-sync)
-			- [2. Register Prometheus Metrics](#2-register-prometheus-metrics)
-				- [2.1 controller.describe](#21-controllerdescribe)
-				- [2.1 controller.collect](#21-controllercollect)
+			- [2. Register On Prometheus](#2-register-on-prometheus)
+				- [2.1 Describe Metrics (controller.Describe)](#21-describe-metrics-controllerdescribe)
+				- [2.1 Collect Metrics (controller.Collect)](#21-collect-metrics-controllercollect)
+					- [2.1.1 Collect Machine Metrics](#211-collect-machine-metrics)
 			- [3. create controller worker go-routines applying reconciliations](#3-create-controller-worker-go-routines-applying-reconciliations)
 				- [3.1 createworker](#31-createworker)
 			- [4. reconciliation functions executed by worker](#4-reconciliation-functions-executed-by-worker)
@@ -561,45 +562,78 @@ if !cache.WaitForCacheSync(stopCh, c.secretSynced, c.pvcSynced, c.pvSynced, c.vo
 }
 
 ```
-#### 2. Register Prometheus Metrics
+#### 2. Register On Prometheus
 
 The Machine controller struct implements the [prometheus.Collector](https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#Collector) interface and can therefore
- be registered on prometheus metrics registry. 
- 
-collectors which are added to the registry will collect metrics to expose them via the metrics endpoint of the mcm every time when the endpoint is called.
+ be then be registered on prometheus metrics registry. 
+
 ```go
 prometheus.MustRegister(controller)
 ```
+ 
+Collectors which are added to the registry will collect metrics to expose them via the metrics endpoint of the MCM every time when the endpoint is called.
 
-##### 2.1 controller.describe
 
-all [promethueus.metric](https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#metric) that are collected must first be described using a [prometheus.desc](https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#desc) which is the _meta-data_ about a metric.  
+##### 2.1 Describe Metrics (controller.Describe)
 
-as can be seen below the machine controller sends a description of `metrics.machinecountdesc` to prometheus. this is `mcm_machine_items_total` which is the count of machines managed by controller. doubt: we currently appear to have  only have one metric for the mc ?
+All [promethueus.Metric](https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#Metric) that are collected must first be described using a [prometheus.Desc](https://pkg.go.dev/github.com/prometheus/client_golang@v1.13.0/prometheus#Desc) which is the immutable  _meta-data_ about a metric.  
+
+As can be seen below the machine controller sends a description of [metrics.MachineCountDesc](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/util/provider/metrics#pkg-variables) to prometheus. this is `mcm_machine_items_total` which is the count of machines managed by controller. 
+
+This `Describe` callback is called by `prometheus.MustRegister`
+
+Doubt: we currently appear to have  only have one metric for the mc ?
+
 ```go
-var machinecountdesc = prometheus.newdesc("mcm_machine_items_total", "count of machines currently managed by the mcm.", nil, nil)
+var	MachineCountDesc = prometheus.NewDesc("mcm_machine_items_total", "Count of machines currently managed by the mcm.", nil, nil)
 
-func (c *controller) describe(ch chan<- *prometheus.desc) {
-	ch <- metrics.machinecountdesc
+func (c *controller) Describe(ch chan<- *prometheus.desc) {
+	ch <- metrics.MachineCountDesc
 }
 ```
-##### 2.1 controller.collect
 
-`collect` is called by the prometheus registry when collecting
- metrics. the implementation sends each collected metric via the
+A [prometheus.Gauge](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge) is a Metric that represents a single numerical value that can arbitrarily go up and down. We use a Gauge for the machine count.
+
+##### 2.1 Collect Metrics (controller.Collect)
+
+`Collect` is called by the prometheus registry when collecting
+ metrics. The implementation sends each collected metric via the
  provided channel and returns once the last metric has been sent. the
-descriptor of each sent metric is one of those returned by `describe`
+descriptor of each sent metric is one of those returned by `Describe`
 
-todo: describe each of the collect methods.
 ```go
-// collect is method required to implement the prometheus.collect interface.
-func (c *controller) collect(ch chan<- prometheus.metric) {
-	c.collectmachinemetrics(ch)
-	//c.collectmachinesetmetrics(ch)
-	//c.collectmachinedeploymentmetrics(ch)
-	c.collectmachinecontrollerfrozenstatus(ch)
+// Collect is method required to implement the prometheus.Collect interface.
+func (c *controller) Collect(ch chan<- prometheus.Metric) {
+	c.CollectMachineMetrics(ch)
+	c.CollectMachineControllerFrozenStatus(ch)
 }
 ```
+
+###### 2.1.1 Collect Machine Metrics
+
+```go
+func (c *controller) CollectMachineMetrics(ch chan<- prometheus.Metric) 
+```
+
+A machine managed by MCM is described on Prometheus using a [prometheus.GaugeVec](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec) constructed using the factory function [prometheus.NewGaugeVec](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#NewGaugeVec).
+
+Example:
+```go
+var MachineInfo prometheus.GaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: machineSubsystem,
+		Name:      "info",
+		Help:      "Information of the Machines currently managed by the mcm.",
+	}, []string{"name", "namespace", "createdAt",
+		"spec_provider_id", "spec_class_api_group", "spec_class_kind", "spec_class_name"})
+```
+
+One invokes the [GaugeVec.With](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec.With) method passing a [prometheus.Labels](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Labels) which is a `map[string]string` to obtain a [prometheus.Gauge](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge)
+
+
+1. Gets the list of machines using the `machineLister`
+1. 
+
 #### 3. create controller worker go-routines applying reconciliations
 
 ```go
