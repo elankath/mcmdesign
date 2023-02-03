@@ -34,9 +34,9 @@
 				- [2.1 Describe Metrics (controller.Describe)](#21-describe-metrics-controllerdescribe)
 				- [2.1 Collect Metrics (controller.Collect)](#21-collect-metrics-controllercollect)
 					- [2.1.1 Collect Machine Metrics](#211-collect-machine-metrics)
-			- [3. create controller worker go-routines applying reconciliations](#3-create-controller-worker-go-routines-applying-reconciliations)
-				- [3.1 createworker](#31-createworker)
-			- [4. reconciliation functions executed by worker](#4-reconciliation-functions-executed-by-worker)
+			- [3. Create controller worker go-routines specifying reconcile functions](#3-create-controller-worker-go-routines-specifying-reconcile-functions)
+				- [3.1 worker.worker](#31-workerworker)
+			- [4. Reconciliation functions executed by worker](#4-reconciliation-functions-executed-by-worker)
 # Machine Controller
 
 The [Machine Controller]() handles reconciliation of [Machine](./../mcm_facilities.md#machine) and [MachineClass](./../mcm_facilities.md#machineclass) objects. 
@@ -592,8 +592,6 @@ func (c *controller) Describe(ch chan<- *prometheus.desc) {
 }
 ```
 
-A [prometheus.Gauge](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge) is a Metric that represents a single numerical value that can arbitrarily go up and down. We use a Gauge for the machine count.
-
 ##### 2.1 Collect Metrics (controller.Collect)
 
 `Collect` is called by the prometheus registry when collecting
@@ -615,52 +613,90 @@ func (c *controller) Collect(ch chan<- prometheus.Metric) {
 func (c *controller) CollectMachineMetrics(ch chan<- prometheus.Metric) 
 ```
 
-A machine managed by MCM is described on Prometheus using a [prometheus.GaugeVec](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec) constructed using the factory function [prometheus.NewGaugeVec](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#NewGaugeVec).
+A [prometheus.Metric])(https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Metric) models a sample linking data points together over time. Custom labels (with their own values) can be added to each data point
+
+A [prometheus.Gauge](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge) is a Metric that represents a single numerical value that can arbitrarily go up and down. We use a Gauge for the machine count.
+
+A [prometheus.GaugeVec](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec) is a factory for creating a set of gauges all with the same description but which have different data values for the metric labels.
+
+Machine information about a machine managed by MCM is described on Prometheus using a [prometheus.GaugeVec](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec) constructed using the factory function [prometheus.NewGaugeVec](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#NewGaugeVec). 
+
+A [prometheus.Desc](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Desc) is the descriptor used by every Prometheus Metric. It is essentially the immutable meta-data of a Metric that includes fully qualified name of the metric, the help string and the metric label names.
+
+We have 3 such gauge vecs for machine metrics  and 1 gauge metric for the machine count as seen below. 
+
+Q: Discuss Why do we need the 3 gauge vecs ?
 
 Example:
 ```go
+
+var	MachineCountDesc = prometheus.NewDesc("mcm_machine_items_total", "Count of machines currently managed by the mcm.", nil, nil)
+
+//MachineInfo Information of the Machines currently managed by the mcm.
 var MachineInfo prometheus.GaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Subsystem: machineSubsystem,
+		Namespace: "mcm",
+		Subsystem: "machine",
 		Name:      "info",
 		Help:      "Information of the Machines currently managed by the mcm.",
 	}, []string{"name", "namespace", "createdAt",
 		"spec_provider_id", "spec_class_api_group", "spec_class_kind", "spec_class_name"})
+
+// MachineStatusCondition Information of the mcm managed Machines' status conditions
+var	MachineStatusCondition = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: machineSubsystem,
+		Name:      "status_condition",
+		Help:      "Information of the mcm managed Machines' status conditions.",
+	}, []string{"name", "namespace", "condition"})
+
+//MachineCSPhase Current status phase of the Machines currently managed by the mcm.
+	MachineCSPhase = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: machineSubsystem,
+		Name:      "current_status_phase",
+		Help:      "Current status phase of the Machines currently managed by the mcm.",
+	}, []string{"name", "namespace"})
 ```
 
-One invokes the [GaugeVec.With](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec.With) method passing a [prometheus.Labels](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Labels) which is a `map[string]string` to obtain a [prometheus.Gauge](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge)
+One invokes the [GaugeVec.With](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec.With) method passing a [prometheus.Labels](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Labels) which is a `map[string]string` to obtain a [prometheus.Gauge](https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge). 
 
 
 1. Gets the list of machines using the `machineLister`
-1. 
-
-#### 3. create controller worker go-routines applying reconciliations
-
+1. Iterate through list of machines. Use the `MachineInfo.With` method to initialize the labels for each metric and obtain the `Gauge`. Use `Gauge.Set` to set value for metric.
+1. Create the machine count metric
 ```go
-func (c *controller) run(workers int, stopch <-chan struct{}) {
-	//.. 3
-	waitgroup sync.waitgroup
-	for i := 0; i < workers; i++ {
-		createworker(c.secretqueue, "clustersecret", maxretries, true, c.reconcileclustersecretkey, stopch, &waitgroup)
-		createworker(c.machineclassqueue, "clustermachineclass", maxretries, true, c.reconcileclustermachineclasskey, stopch, &waitgroup)
-		createworker(c.nodequeue, "clusternode", maxretries, true, c.reconcileclusternodekey, stopch, &waitgroup)
-		createworker(c.machinequeue, "clustermachine", maxretries, true, c.reconcileclustermachinekey, stopch, &waitgroup
-		createworker(c.machinesafetyorphanvmsqueue, "clustermachinesafetyorphanvms", maxretries, true, c.reconcileclustermachinesafetyorphanvms, stopch, &waitgroup)
-		createworker(c.machinesafetyapiserverqueue, "clustermachineapiserver", maxretries, true, c.reconcileclustermachinesafetyapiserver, stopch, &waitgroup)
-	}
-	<-stopch
-	waitgroup.wait()
+	metric, err := prometheus.NewConstMetric(metrics.MachineCountDesc, prometheus.GaugeValue, float64(len(machineList)))
+```
+4. Set the metric value and send the metric to the prometheus metric channel:
+```go
+metric, err := prometheus.NewConstMetric(metrics.MachineCountDesc, prometheus.GaugeValue, float64(len(machineList)))
+```
+
+
+#### 3. Create controller worker go-routines specifying reconcile functions
+
+Finally use `worker.Run` to create and runs a worker routine that just processes items in the specified queue. The worker will run until `stopCh` is closed. The worker go-routine will be added to the wait group when started and marked done when finished.
+
+Q: `reconcileClusterNodeKey` seems useless ?
+```go
+func (c *controller) Run(workers int, stopch <-chan struct{}) {
+	//...
+waitGroup sync.WaitGroup
+for i := 0; i < workers; i++ {
+	worker.Run(c.secretQueue, "ClusterSecret", worker.DefaultMaxRetries, true, c.reconcileClusterSecretKey, stopCh, &waitGroup)
+	worker.Run(c.machineClassQueue, "ClusterMachineClass", worker.DefaultMaxRetries, true, c.reconcileClusterMachineClassKey, stopCh, &waitGroup)
+	worker.Run(c.machineQueue, "ClusterMachine", worker.DefaultMaxRetries, true, c.reconcileClusterMachineKey, stopCh, &waitGroup)
+	worker.Run(c.machineSafetyOrphanVMsQueue, "ClusterMachineSafetyOrphanVMs", worker.DefaultMaxRetries, true, c.reconcileClusterMachineSafetyOrphanVMs, stopCh, &waitGroup)
+	worker.Run(c.machineSafetyAPIServerQueue, "ClusterMachineAPIServer", worker.DefaultMaxRetries, true, c.reconcileClusterMachineSafetyAPIServer, stopCh, &waitGroup)
+}
+<-stopch
+waitGroup.wait()
 }
 
 ```
-##### 3.1 createworker
-
-`createworker` creates and runs a go-routine that just processes items in the
-specified `queue`. the worker will run until `stopch` is closed. the worker will be
- added to the wait group when started and marked done when finished.
 
 ```go
-func createworker(queue workqueue.ratelimitinginterface, resourcetype string, maxretries int, forgetaftersuccess bool, reconciler func(key string) error, stopch <-chan struct{}, waitgroup *sync.waitgroup) {
+func Run(queue workqueue.ratelimitinginterface, resourcetype string, maxretries int, forgetaftersuccess bool, reconciler func(key string) error, stopch <-chan struct{}, waitgroup *sync.waitgroup) {
 	waitgroup.add(1)
 	go func() {
 		wait.until(worker(queue, resourcetype, maxretries, forgetaftersuccess, reconciler), time.second, stopch)
@@ -668,52 +704,54 @@ func createworker(queue workqueue.ratelimitinginterface, resourcetype string, ma
 	}()
 }
 ```
+##### 3.1 worker.worker
 
-[worker](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/controller.go#l369) returns a function that 
+NOTE: Puzzled that basic routine like this is NOT part of client-go lib. Its likely repeated across thosands of controllers (prob with bugs). Thankfully controller-runtime obviates the need for soemthing like this.
+
+[worker]() returns a function that 
 1. de-queues items (keys) from the work `queue`. the `key`s that are obtained using work `queue.get` to be strings of the form `namespace/name` of the resource. 
 2. processes them by invoking the `reconciler(key)` function 
    1. the purpose of the `reconciler` is to compares the actual state with the desired state, and attempts to converge the two. it should then update the `status` block of the resource.
    2. if `reconciler` returns an error, requeue the item up to `maxretries` before giving up.
 3. marks items as done.  
 
-then we execute the `reconciler`. 
 
 
 ```go
-func worker(queue workqueue.ratelimitinginterface, resourcetype string, maxretries int, forgetaftersuccess bool, reconciler func(key string) error) func() {
+func worker(queue workqueue.RateLimitingInterface, resourceType string, maxRetries int, forgetAfterSuccess bool, reconciler func(key string) error) func() {
 	return func() {
 		exit := false
 		for !exit {
 			exit = func() bool {
-				key, quit := queue.get()
+				key, quit := queue.Get()
 				if quit {
 					return true
 				}
-				defer queue.done(key)
+				defer queue.Done(key)
 
 				err := reconciler(key.(string))
 				if err == nil {
-					if forgetaftersuccess { // always true for mc
-						queue.forget(key)
+					if forgetAfterSuccess {
+						queue.Forget(key)
 					}
 					return false
 				}
 
-				if queue.numrequeues(key) < maxretries {
-					queue.addratelimited(key)
+				if queue.NumRequeues(key) < maxRetries {
+					queue.AddRateLimited(key)
 					return false
 				}
 
-				queue.forget(key)
+				queue.Forget(key)
 				return false
 			}()
 		}
 	}
 }
+
 ```
-#### 4. reconciliation functions executed by worker
+#### 4. Reconciliation functions executed by worker
 
-the controller starts worker go-routines that pop out keys from the relevant workqueue and execute the reconcile function.
+The controller starts worker go-routines that pop out keys from the relevant workqueue and execute the reconcile function.
 
-See reconcile chapters.
-
+See reconcile chapters

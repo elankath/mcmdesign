@@ -11,13 +11,13 @@ func (c *controller) reconcileClusterSecret(ctx context.Context, secret *corev1.
 Worker go-routines are created for this as below
 
 ```go
-createWorker(c.secretQueue, 
+worker.Run(c.secretQueue, 
     "ClusterSecret", 
-    maxRetries, 
+    worker.DefaultMaxRetries, 
     true, 
     c.reconcileClusterSecretKey,
-     stopCh, 
-     &waitGroup)
+    stopCh,
+    &waitGroup)
 ```
 ## Flow
 
@@ -29,27 +29,29 @@ createWorker(c.secretQueue,
 
 flowchart TD
 
-a[ns, name = cache.splitmetanamespacekey]
-b["sec=secretLister.secrets(ns).get(name)"]
-c["machineclasses=findMachineClassForsecret(name)
-// gets the set of MachineClasses referring to the passed secret
+a[ns, name = cache.SplitMetaNamespaceKey]
+b["sec=secretLister.Secrets(ns).Get(name)"]
+c["machineClasses=findMachineClassForSecret(name)
+// Gets the slice of MachineClasses referring to the passed secret
+//iterates through machine classes and 
+// checks whether mc.SecretRef.Name or mcCredentialSecretRef.Name 
+// matches secret name
 "]
-d{machineclasses empty?}
-e["updateSecretFinalizers(sec)"] 
-f["secretq.addafter(key,10min)"]
-z(("end"))
+d{machineClasses empty?}
+e["controller.addSecretFinalizers(sec)"] 
+z(("return err"))
 a-->b
 b-->c
 c-->d
-d--yes-->z
-d--no-->e
-e--err-->f
+d--Yes-->DeleteFinalizers["controller.deleteSecretFinalizers"]-->z
 e--success-->z
-f-->z
+d--No-->e
 ```
 
-### updateSecretFinalizers
+### controller.addSecretFinalizers
 
 ```go
-func (c *controller) updateSecretFinalizers(ctx context.Context, secret *corev1.Secret, finalizers []string) error 
+func (c *controller) addSecretFinalizers(ctx context.Context, secret *corev1.Secret) error {
 ```
+
+Basicaly adds `machine.sapcloud.io/machine-controller` to the secret and uses `controlCoreClient` to update the secret.

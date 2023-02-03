@@ -109,6 +109,6 @@ Container command configured on AWS
 
 # Change Log
 
-- [ ] TODO - PLANNED 30th Jan: Reconcile Machine Safety Orphan VM's.
-- [ ] TODO - PLANNED 2nd Feb: AWS, Azure Drivers
-- [ ] TODO - evictPodsWithPVInternal (complicated due to concurrent flow)
+- [ ] TODO - PLANNED 5th Feb: Reconcile Machine Safety Orphan VM's.
+- [ ] TODO - PLANNED 8nd Feb: AWS, Azure Drivers
+- [ ] TODO - discuss evictPodsWithPVInternal (very complicated and convolute due to concurrent flow)

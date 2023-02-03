@@ -1,17 +1,84 @@
-# Reconcile Cluster Machine Class Key
+# Reconcile Cluster Machine Class 
 
-`reconcileClusterMachineClassKey` reconciles an machineClass due to controller resync or an event on the machineClass.
+## Reconcile Cluster Machine Class Key
+`reconcileClusterMachineClassKey` just picks up the machine class key from the machine class queue  and then delegates further. 
 
 ```go
 func (c *controller) reconcileClusterMachineClassKey(key string) error
 ```
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+GetMCName["ns,name=cache.SplitMetanamespacekey(mkey)"]
+-->GetMC["
+class, err := c.machineClassLister.MachineClasses(c.namespace).Get(name)
+if err != nil return err  // basically adds back to the queue after rate limiting
+"]
+-->RMC["
+ctx := context.Background()
+reconcileClusterMachineClass(ctx, class)"]
+-->CheckErr{"err !=nil"}
+--Yes-->ShortR["machineClassQueue.AddAfter(key, machineutils.ShortRetry)"]
+CheckErr--No-->LongR["machineClassQueue.AddAfter(key, machineutils.LongRetry)"]
+
+```
+
+## Reconcile Cluster Machine Class
+
+```go
+func (c *controller) reconcileClusterMachineClass(ctx context.Context,
+ class *v1alpha1.MachineClass) error 
+```
+Bad design: should ideally return the retry period like other reconcile functions.
 
 ```mermaid
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
 
+FindMachineForClass["
+machines := Use machineLister and 
+match on Machine.Spec.Class.Name == class to 
+find machines with matching class"]
+-->CheckDelTimeStamp{"
+// machines are ref
+class.DeletionTimestamp == nil
+&& len(machines) > 0
+"}
 
-a["ns,name=cache.splitmetanamespacekey(mkey)"]
+CheckDelTimeStamp--Yes-->AddMCFinalizers["
+Add/Update MCM Finalizers to MC 
+and use controlMachineClient to update
+(why mcm finalizer not mc finalizer?)
+'machine.sapcloud.io/machine-controller-manager'
+retryPeriod=LongRetry
+"]
+-->ChkMachineCount{{"len(machines)>0?"}}
+--Yes-->EnQMachines["
+iterate machines and invoke:
+c.machineQueue.Add(machine)
+"]
+-->End(("End"))
+
+CheckDelTimeStamp--No-->Shortr["
+// Seems like over-work here.
+retryPeriod=ShortRetry
+"]-->ChkMachineCount
+
+ChkMachineCount--No-->DelMCFinalizers["
+controller.deleteMachineClassFinalizers(ctx, class)
+"]-->End
+```
+
+
+
+NOTE: Scratch work below. IGNORE.
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+a["ns,name=cache.SplitMetanamespacekey(mkey)"]
 getm["machine=machinelister.machines(ns).get(name)"]
 valm["validation.validatemachine(machine)"]
 valmc["machineclz,secretdata,err=validation.validatemachineclass(machine)"]

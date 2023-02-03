@@ -1,25 +1,10 @@
 - [Machine Controller Helper Methods](#machine-controller-helper-methods)
-	- [controller.ValidateMachineClass](#controllervalidatemachineclass)
 	- [controller.addMachineFinalizers](#controlleraddmachinefinalizers)
 	- [controller.setMachineTerminationStatus](#controllersetmachineterminationstatus)
 	- [controller.machineStatusUpdate](#controllermachinestatusupdate)
 	- [controller.UpdateNodeTerminationCondition](#controllerupdatenodeterminationcondition)
 	- [controller.isHealthy](#controllerishealthy)
 # Machine Controller Helper Methods
-
-## controller.ValidateMachineClass
-
-```go
-func (c *controller) ValidateMachineClass(ctx context.Context, classSpec *v1alpha1.ClassSpec) (*v1alpha1.MachineClass, map[string][]byte, machineutils.RetryPeriod, error) 
-```
- - Checks whether `MachineClass.Spec.Kind` is `MachineClass`. If not, thijs implies an deprecated, in-tree provider-specific machine class. Performs migration to the modern machine class object, creates the new machine class object and updates class references. (Details not covered here)
- - Confirms the presence of the machine class using [MachineClassLister](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/client/listers/machine/v1alpha1#MachineClassLister) through `c.machineClassLister.MachineClasses(c.namespace).Get(classSpec.Name)`
- - Gets the [MachineClass](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/apis/machine/v1alpha1#MachineClass) `SecretRef` and `CredentialsSecretRef`- which are both [k8s.io/api/core/v1.SecretReference](https://pkg.go.dev/k8s.io/api/core/v1#SecretReference)'s.
- - Retrives the k8s secrets using the secret lister using the secret references and checks that there are no errors in doing so.
- - Validates the node templates for the machine class. (TODO: more on this later)
- - Checks that the `MCMFinalizerName` constant `machine.sapcloud.io/machine-controller-manager` is present in `MachineClass.Finalizers`. if not, adds the macine class name to the machine class queue using `c.machineClassQueue.Add(machineClass.Name)`.
- - If validation fails in any of the above steps, returns `machineutils.ShortRetry` else returns `machineutils.LongRetry`
-
 
 
 ## controller.addMachineFinalizers

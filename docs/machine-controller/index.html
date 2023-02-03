@@ -80,7 +80,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html" class="active"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Cluster Machine Reconciliation</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="../machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html" class="active"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Reconcile Cluster Machine</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="../machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -217,12 +217,12 @@
 </li>
 </ul>
 </li>
-<li><a href="#3-create-controller-worker-go-routines-applying-reconciliations">3. create controller worker go-routines applying reconciliations</a>
+<li><a href="#3-create-controller-worker-go-routines-specifying-reconcile-functions">3. Create controller worker go-routines specifying reconcile functions</a>
 <ul>
-<li><a href="#31-createworker">3.1 createworker</a></li>
+<li><a href="#31-workerworker">3.1 worker.worker</a></li>
 </ul>
 </li>
-<li><a href="#4-reconciliation-functions-executed-by-worker">4. reconciliation functions executed by worker</a></li>
+<li><a href="#4-reconciliation-functions-executed-by-worker">4. Reconciliation functions executed by worker</a></li>
 </ul>
 </li>
 </ul>
@@ -742,7 +742,6 @@ func (c *controller) Describe(ch chan&lt;- *prometheus.desc) {
 	ch &lt;- metrics.MachineCountDesc
 }
 </code></pre>
-<p>A <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge">prometheus.Gauge</a> is a Metric that represents a single numerical value that can arbitrarily go up and down. We use a Gauge for the machine count.</p>
 <h5 id="21-collect-metrics-controllercollect"><a class="header" href="#21-collect-metrics-controllercollect">2.1 Collect Metrics (controller.Collect)</a></h5>
 <p><code>Collect</code> is called by the prometheus registry when collecting
 metrics. The implementation sends each collected metric via the
@@ -757,43 +756,74 @@ func (c *controller) Collect(ch chan&lt;- prometheus.Metric) {
 <h6 id="211-collect-machine-metrics"><a class="header" href="#211-collect-machine-metrics">2.1.1 Collect Machine Metrics</a></h6>
 <pre><code class="language-go">func (c *controller) CollectMachineMetrics(ch chan&lt;- prometheus.Metric) 
 </code></pre>
-<p>A machine managed by MCM is described on Prometheus using a <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec">prometheus.GaugeVec</a> constructed using the factory function <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#NewGaugeVec">prometheus.NewGaugeVec</a>.</p>
+<p>A [prometheus.Metric])(https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Metric) models a sample linking data points together over time. Custom labels (with their own values) can be added to each data point</p>
+<p>A <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge">prometheus.Gauge</a> is a Metric that represents a single numerical value that can arbitrarily go up and down. We use a Gauge for the machine count.</p>
+<p>A <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec">prometheus.GaugeVec</a> is a factory for creating a set of gauges all with the same description but which have different data values for the metric labels.</p>
+<p>Machine information about a machine managed by MCM is described on Prometheus using a <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec">prometheus.GaugeVec</a> constructed using the factory function <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#NewGaugeVec">prometheus.NewGaugeVec</a>. </p>
+<p>A <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Desc">prometheus.Desc</a> is the descriptor used by every Prometheus Metric. It is essentially the immutable meta-data of a Metric that includes fully qualified name of the metric, the help string and the metric label names.</p>
+<p>We have 3 such gauge vecs for machine metrics  and 1 gauge metric for the machine count as seen below. </p>
+<p>Q: Discuss Why do we need the 3 gauge vecs ?</p>
 <p>Example:</p>
-<pre><code class="language-go">var MachineInfo prometheus.GaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace: namespace,
-		Subsystem: machineSubsystem,
+<pre><code class="language-go">
+var	MachineCountDesc = prometheus.NewDesc(&quot;mcm_machine_items_total&quot;, &quot;Count of machines currently managed by the mcm.&quot;, nil, nil)
+
+//MachineInfo Information of the Machines currently managed by the mcm.
+var MachineInfo prometheus.GaugeVec = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: &quot;mcm&quot;,
+		Subsystem: &quot;machine&quot;,
 		Name:      &quot;info&quot;,
 		Help:      &quot;Information of the Machines currently managed by the mcm.&quot;,
 	}, []string{&quot;name&quot;, &quot;namespace&quot;, &quot;createdAt&quot;,
 		&quot;spec_provider_id&quot;, &quot;spec_class_api_group&quot;, &quot;spec_class_kind&quot;, &quot;spec_class_name&quot;})
+
+// MachineStatusCondition Information of the mcm managed Machines' status conditions
+var	MachineStatusCondition = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: machineSubsystem,
+		Name:      &quot;status_condition&quot;,
+		Help:      &quot;Information of the mcm managed Machines' status conditions.&quot;,
+	}, []string{&quot;name&quot;, &quot;namespace&quot;, &quot;condition&quot;})
+
+//MachineCSPhase Current status phase of the Machines currently managed by the mcm.
+	MachineCSPhase = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace: namespace,
+		Subsystem: machineSubsystem,
+		Name:      &quot;current_status_phase&quot;,
+		Help:      &quot;Current status phase of the Machines currently managed by the mcm.&quot;,
+	}, []string{&quot;name&quot;, &quot;namespace&quot;})
 </code></pre>
-<p>One invokes the <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec.With">GaugeVec.With</a> method passing a <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Labels">prometheus.Labels</a> which is a <code>map[string]string</code> to obtain a <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge">prometheus.Gauge</a></p>
+<p>One invokes the <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#GaugeVec.With">GaugeVec.With</a> method passing a <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Labels">prometheus.Labels</a> which is a <code>map[string]string</code> to obtain a <a href="https://pkg.go.dev/github.com/prometheus/client_golang/prometheus#Gauge">prometheus.Gauge</a>. </p>
 <ol>
 <li>Gets the list of machines using the <code>machineLister</code></li>
-<li></li>
+<li>Iterate through list of machines. Use the <code>MachineInfo.With</code> method to initialize the labels for each metric and obtain the <code>Gauge</code>. Use <code>Gauge.Set</code> to set value for metric.</li>
+<li>Create the machine count metric</li>
 </ol>
-<h4 id="3-create-controller-worker-go-routines-applying-reconciliations"><a class="header" href="#3-create-controller-worker-go-routines-applying-reconciliations">3. create controller worker go-routines applying reconciliations</a></h4>
-<pre><code class="language-go">func (c *controller) run(workers int, stopch &lt;-chan struct{}) {
-	//.. 3
-	waitgroup sync.waitgroup
-	for i := 0; i &lt; workers; i++ {
-		createworker(c.secretqueue, &quot;clustersecret&quot;, maxretries, true, c.reconcileclustersecretkey, stopch, &amp;waitgroup)
-		createworker(c.machineclassqueue, &quot;clustermachineclass&quot;, maxretries, true, c.reconcileclustermachineclasskey, stopch, &amp;waitgroup)
-		createworker(c.nodequeue, &quot;clusternode&quot;, maxretries, true, c.reconcileclusternodekey, stopch, &amp;waitgroup)
-		createworker(c.machinequeue, &quot;clustermachine&quot;, maxretries, true, c.reconcileclustermachinekey, stopch, &amp;waitgroup
-		createworker(c.machinesafetyorphanvmsqueue, &quot;clustermachinesafetyorphanvms&quot;, maxretries, true, c.reconcileclustermachinesafetyorphanvms, stopch, &amp;waitgroup)
-		createworker(c.machinesafetyapiserverqueue, &quot;clustermachineapiserver&quot;, maxretries, true, c.reconcileclustermachinesafetyapiserver, stopch, &amp;waitgroup)
-	}
-	&lt;-stopch
-	waitgroup.wait()
+<pre><code class="language-go">	metric, err := prometheus.NewConstMetric(metrics.MachineCountDesc, prometheus.GaugeValue, float64(len(machineList)))
+</code></pre>
+<ol start="4">
+<li>Set the metric value and send the metric to the prometheus metric channel:</li>
+</ol>
+<pre><code class="language-go">metric, err := prometheus.NewConstMetric(metrics.MachineCountDesc, prometheus.GaugeValue, float64(len(machineList)))
+</code></pre>
+<h4 id="3-create-controller-worker-go-routines-specifying-reconcile-functions"><a class="header" href="#3-create-controller-worker-go-routines-specifying-reconcile-functions">3. Create controller worker go-routines specifying reconcile functions</a></h4>
+<p>Finally use <code>worker.Run</code> to create and runs a worker routine that just processes items in the specified queue. The worker will run until <code>stopCh</code> is closed. The worker go-routine will be added to the wait group when started and marked done when finished.</p>
+<p>Q: <code>reconcileClusterNodeKey</code> seems useless ?</p>
+<pre><code class="language-go">func (c *controller) Run(workers int, stopch &lt;-chan struct{}) {
+	//...
+waitGroup sync.WaitGroup
+for i := 0; i &lt; workers; i++ {
+	worker.Run(c.secretQueue, &quot;ClusterSecret&quot;, worker.DefaultMaxRetries, true, c.reconcileClusterSecretKey, stopCh, &amp;waitGroup)
+	worker.Run(c.machineClassQueue, &quot;ClusterMachineClass&quot;, worker.DefaultMaxRetries, true, c.reconcileClusterMachineClassKey, stopCh, &amp;waitGroup)
+	worker.Run(c.machineQueue, &quot;ClusterMachine&quot;, worker.DefaultMaxRetries, true, c.reconcileClusterMachineKey, stopCh, &amp;waitGroup)
+	worker.Run(c.machineSafetyOrphanVMsQueue, &quot;ClusterMachineSafetyOrphanVMs&quot;, worker.DefaultMaxRetries, true, c.reconcileClusterMachineSafetyOrphanVMs, stopCh, &amp;waitGroup)
+	worker.Run(c.machineSafetyAPIServerQueue, &quot;ClusterMachineAPIServer&quot;, worker.DefaultMaxRetries, true, c.reconcileClusterMachineSafetyAPIServer, stopCh, &amp;waitGroup)
+}
+&lt;-stopch
+waitGroup.wait()
 }
 
 </code></pre>
-<h5 id="31-createworker"><a class="header" href="#31-createworker">3.1 createworker</a></h5>
-<p><code>createworker</code> creates and runs a go-routine that just processes items in the
-specified <code>queue</code>. the worker will run until <code>stopch</code> is closed. the worker will be
-added to the wait group when started and marked done when finished.</p>
-<pre><code class="language-go">func createworker(queue workqueue.ratelimitinginterface, resourcetype string, maxretries int, forgetaftersuccess bool, reconciler func(key string) error, stopch &lt;-chan struct{}, waitgroup *sync.waitgroup) {
+<pre><code class="language-go">func Run(queue workqueue.ratelimitinginterface, resourcetype string, maxretries int, forgetaftersuccess bool, reconciler func(key string) error, stopch &lt;-chan struct{}, waitgroup *sync.waitgroup) {
 	waitgroup.add(1)
 	go func() {
 		wait.until(worker(queue, resourcetype, maxretries, forgetaftersuccess, reconciler), time.second, stopch)
@@ -801,7 +831,9 @@ added to the wait group when started and marked done when finished.</p>
 	}()
 }
 </code></pre>
-<p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/controller.go#l369">worker</a> returns a function that </p>
+<h5 id="31-workerworker"><a class="header" href="#31-workerworker">3.1 worker.worker</a></h5>
+<p>NOTE: Puzzled that basic routine like this is NOT part of client-go lib. Its likely repeated across thosands of controllers (prob with bugs). Thankfully controller-runtime obviates the need for soemthing like this.</p>
+<p><a href="">worker</a> returns a function that </p>
 <ol>
 <li>de-queues items (keys) from the work <code>queue</code>. the <code>key</code>s that are obtained using work <code>queue.get</code> to be strings of the form <code>namespace/name</code> of the resource. </li>
 <li>processes them by invoking the <code>reconciler(key)</code> function 
@@ -812,41 +844,41 @@ added to the wait group when started and marked done when finished.</p>
 </li>
 <li>marks items as done.</li>
 </ol>
-<p>then we execute the <code>reconciler</code>. </p>
-<pre><code class="language-go">func worker(queue workqueue.ratelimitinginterface, resourcetype string, maxretries int, forgetaftersuccess bool, reconciler func(key string) error) func() {
+<pre><code class="language-go">func worker(queue workqueue.RateLimitingInterface, resourceType string, maxRetries int, forgetAfterSuccess bool, reconciler func(key string) error) func() {
 	return func() {
 		exit := false
 		for !exit {
 			exit = func() bool {
-				key, quit := queue.get()
+				key, quit := queue.Get()
 				if quit {
 					return true
 				}
-				defer queue.done(key)
+				defer queue.Done(key)
 
 				err := reconciler(key.(string))
 				if err == nil {
-					if forgetaftersuccess { // always true for mc
-						queue.forget(key)
+					if forgetAfterSuccess {
+						queue.Forget(key)
 					}
 					return false
 				}
 
-				if queue.numrequeues(key) &lt; maxretries {
-					queue.addratelimited(key)
+				if queue.NumRequeues(key) &lt; maxRetries {
+					queue.AddRateLimited(key)
 					return false
 				}
 
-				queue.forget(key)
+				queue.Forget(key)
 				return false
 			}()
 		}
 	}
 }
+
 </code></pre>
-<h4 id="4-reconciliation-functions-executed-by-worker"><a class="header" href="#4-reconciliation-functions-executed-by-worker">4. reconciliation functions executed by worker</a></h4>
-<p>the controller starts worker go-routines that pop out keys from the relevant workqueue and execute the reconcile function.</p>
-<p>See reconcile chapters.</p>
+<h4 id="4-reconciliation-functions-executed-by-worker"><a class="header" href="#4-reconciliation-functions-executed-by-worker">4. Reconciliation functions executed by worker</a></h4>
+<p>The controller starts worker go-routines that pop out keys from the relevant workqueue and execute the reconcile function.</p>
+<p>See reconcile chapters</p>
 
                     </main>
 
