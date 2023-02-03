@@ -225,7 +225,7 @@ CreateFlow--&gt;EnqM
 cmr *driver.CreateMachineRequest) 
   (machineutils.RetryPeriod, error) 
 </code></pre>
-<p>Apologies for HUMONGOUS flow diagram - all this is in one method - will split into several sections later for clarity!</p>
+<p>Apologies for HUMONGOUS flow diagram - ideally code should have been split here into small functions.</p>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
@@ -350,7 +350,19 @@ ChkStaleNode--Yes--&gt;CreateDMR[&quot;
 &quot;]--&gt;DeleteMachine[&quot;
   _, err := c.driver.DeleteMachine(ctx, deleteMachineRequest)
   // discuss stale node case
-&quot;]--&gt;ShortRetry[&quot;retryPeriod=machineutils.ShortRetry&quot;]
+  retryPeriod=machineutils.ShortRetry
+&quot;]--&gt;InitFailedOp1[&quot;
+ lastOp := LastOperation{
+    Description: 'VM using old node obj',
+    State: MachineStateFailed,
+    Type: MachineOperationCreate, //seems wrong
+    LastUpdateTime: Now(),
+ };
+ currStatus := CurrentStatus {
+    Phase: MachineFailed (on create timeout)
+    LastUpdateTime: Now()
+ }
+&quot;]--&gt;UpdateMachineStatus
 
 ChkNodeLabelAnnotPresent--Yes--&gt;ChkMachineStatus{&quot;machine.Status.Node != nodeName
   || machine.Status.CurrentStatus.Phase == ''&quot;}
@@ -547,14 +559,14 @@ State: v1alpha1.MachineStateFailed,
 Type: v1alpha1.MachineOperationDelete,
 Time: time.Now()}&quot;]
 
-CreaterRetryVMStatusOp[&quot;op:=LastOperation{Description: machineutils.GetVMStatus,
+CreaterRetryVMStatusOp[&quot;op:=LastOperation{Description: ma1chineutils.GetVMStatus,
 State: v1alpha1.MachineStateFailed,
 Type:  v1alpha1.MachineOperationDelete,
 Time: time.Now()}&quot;]
 
 ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
 LongR[&quot;retryPeriod=machineUtils.LongRetry&quot;]
-MachineStatusUpdate[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
+UpdateMachineStatus[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
 
 Z((&quot;End&quot;))
 

@@ -80,7 +80,8 @@ cmr *driver.CreateMachineRequest)
   (machineutils.RetryPeriod, error) 
 ```
 
-Apologies for HUMONGOUS flow diagram - all this is in one method - will split into several sections later for clarity!
+Apologies for HUMONGOUS flow diagram - ideally code should have been split here into small functions.
+
 ```mermaid
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
@@ -206,7 +207,19 @@ ChkStaleNode--Yes-->CreateDMR["
 "]-->DeleteMachine["
   _, err := c.driver.DeleteMachine(ctx, deleteMachineRequest)
   // discuss stale node case
-"]-->ShortRetry["retryPeriod=machineutils.ShortRetry"]
+  retryPeriod=machineutils.ShortRetry
+"]-->InitFailedOp1["
+ lastOp := LastOperation{
+    Description: 'VM using old node obj',
+    State: MachineStateFailed,
+    Type: MachineOperationCreate, //seems wrong
+    LastUpdateTime: Now(),
+ };
+ currStatus := CurrentStatus {
+    Phase: MachineFailed (on create timeout)
+    LastUpdateTime: Now()
+ }
+"]-->UpdateMachineStatus
 
 ChkNodeLabelAnnotPresent--Yes-->ChkMachineStatus{"machine.Status.Node != nodeName
   || machine.Status.CurrentStatus.Phase == ''"}
@@ -416,14 +429,14 @@ State: v1alpha1.MachineStateFailed,
 Type: v1alpha1.MachineOperationDelete,
 Time: time.Now()}"]
 
-CreaterRetryVMStatusOp["op:=LastOperation{Description: machineutils.GetVMStatus,
+CreaterRetryVMStatusOp["op:=LastOperation{Description: ma1chineutils.GetVMStatus,
 State: v1alpha1.MachineStateFailed,
 Type:  v1alpha1.MachineOperationDelete,
 Time: time.Now()}"]
 
 ShortR["retryPeriod=machineUtils.ShortRetry"]
 LongR["retryPeriod=machineUtils.LongRetry"]
-MachineStatusUpdate["c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)"]
+UpdateMachineStatus["c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)"]
 
 Z(("End"))
 
