@@ -1,4 +1,5 @@
 - [Machine Controller Helper Methods](#machine-controller-helper-methods)
+	- [controller.addBootstrapTokenToUserData](#controlleraddbootstraptokentouserdata)
 	- [controller.addMachineFinalizers](#controlleraddmachinefinalizers)
 	- [controller.setMachineTerminationStatus](#controllersetmachineterminationstatus)
 	- [controller.machineStatusUpdate](#controllermachinestatusupdate)
@@ -6,6 +7,84 @@
 	- [controller.isHealthy](#controllerishealthy)
 # Machine Controller Helper Methods
 
+## controller.addBootstrapTokenToUserData
+
+
+This method is responsible for adding the bootstrap token for the machine.
+
+Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific `SecretType`: `bootstrap.kubernetes.io/token` and live in the `kube-system` namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server
+
+
+Reference
+- [Bootstrap Tokens](https://kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/)
+- [Bootstrap Token Secrets](https://github.com/kubernetes/design-proposals-archive/blob/main/cluster-lifecycle/bootstrap-discovery.md#new-bootstrap-token-secrets)
+- [Bootstrap Token Structure](https://github.com/kubernetes/design-proposals-archive/blob/main/cluster-lifecycle/bootstrap-discovery.md#new-bootstrap-token-structure)
+
+
+```go
+func (c *controller) addBootstrapTokenToUserData(ctx context.Context, machineName string, secret *corev1.Secret) error 
+
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+Begin((" "))
+-->InitTokenSecret["
+tokenID := hex.EncodeToString([]byte(machineName)[len(machineName)-5:])[:6]
+// 6 chars length
+secretName :='bootstrap-token-' + tokenID
+"]
+-->GetSecret["
+	secret, err = c.targetCoreClient.CoreV1().Secrets('kube-system').Get(ctx, secretName, GetOptions{}) 
+"]
+-->ChkErr{err!=nil?}
+
+ChkErr--Yes-->ChkNotFound{"IsNotFound(err)"}
+
+ChkNotFound--Yes-->GenToken["
+  tokenSecretKey = generateRandomStrOf16Chars
+"]-->InitSecretData["
+  data := map[string][]byte{
+    'token-id': []byte(tokenID),
+    'token-secret': []byte(tokenSecretKey),
+    'expiration': []byte(c.safetyOptions.MachineCreationTimeout.Duration)
+    //..others
+ }
+"]
+-->InitSecret["
+  	secret = &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: metav1.NamespaceSystem,
+				},
+				Type: 'bootstrap.kubernetes.io/token'
+				Data: data,
+			}
+"]
+-->CreateSecret["
+secret, err =c.targetCoreClient.CoreV1().Secrets('kube-system').Create(ctx, secret, CreateOptions{})
+"]
+-->ChkErr1{err!=nil?}
+
+ChkErr1--Yes-->ReturnErr(("return err"))
+ChkNotFound--No-->ReturnErr
+
+ChkErr1--No-->CreateToken["
+token = tokenID + '.' + tokenSecretKey
+"]-->InitUserData["
+  userDataByes = secret.Data['userData']
+  userDataStr = string(userDataBytes)
+"]-->ReplaceUserData["
+  	userDataS = strings.ReplaceAll(userDataS, 'BOOTSTRAP_TOKEN',placeholder, token)
+   	secret.Data['userData'] = []byte(userDataS)
+    //discuss this.
+"]-->ReturnNil(("return nil"))
+
+style InitSecretData text-align:left
+style InitSecret text-align:left
+```
 
 ## controller.addMachineFinalizers
 

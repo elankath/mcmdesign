@@ -144,6 +144,7 @@
                         <ul>
 <li><a href="#machine-controller-helper-methods">Machine Controller Helper Methods</a>
 <ul>
+<li><a href="#controlleraddbootstraptokentouserdata">controller.addBootstrapTokenToUserData</a></li>
 <li><a href="#controlleraddmachinefinalizers">controller.addMachineFinalizers</a></li>
 <li><a href="#controllersetmachineterminationstatus">controller.setMachineTerminationStatus</a></li>
 <li><a href="#controllermachinestatusupdate">controller.machineStatusUpdate</a></li>
@@ -153,6 +154,76 @@
 </li>
 </ul>
 <h1 id="machine-controller-helper-methods"><a class="header" href="#machine-controller-helper-methods">Machine Controller Helper Methods</a></h1>
+<h2 id="controlleraddbootstraptokentouserdata"><a class="header" href="#controlleraddbootstraptokentouserdata">controller.addBootstrapTokenToUserData</a></h2>
+<p>This method is responsible for adding the bootstrap token for the machine.</p>
+<p>Bootstrap tokens are used when joining new nodes to a cluster. Bootstrap Tokens are defined with a specific <code>SecretType</code>: <code>bootstrap.kubernetes.io/token</code> and live in the <code>kube-system</code> namespace. These Secrets are then read by the Bootstrap Authenticator in the API Server</p>
+<p>Reference</p>
+<ul>
+<li><a href="https://kubernetes.io/docs/reference/access-authn-authz/bootstrap-tokens/">Bootstrap Tokens</a></li>
+<li><a href="https://github.com/kubernetes/design-proposals-archive/blob/main/cluster-lifecycle/bootstrap-discovery.md#new-bootstrap-token-secrets">Bootstrap Token Secrets</a></li>
+<li><a href="https://github.com/kubernetes/design-proposals-archive/blob/main/cluster-lifecycle/bootstrap-discovery.md#new-bootstrap-token-structure">Bootstrap Token Structure</a></li>
+</ul>
+<pre><code class="language-go">func (c *controller) addBootstrapTokenToUserData(ctx context.Context, machineName string, secret *corev1.Secret) error 
+
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Begin((&quot; &quot;))
+--&gt;InitTokenSecret[&quot;
+tokenID := hex.EncodeToString([]byte(machineName)[len(machineName)-5:])[:6]
+// 6 chars length
+secretName :='bootstrap-token-' + tokenID
+&quot;]
+--&gt;GetSecret[&quot;
+	secret, err = c.targetCoreClient.CoreV1().Secrets('kube-system').Get(ctx, secretName, GetOptions{}) 
+&quot;]
+--&gt;ChkErr{err!=nil?}
+
+ChkErr--Yes--&gt;ChkNotFound{&quot;IsNotFound(err)&quot;}
+
+ChkNotFound--Yes--&gt;GenToken[&quot;
+  tokenSecretKey = generateRandomStrOf16Chars
+&quot;]--&gt;InitSecretData[&quot;
+  data := map[string][]byte{
+    'token-id': []byte(tokenID),
+    'token-secret': []byte(tokenSecretKey),
+    'expiration': []byte(c.safetyOptions.MachineCreationTimeout.Duration)
+    //..others
+ }
+&quot;]
+--&gt;InitSecret[&quot;
+  	secret = &amp;corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: metav1.NamespaceSystem,
+				},
+				Type: 'bootstrap.kubernetes.io/token'
+				Data: data,
+			}
+&quot;]
+--&gt;CreateSecret[&quot;
+secret, err =c.targetCoreClient.CoreV1().Secrets('kube-system').Create(ctx, secret, CreateOptions{})
+&quot;]
+--&gt;ChkErr1{err!=nil?}
+
+ChkErr1--Yes--&gt;ReturnErr((&quot;return err&quot;))
+ChkNotFound--No--&gt;ReturnErr
+
+ChkErr1--No--&gt;CreateToken[&quot;
+token = tokenID + '.' + tokenSecretKey
+&quot;]--&gt;InitUserData[&quot;
+  userDataByes = secret.Data['userData']
+  userDataStr = string(userDataBytes)
+&quot;]--&gt;ReplaceUserData[&quot;
+  	userDataS = strings.ReplaceAll(userDataS, 'BOOTSTRAP_TOKEN',placeholder, token)
+   	secret.Data['userData'] = []byte(userDataS)
+    //discuss this.
+&quot;]--&gt;ReturnNil((&quot;return nil&quot;))
+
+style InitSecretData text-align:left
+style InitSecret text-align:left
+</pre>
 <h2 id="controlleraddmachinefinalizers"><a class="header" href="#controlleraddmachinefinalizers">controller.addMachineFinalizers</a></h2>
 <p>This method checks for the <code>MCMFinalizer</code> Value: <code>machine.sapcloud.io/machine-controller-manager</code> and adds it if it is not present. It leverages <code>k8s.io/apimachinery/pkg/util/sets</code> package for its work.</p>
 <p>This method is regularly called during machine reconciliation, if a machine does not have a deletion timestamp so that all non-deleted machines possess this finalizer.</p>
