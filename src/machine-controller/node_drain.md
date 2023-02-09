@@ -1,6 +1,9 @@
 - [Node Drain](#node-drain)
 	- [Drain Utilities](#drain-utilities)
 		- [VolumeAttachmentHandler](#volumeattachmenthandler)
+			- [VolumeAttachmentHandler.AddWorker](#volumeattachmenthandleraddworker)
+			- [VolumeAttachmentHandler.dispatch](#volumeattachmenthandlerdispatch)
+			- [VolumeAttachmentHandler Initialization in MC](#volumeattachmenthandler-initialization-in-mc)
 	- [Drain](#drain)
 		- [Drain Types](#drain-types)
 			- [Drain Constants](#drain-constants)
@@ -17,7 +20,7 @@
 			- [drain.Options.doAccountingOfPvs](#drainoptionsdoaccountingofpvs)
 			- [drain.Options.getPVList](#drainoptionsgetpvlist)
 			- [drain.Options.getVolIDsFromDriver](#drainoptionsgetvolidsfromdriver)
-			- [drain.Options.evictPodsWithPVInternal](#drainoptionsevictpodswithpvinternal)
+		- [# drain.Options.evictPodsWithPVInternal](#-drainoptionsevictpodswithpvinternal)
 		- [drain.Options.waitForDelete](#drainoptionswaitfordelete)
 
 # Node Drain
@@ -31,7 +34,7 @@ Node Drain code is in [github.com/gardener/machine-controller-manager/pkg/util/p
 [pkg/util/provider/drain.VolumeAttachmentHandler](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler) is an handler used to distribute
 incoming [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) requests to a number of workers where each worker is a channel of type `*VolumeAttachment`. 
 
-A [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node. See [VolumeAttachment](../src/k8s_facilities.md#volumeattachment)
+A [k8s.io/api/storage/v1.VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node. See [VolumeAttachment](https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume-attachment-v1/)
 
 ```go
 type VolumeAttachmentHandler struct {
@@ -46,8 +49,35 @@ func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
 		workers: []chan *storagev1.VolumeAttachment{},
 	}
 }
+
 ```
 
+#### VolumeAttachmentHandler.AddWorker
+
+`AddWorker` appends a buffered channel of size `20` of type `VolumeAttachment` to the `workers` slice  in `VolumeAttachmentHandler`
+. There is an assumption that not more than 20 unprocessed objects would exist at a given time. On bufferring requests beyond this the channel will start dropping writes. See `dispatch` method.
+
+```go
+func (v *VolumeAttachmentHandler) AddWorker() chan *storagev1.VolumeAttachment {
+	// chanSize is the channel buffer size to hold requests.
+	// This assumes 
+	// On bufferring requests beyond this the channel will start dropping writes
+	const chanSize = 20
+
+	klog.V(4).Infof("Adding new worker. Current active workers %d - %v", len(v.workers), v.workers)
+
+	v.Lock()
+	defer v.Unlock()
+
+	newWorker := make(chan *storagev1.VolumeAttachment, chanSize)
+	v.workers = append(v.workers, newWorker)
+
+	klog.V(4).Infof("Successfully added new worker %v. Current active workers %d - %v", newWorker, len(v.workers), v.workers)
+	return newWorker
+}
+
+```
+#### VolumeAttachmentHandler.dispatch
 The `dispatch` method is responsible for distributing incomding `VolumeAttachent`s to available channels.
 
 ```go
@@ -62,6 +92,7 @@ func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
 
 	for i, worker := range v.workers {
 		select {
+		// submit volume attachment to the worker channel if channel is not full
 		case worker <- volumeAttachment:
 		default:
 			klog.Warningf("Worker %d/%v is full. Discarding value.", i, worker)
@@ -81,10 +112,13 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 	v.dispatch(newObj)
 }
 ```
-#### VolumeAttachmentHandler Usage
-During construction of the MC:
+#### VolumeAttachmentHandler Initialization in MC
+During construction of the MC controller struct, we initialize the callback methods on volume attachment handler using the volume attachment informer
 
 ```go
+func NewController(...) {
+	//...
+controller.volumeAttachmentHandler = drain.NewVolumeAttachmentHandler()
 volumeAttachmentInformer.Informer().AddEventHandler(
 	cache.ResourceEventHandlerFuncs{
 			AddFunc:    controller.volumeAttachmentHandler.AddVolumeAttachment,
@@ -161,8 +195,6 @@ func (o *Options) evictPod(ctx context.Context, pod *corev1.Pod, policyGroupVers
 [drain.Options.evictPod](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L363) is a simple helper method to evict a Pod using [Eviction API](https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionExpansion)
 - TODO: `GracePeriodSeconds` in the code is useless here and should be removed as it is always -1.
 - TODO: Currently this method uses old `k8s.io/api/policy/v1beta1`. It must be changed to  `k8s.io/api/policy/v1`
-TODO NOTE: 
-
 ```mermaid
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
 flowchart TD
@@ -287,6 +319,7 @@ Notes:
 1. [machine-controller-manager/pkg/util/provider/drain.SupportEviction](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L1106) uses Discovery API to find out if the server support eviction subresource and if so return its groupVersion or "" if it doesn't.
    1. [k8s.io/kubectl/pkg/drain.CheckEvictionSupport](https://pkg.go.dev/k8s.io/kubectl/pkg/drain#CheckEvictionSupport) already does this.
 2. [attemptEvict boolean](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400) usage is confusing.
+3. TODO: GAP? For cordoning a Node we currently just set `Node.Spec.Unschedulable`. But we are also supposed to set the taint. `node.kubernetes.io/unschedulable`. The spec way is supposed to be deprecated.
 
 #### drain.filterPodsWithPv
 

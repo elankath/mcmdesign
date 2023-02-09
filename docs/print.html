@@ -1231,7 +1231,7 @@ type NodeTemplateSpec struct { // BADLY NAMED!
 </ul>
 <p>NodeTerminationCondition</p>
 <h4 id="lastoperation"><a class="header" href="#lastoperation">LastOperation</a></h4>
-<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#LastOperation">github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.LastOperation</a> represents the last operation performed on the object</p>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#LastOperation">github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.LastOperation</a> represents the last operation performed on the object. Can sometimes mean the <em>next</em> operation to be performed on the machine if the machine operation state is <code>Processing</code>! </p>
 <pre><code class="language-go">type LastOperation struct {
 	// Description of the operation
 	Description string 
@@ -3067,12 +3067,7 @@ d--No--&gt;e
 <li><a href="machine-controller/cluster_machine_reconcile.html#cluster-machine-reconciliation">Cluster Machine Reconciliation</a>
 <ul>
 <li><a href="machine-controller/cluster_machine_reconcile.html#controllertriggercreationflow">controller.triggerCreationFlow</a></li>
-<li><a href="machine-controller/cluster_machine_reconcile.html#controllertriggerdeletionflow">controller.triggerDeletionFlow</a>
-<ul>
-<li><a href="machine-controller/cluster_machine_reconcile.html#controllergetvmstatus">controller.getVMStatus</a></li>
-<li><a href="machine-controller/cluster_machine_reconcile.html#controllerdrainnode">controller.drainNode</a></li>
-</ul>
-</li>
+<li><a href="machine-controller/cluster_machine_reconcile.html#controllertriggerdeletionflow">controller.triggerDeletionFlow</a></li>
 <li><a href="machine-controller/cluster_machine_reconcile.html#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a>
 <ul>
 <li><a href="machine-controller/cluster_machine_reconcile.html#health-check-flow-diagram">Health Check FLow Diagram</a></li>
@@ -3080,6 +3075,7 @@ d--No--&gt;e
 <li><a href="machine-controller/cluster_machine_reconcile.html#health-check-doubts">Health Check Doubts</a></li>
 </ul>
 </li>
+<li><a href="machine-controller/cluster_machine_reconcile.html#controllertriggerupdationflow">controller.triggerUpdationFlow</a></li>
 </ul>
 </li>
 </ul>
@@ -3327,7 +3323,7 @@ CheckMachineOperation{&quot;Check\nmachine.Status.LastOperation.Description&quot
 DrainNode[&quot;retryPeriod=c.drainNode(dmr)&quot;]
 DeleteVM[&quot;retryPeriod=c.deleteVM(dmr)&quot;]
 DeleteNode[&quot;retryPeriod=c.deleteNodeObject(dmr)&quot;]
-DeleteMachineFin[&quot;retryPeriod=c.deleteMachineFinalizers(machine)\n(dead code?)&quot;]
+DeleteMachineFin[&quot;retryPeriod=c.deleteMachineFinalizers(machine)&quot;]
 SetMachineTermStatus[&quot;c.setMachineTerminationStatus(dmr)&quot;]
 
 CreateMachineStatusRequest[&quot;statusReq=&amp;driver.GetMachineStatusRequest{machine, machineClass,secret}&quot;]
@@ -3361,172 +3357,6 @@ DeleteMachineFin--&gt;Z
 ShortR--&gt;Z
 
 </pre>
-<h3 id="controllergetvmstatus"><a class="header" href="#controllergetvmstatus">controller.getVMStatus</a></h3>
-<p>(BAD NAME FOR METHOD: should be called <code>checkMachineExistenceAndEnqueNextOperation</code>)</p>
-<pre><code class="language-go">func (c *controller) getVMStatus(ctx context.Context, 
-    statusReq *driver.GetMachineStatusRequest) (machineutils.RetryPeriod, error)
-</code></pre>
-<p>This method is only called for the delete flow. </p>
-<ol>
-<li>It attempts to get the machine status</li>
-<li>If the machine exists, it updates the machine status operation to <code>InitiateDrain</code> and returns a <code>ShortRetry</code> for the machine work queue. </li>
-<li>If attempt to get machine status failed, it will obtain the error code from the error.
-<ol>
-<li>If decoding the error code failed, it will update the  machine status operation to <code>machineutils.GetVMStatus</code>returns a <code>LongRetry</code> for the machine work queue. 
-<ol>
-<li>Unsure how we get out of this Loop. TODO: Discuss this. Is this dead code?</li>
-</ol>
-</li>
-<li>For <code>Unknown|DeadlineExceeded|Aborted|Unavailable</code> it updates the machine status operation to <code>machineutils.GetVMStatus</code> status and returns a <code>ShortRetry</code> for the machine work queue.  (So that reconcile will run this method again in future)</li>
-<li>For <code>NotFound</code> code (ie machine is not found), it will enqueue node deletion by updating the machine stauts operation to <code>machineutils.InitiateNodeDeletion</code> and returning a <code>ShortRetry</code> for the machine work queue.</li>
-</ol>
-</li>
-</ol>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
-flowchart TD
-
-GetMachineStatus[&quot;_,err=driver.GetMachineStatus(statusReq)&quot;]
-ChkMachineExists{&quot;err==nil ?\n (ie machine exists)&quot;}
-DecodeErrorStatus[&quot;errStatus,decodeOk= status.FromError(err)&quot;]
-CheckDecodeOk{&quot;decodeOk ?&quot;}
-
-CheckErrStatusCode{&quot;Check errStatus.Code&quot;}
-
-CreateDrainOp[&quot;op:=LastOperation{Description: machineutils.InitiateDrain
-State: v1alpha1.MachineStateProcessing,
-Type: v1alpha1.MachineOperationDelete,
-Time: time.Now()}&quot;]
-
-CreateNodeDelOp[&quot;op:=LastOperation{Description: machineutils.InitiateNodeDeletion
-State: v1alpha1.MachineStateProcessing,
-Type: v1alpha1.MachineOperationDelete,
-Time: time.Now()}&quot;]
-
-CreateDecodeFailedOp[&quot;op:=LastOperation{Description: machineutils.GetVMStatus,
-State: v1alpha1.MachineStateFailed,
-Type: v1alpha1.MachineOperationDelete,
-Time: time.Now()}&quot;]
-
-CreaterRetryVMStatusOp[&quot;op:=LastOperation{Description: ma1chineutils.GetVMStatus,
-State: v1alpha1.MachineStateFailed,
-Type:  v1alpha1.MachineOperationDelete,
-Time: time.Now()}&quot;]
-
-ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
-LongR[&quot;retryPeriod=machineUtils.LongRetry&quot;]
-UpdateMachineStatus[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
-
-Z((&quot;End&quot;))
-
-GetMachineStatus--&gt;ChkMachineExists
-
-ChkMachineExists--Yes--&gt;CreateDrainOp
-ChkMachineExists--No--&gt;DecodeErrorStatus
-DecodeErrorStatus--&gt;CheckDecodeOk
-CheckDecodeOk--Yes--&gt;CheckErrStatusCode
-CheckDecodeOk--No--&gt;CreateDecodeFailedOp
-CreateDecodeFailedOp--&gt;LongR
-CheckErrStatusCode--&quot;Unimplemented&quot;--&gt;CreateDrainOp
-CheckErrStatusCode--&quot;Unknown|DeadlineExceeded|Aborted|Unavailable&quot;--&gt;CreaterRetryVMStatusOp
-CheckErrStatusCode--&quot;NotFound&quot;--&gt;CreateNodeDelOp
-CreaterRetryVMStatusOp--&gt;ShortR
-
-CreateDrainOp--&gt;ShortR
-CreateNodeDelOp--&gt;ShortR
-ShortR--&gt;UpdateMachineStatus
-LongR--&gt;UpdateMachineStatus
-UpdateMachineStatus--&gt;Z
-</pre>
-<h3 id="controllerdrainnode"><a class="header" href="#controllerdrainnode">controller.drainNode</a></h3>
-<p>Inside <code>pkg/util/provider/machinecontroller/machine_util.go</code></p>
-<pre><code class="language-go">func (c *controller) drainNode(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
-</code></pre>
-<pre class="mermaid">
-%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
-flowchart TD
-
-
-Initialize[&quot;err = nil
-machine = dmr.Machine
-nodeName= machine.Labels['node']
-drainTimeout=machine.Spec.MachineConfiguration.MachineDrainTimeout || c.safetyOptions.MachineDrainTimeout
-maxEvictRetries=machine.Spec.MachineConfiguration.MaxEvictRetries || c.safetyOptions.MaxEvictRetries
-skipDrain = false&quot;]
---&gt;GetNodeReadyCond[&quot;nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
-readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
-&quot;]
---&gt;ChkNodeNotReady[&quot;skipDrain = (nodeReadyCond.Status == ConditionFalse) &amp;&amp; nodeReadyCondition.LastTransitionTime.Time &gt; 5m
-or (readOnlyFSCond.Status == ConditionTrue) &amp;&amp; readOnlyFSCond.LastTransitionTime.Time &gt; 5m
-// discuss this
-&quot;]
---&gt;ChkSkipDrain{&quot;skipDrain true?&quot;}
-ChkSkipDrain--Yes--&gt;SetOpStateProcessing
-ChkSkipDrain--No--&gt;SetHasDrainTimedOut[&quot;hasDrainTimedOut = time.Now() &gt; machine.DeletionTimestamp + drainTimeout&quot;]
-SetHasDrainTimedOut--&gt;ChkForceDelOrTimedOut{&quot;machine.Labels['force-deletion']
-  || hasDrainTimedOut&quot;}
-
-ChkForceDelOrTimedOut--Yes--&gt;SetForceDelParams[&quot;
-  forceDeletePods=true
-  drainTimeout=1m
-  maxEvictRetries=1
-  &quot;]
-SetForceDelParams--No--&gt;UpdateNodeTermCond[&quot;err=c.UpdateNodeTerminationCondition(ctx, machine)&quot;]
-ChkForceDelOrTimedOut--No--&gt;UpdateNodeTermCond
-
-UpdateNodeTermCond--&gt;ChkUpdateErr{&quot;err != nil ?&quot;}
-ChkUpdateErr--No--&gt;InitDrainOpts[&quot;
-  // params reduced for brevity
-  drainOptions := drain.NewDrainOptions(
-    c.targetCoreClient,
-    drainTimeout,
-    maxEvictRetries,
-    c.safetyOptions.PvDetachTimeout.Duration,
-    c.safetyOptions.PvReattachTimeout.Duration,
-    nodeName,
-    forceDeletePods,
-    c.driver,
-		c.pvcLister,
-		c.pvLister,
-    c.pdbV1Lister,
-		c.nodeLister,
-		c.volumeAttachmentHandler)
-&quot;]
-ChkUpdateErr--&quot;Yes&amp;&amp;forceDelPods&quot;--&gt;InitDrainOpts
-ChkUpdateErr--Yes--&gt;SetOpStateFailed[&quot;opstate = v1alpha1.MachineStateFailed
-  description=machineutils.InitiateDrain
-  //drain failed. retry next sync
-  &quot;]
-
-InitDrainOpts--&gt;RunDrain[&quot;err = drainOptions.RunDrain(ctx)&quot;]
-RunDrain--&gt;ChkDrainErr{&quot;err!=nil?&quot;}
-ChkDrainErr--No--&gt;SetOpStateProcessing[&quot;
-  opstate= v1alpha1.MachineStateProcessing
-  description=machineutils.InitiateVMDeletion
-// proceed with vm deletion&quot;]
-ChkDrainErr--&quot;Yes &amp;&amp; forceDeletePods&quot;--&gt;SetOpStateProcessing
-ChkDrainErr--Yes--&gt;SetOpStateFailed
-SetOpStateProcessing--&gt;
-InitLastOp[&quot;lastOp:=v1alpha1.LastOperation{
-			Description:    description,
-			State:          state,
-			Type:           v1alpha1.MachineOperationDelete,
-			LastUpdateTime: metav1.Now(),
-		}
-  //lastOp is actually the *next* op semantically&quot;]
-SetOpStateFailed--&gt;InitLastOp
-InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)&quot;]
---&gt;Return((&quot;machineutils.ShortRetry, err&quot;))
-</pre>
-<p>Note on above</p>
-<ol>
-<li>We skip the drain if node is set to ReadonlyFilesystem for over 5 minutes
-<ol>
-<li>Check TODO:  <code>ReadonlyFilesystem</code> is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.</li>
-</ol>
-</li>
-<li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?/</li>
-<li>See <a href="machine-controller/./node_drain.html#run-drain">Run Drain</a></li>
-</ol>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L584">controller.reconcileMachineHealth</a> reconciles the machine object with any change in node conditions or VM health.</p>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *Machine) 
@@ -3672,6 +3502,8 @@ style SetUnknown text-align:left
 <li>TODO: code makes too much use of <code>cloneDirty</code> to check whether machine clone obj has changed, when it could easily return early in several branches.</li>
 <li>TODO: Code directly makes calls to enqueue machine keys on the machine queue and still returns retry periods to caller leanding to un-necessary enqueue of machine keys. (spurious design)</li>
 </ol>
+<h2 id="controllertriggerupdationflow"><a class="header" href="#controllertriggerupdationflow">controller.triggerUpdationFlow</a></h2>
+<p>Doesn't seem to be used ? Possibly dead code ?</p>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="machine-controller/mc_helper_methods.html#machine-controller-helper-methods">Machine Controller Helper Methods</a>
 <ul>
@@ -3681,6 +3513,10 @@ style SetUnknown text-align:left
 <li><a href="machine-controller/mc_helper_methods.html#controllermachinestatusupdate">controller.machineStatusUpdate</a></li>
 <li><a href="machine-controller/mc_helper_methods.html#controllerupdatenodeterminationcondition">controller.UpdateNodeTerminationCondition</a></li>
 <li><a href="machine-controller/mc_helper_methods.html#controllerishealthy">controller.isHealthy</a></li>
+<li><a href="machine-controller/mc_helper_methods.html#controllergetvmstatus">controller.getVMStatus</a></li>
+<li><a href="machine-controller/mc_helper_methods.html#controllerdrainnode">controller.drainNode</a></li>
+<li><a href="machine-controller/mc_helper_methods.html#controllerdeletevm">controller.deleteVM</a></li>
+<li><a href="machine-controller/mc_helper_methods.html#controllerdeletenodeobject">controller.deleteNodeObject</a></li>
 </ul>
 </li>
 </ul>
@@ -3777,7 +3613,7 @@ style InitSecret text-align:left
 
 </code></pre>
 <h2 id="controllersetmachineterminationstatus"><a class="header" href="#controllersetmachineterminationstatus">controller.setMachineTerminationStatus</a></h2>
-<p><code>setMachineTerminationStatus</code> set's the machine status to terminating. This is illustrated below. Please note that <code>Machine.Status.LastOperation</code> is set an instance of the <code>LastOperation</code> struct. (This appears a bit misleading as this can be interpreted as sometimes the Next Operation carried in the next pickup by the reconciler func?: Discuss this)</p>
+<p><code>setMachineTerminationStatus</code> set's the machine status to terminating. This is illustrated below. Please note that <code>Machine.Status.LastOperation</code> is set an instance of the <code>LastOperation</code> struct. (which at times appears to be a command for the next action? Discuss this.) </p>
 <pre><code class="language-go">func (c *controller) setMachineTerminationStatus(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)  
 </code></pre>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
@@ -3911,12 +3747,306 @@ style Init text-align:left
 </ol>
 </li>
 </ol>
+<h2 id="controllergetvmstatus"><a class="header" href="#controllergetvmstatus">controller.getVMStatus</a></h2>
+<p>(BAD NAME FOR METHOD: should be called <code>checkMachineExistenceAndEnqueNextOperation</code>)</p>
+<pre><code class="language-go">func (c *controller) getVMStatus(ctx context.Context, 
+    statusReq *driver.GetMachineStatusRequest) (machineutils.RetryPeriod, error)
+</code></pre>
+<p>This method is only called for the delete flow. </p>
+<ol>
+<li>It attempts to get the machine status</li>
+<li>If the machine exists, it updates the machine status operation to <code>InitiateDrain</code> and returns a <code>ShortRetry</code> for the machine work queue. </li>
+<li>If attempt to get machine status failed, it will obtain the error code from the error.
+<ol>
+<li>For <code>Unimplemented</code>(ie <code>GetMachineStatus</code> op was is not implemented), it does the same as <code>2</code>. ie: it updates the machine status operation to <code>InitiateDrain</code> and returns a <code>ShortRetry</code> for the machine work queue. </li>
+<li>If decoding the error code failed, it will update the  machine status operation to <code>machineutils.GetVMStatus</code> and returns a <code>LongRetry</code> for the machine key into the machine work queue. 
+<ol>
+<li>Unsure how we get out of this Loop. TODO: Discuss this.</li>
+</ol>
+</li>
+<li>For <code>Unknown|DeadlineExceeded|Aborted|Unavailable</code> it updates the machine status operation to <code>machineutils.GetVMStatus</code> status and returns a <code>ShortRetry</code> for the machine work queue.  (So that reconcile will run this method again in future)</li>
+<li>For <code>NotFound</code> code (ie machine is not found), it will enqueue node deletion by updating the machine stauts operation to <code>machineutils.InitiateNodeDeletion</code> and returning a <code>ShortRetry</code> for the machine work queue.</li>
+</ol>
+</li>
+</ol>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+GetMachineStatus[&quot;_,err=driver.GetMachineStatus(statusReq)&quot;]
+ChkMachineExists{&quot;err==nil ?\n (ie machine exists)&quot;}
+DecodeErrorStatus[&quot;errStatus,decodeOk= status.FromError(err)&quot;]
+CheckDecodeOk{&quot;decodeOk ?&quot;}
+
+CheckErrStatusCode{&quot;Check errStatus.Code&quot;}
+
+CreateDrainOp[&quot;op:=LastOperation{Description: machineutils.InitiateDrain
+State: v1alpha1.MachineStateProcessing,
+Type: v1alpha1.MachineOperationDelete,
+Time: time.Now()}&quot;]
+
+CreateNodeDelOp[&quot;op:=LastOperation{Description: machineutils.InitiateNodeDeletion
+State: v1alpha1.MachineStateProcessing,
+Type: v1alpha1.MachineOperationDelete,
+Time: time.Now()}&quot;]
+
+CreateDecodeFailedOp[&quot;op:=LastOperation{Description: machineutils.GetVMStatus,
+State: v1alpha1.MachineStateFailed,
+Type: v1alpha1.MachineOperationDelete,
+Time: time.Now()}&quot;]
+
+CreaterRetryVMStatusOp[&quot;op:=LastOperation{Description: ma1chineutils.GetVMStatus,
+State: v1alpha1.MachineStateFailed,
+Type:  v1alpha1.MachineOperationDelete,
+Time: time.Now()}&quot;]
+
+ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
+LongR[&quot;retryPeriod=machineUtils.LongRetry&quot;]
+UpdateMachineStatus[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
+
+Z((&quot;End&quot;))
+
+GetMachineStatus--&gt;ChkMachineExists
+
+ChkMachineExists--Yes--&gt;CreateDrainOp
+ChkMachineExists--No--&gt;DecodeErrorStatus
+DecodeErrorStatus--&gt;CheckDecodeOk
+CheckDecodeOk--Yes--&gt;CheckErrStatusCode
+CheckDecodeOk--No--&gt;CreateDecodeFailedOp
+CreateDecodeFailedOp--&gt;LongR
+CheckErrStatusCode--&quot;Unimplemented&quot;--&gt;CreateDrainOp
+CheckErrStatusCode--&quot;Unknown|DeadlineExceeded|Aborted|Unavailable&quot;--&gt;CreaterRetryVMStatusOp
+CheckErrStatusCode--&quot;NotFound&quot;--&gt;CreateNodeDelOp
+CreaterRetryVMStatusOp--&gt;ShortR
+
+CreateDrainOp--&gt;ShortR
+CreateNodeDelOp--&gt;ShortR
+ShortR--&gt;UpdateMachineStatus
+LongR--&gt;UpdateMachineStatus
+UpdateMachineStatus--&gt;Z
+</pre>
+<h2 id="controllerdrainnode"><a class="header" href="#controllerdrainnode">controller.drainNode</a></h2>
+<p>Inside <code>pkg/util/provider/machinecontroller/machine_util.go</code></p>
+<pre><code class="language-go">func (c *controller) drainNode(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
+</code></pre>
+<pre class="mermaid">
+%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+
+Initialize[&quot;err = nil
+machine = dmr.Machine
+nodeName= machine.Labels['node']
+drainTimeout=machine.Spec.MachineConfiguration.MachineDrainTimeout || c.safetyOptions.MachineDrainTimeout
+maxEvictRetries=machine.Spec.MachineConfiguration.MaxEvictRetries || c.safetyOptions.MaxEvictRetries
+skipDrain = false&quot;]
+--&gt;GetNodeReadyCond[&quot;nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
+readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
+&quot;]
+--&gt;ChkNodeNotReady[&quot;skipDrain = (nodeReadyCond.Status == ConditionFalse) &amp;&amp; nodeReadyCondition.LastTransitionTime.Time &gt; 5m
+or (readOnlyFSCond.Status == ConditionTrue) &amp;&amp; readOnlyFSCond.LastTransitionTime.Time &gt; 5m
+// discuss this
+&quot;]
+--&gt;ChkSkipDrain{&quot;skipDrain true?&quot;}
+ChkSkipDrain--Yes--&gt;SetOpStateProcessing
+ChkSkipDrain--No--&gt;SetHasDrainTimedOut[&quot;hasDrainTimedOut = time.Now() &gt; machine.DeletionTimestamp + drainTimeout&quot;]
+SetHasDrainTimedOut--&gt;ChkForceDelOrTimedOut{&quot;machine.Labels['force-deletion']
+  || hasDrainTimedOut&quot;}
+
+ChkForceDelOrTimedOut--Yes--&gt;SetForceDelParams[&quot;
+  forceDeletePods=true
+  drainTimeout=1m
+  maxEvictRetries=1
+  &quot;]
+SetForceDelParams--&gt;UpdateNodeTermCond[&quot;err=c.UpdateNodeTerminationCondition(ctx, machine)&quot;]
+ChkForceDelOrTimedOut--No--&gt;UpdateNodeTermCond
+
+UpdateNodeTermCond--&gt;ChkUpdateErr{&quot;err != nil ?&quot;}
+ChkUpdateErr--No--&gt;InitDrainOpts[&quot;
+  // params reduced for brevity
+  drainOptions := drain.NewDrainOptions(
+    c.targetCoreClient,
+    drainTimeout,
+    maxEvictRetries,
+    c.safetyOptions.PvDetachTimeout.Duration,
+    c.safetyOptions.PvReattachTimeout.Duration,
+    nodeName,
+    forceDeletePods,
+    c.driver,
+		c.pvcLister,
+		c.pvLister,
+    c.pdbV1Lister,
+		c.nodeLister,
+		c.volumeAttachmentHandler)
+&quot;]
+ChkUpdateErr--&quot;Yes&amp;&amp;forceDelPods&quot;--&gt;InitDrainOpts
+ChkUpdateErr--Yes--&gt;SetOpStateFailed[&quot;opstate = v1alpha1.MachineStateFailed
+  description=machineutils.InitiateDrain
+  //drain failed. retry next sync
+  &quot;]
+
+InitDrainOpts--&gt;RunDrain[&quot;err = drainOptions.RunDrain(ctx)&quot;]
+RunDrain--&gt;ChkDrainErr{&quot;err!=nil?&quot;}
+ChkDrainErr--No--&gt;SetOpStateProcessing[&quot;
+  opstate= v1alpha1.MachineStateProcessing
+  description=machineutils.InitiateVMDeletion
+// proceed with vm deletion&quot;]
+ChkDrainErr--&quot;Yes &amp;&amp; forceDeletePods&quot;--&gt;SetOpStateProcessing
+ChkDrainErr--Yes--&gt;SetOpStateFailed
+SetOpStateProcessing--&gt;
+InitLastOp[&quot;lastOp:=v1alpha1.LastOperation{
+			Description:    description,
+			State:          state,
+			Type:           v1alpha1.MachineOperationDelete,
+			LastUpdateTime: metav1.Now(),
+		}
+  //lastOp is actually the *next* op semantically&quot;]
+SetOpStateFailed--&gt;InitLastOp
+InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)&quot;]
+--&gt;Return((&quot;machineutils.ShortRetry, err&quot;))
+</pre>
+<p>Note on above</p>
+<ol>
+<li>We skip the drain if node is set to ReadonlyFilesystem for over 5 minutes
+<ol>
+<li>Check TODO:  <code>ReadonlyFilesystem</code> is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.</li>
+</ol>
+</li>
+<li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?/</li>
+<li>See <a href="machine-controller/./node_drain.html#run-drain">Run Drain</a></li>
+</ol>
+<h2 id="controllerdeletevm"><a class="header" href="#controllerdeletevm">controller.deleteVM</a></h2>
+<p>Called by <code>controller.triggerDeletionFlow</code></p>
+<pre><code class="language-go">func (c *controller) deleteVM(ctx context.Context, dmReq *driver.DeleteMachineRequest) 
+	(machineutils.RetryPeriod, error)
+
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Begin((&quot; &quot;))
+--&gt;Init[&quot;
+machine = dmr.Machine
+&quot;]
+--&gt;CallDeleteMachine[&quot;
+dmResp, err := c.driver.DeleteMachine(ctx, dmReq)
+&quot;]
+--&gt;ChkDelErr{&quot;err!=nil?&quot;}
+
+ChkDelErr--No--&gt;SetSuccShortRetry[&quot;
+retryPeriod = machineutils.ShortRetry
+description = 'VM deletion was successful.'+ machineutils.InitiateNodeDeletion)
+state = MachineStateProcessing
+&quot;]
+--&gt;InitLastOp[&quot;
+lastOp := LastOperation{
+Description:    description,
+State:          state,
+Type:           MachineOperationDelete,
+LastUpdateTime: Now(),
+},
+&quot;]
+--&gt;SetLastKnownState[&quot;
+// useless since drivers impls dont set this?. 
+// Use machine.Status.LastKnownState instead ?
+lastKnownState = dmResp.LastKnownState
+&quot;]
+--&gt;UpdateMachineStatus[&quot;
+//Discuss: Introduce finer grained phase for status ?
+c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,lastKnownState)&quot;]--&gt;Return((&quot;retryPeriod, err&quot;))
+
+ChkDelErr--Yes--&gt;DecodeErrorStatus[&quot;
+  errStatus,decodeOk= status.FromError(err)
+&quot;]
+DecodeErrorStatus--&gt;CheckDecodeOk{&quot;decodeOk ?&quot;}
+CheckDecodeOk--No--&gt;SetFailed[&quot;
+	state = MachineStateFailed
+	description = 'machine decode error' + machineutils.InitiateVMDeletion
+&quot;]--&gt;SetLongRetry[&quot;
+retryPeriod= machineutils.LongRetry
+&quot;]--&gt;InitLastOp
+
+CheckDecodeOk--Yes--&gt;AnalyzeCode{status.Code?}
+AnalyzeCode--Unknown, DeadlineExceeded,Aborted,Unavailable--&gt;SetDelFailed[&quot;
+state = MachineStateFailed
+description = VM deletion failed due to
++ err + machineutils.InitiateVMDeletion&quot;]
+--&gt;SetShortRetry[&quot;
+retryPeriod= machineutils.ShortRetry
+&quot;]--&gt;InitLastOp
+
+AnalyzeCode--NotFound--&gt;DelSuccess[&quot;
+// we can proceed with deleting node.
+description = 'VM not found. Continuing deletion flow'+ machineutils.InitiateNodeDeletion
+state = MachineStateProcessing
+&quot;]--&gt;SetShortRetry
+
+AnalyzeCode--default--&gt;DelUnknown[&quot;
+state = MachineStateFailed
+description='VM deletion failed due to' + err 
++ 'Aborting..' + machineutils.InitiateVMDeletion
+&quot;]--&gt;SetLongRetry
+
+</pre>
+<h2 id="controllerdeletenodeobject"><a class="header" href="#controllerdeletenodeobject">controller.deleteNodeObject</a></h2>
+<p>NOTE: Should have just called this <code>controller.deleteNode</code> for naming consistency with other methods.</p>
+<p>Called by <code>triggerDeletionFlow</code> after successfully deleting the VM.</p>
+<pre><code class="language-go">func (c *controller) deleteNodeObject(ctx context.Context, 
+machine *v1alpha1.Machine) 
+	(machineutils.RetryPeriod, error) 
+</code></pre>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Begin((&quot; &quot;))
+--&gt;Init[&quot;
+nodeName := machine.Labels['node']
+&quot;]
+--&gt;ChkNodeName{&quot;nodeName != ''&quot; ?}
+ChkNodeName--Yes--&gt;DelNode[&quot;
+err = c.targetCoreClient.CoreV1().Nodes().Delete(ctx, nodeName, metav1.DeleteOptions{})
+&quot;]--&gt;ChkDelErr{&quot;err!=nil?&quot;}
+
+ChkNodeName--No--&gt;NodeObjNotFound[&quot;
+	state = MachineStateProcessing
+	description = 'No node object found for' + nodeName + 'Continue'
+	+ machineutils.InitiateFinalizerRemoval
+&quot;]--&gt;InitLastOp
+
+ChkDelErr--No--&gt;DelSuccess[&quot;
+	state = MachineStateProcessing
+	description = 'Deletion of Node' + nodeName + 'successful'
+	 + machineutils.InitiateFinalizerRemoval 
+&quot;]--&gt;InitLastOp
+
+ChkDelErr--Yes&amp;&amp;!apierrorsIsNotFound--&gt;FailedNodeDel[&quot;
+	state = MachineStateFailed
+	description = 'Deletion of Node' + 
+		nodeName + 'failed due to' + err + machineutils.InitiateNodeDeletion
+&quot;]
+--&gt;InitLastOp[&quot;
+lastOp := LastOperation{
+Description:    description,
+State:          state,
+Type:           MachineOperationDelete,
+LastUpdateTime: Now(),
+},
+&quot;]
+--&gt;UpdateMachineStatus[&quot;
+c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)&quot;]
+--&gt;Return((&quot;machineutils.ShortRetry, err&quot;))
+</pre>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="machine-controller/node_drain.html#node-drain">Node Drain</a>
 <ul>
 <li><a href="machine-controller/node_drain.html#drain-utilities">Drain Utilities</a>
 <ul>
-<li><a href="machine-controller/node_drain.html#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
+<li><a href="machine-controller/node_drain.html#volumeattachmenthandler">VolumeAttachmentHandler</a>
+<ul>
+<li><a href="machine-controller/node_drain.html#volumeattachmenthandleraddworker">VolumeAttachmentHandler.AddWorker</a></li>
+<li><a href="machine-controller/node_drain.html#volumeattachmenthandlerdispatch">VolumeAttachmentHandler.dispatch</a></li>
+<li><a href="machine-controller/node_drain.html#volumeattachmenthandler-initialization-in-mc">VolumeAttachmentHandler Initialization in MC</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li><a href="machine-controller/node_drain.html#drain">Drain</a>
@@ -3946,9 +4076,9 @@ style Init text-align:left
 <li><a href="machine-controller/node_drain.html#drainoptionsdoaccountingofpvs">drain.Options.doAccountingOfPvs</a></li>
 <li><a href="machine-controller/node_drain.html#drainoptionsgetpvlist">drain.Options.getPVList</a></li>
 <li><a href="machine-controller/node_drain.html#drainoptionsgetvolidsfromdriver">drain.Options.getVolIDsFromDriver</a></li>
-<li><a href="machine-controller/node_drain.html#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></li>
 </ul>
 </li>
+<li><a href="machine-controller/node_drain.html#-drainoptionsevictpodswithpvinternal"># drain.Options.evictPodsWithPVInternal</a></li>
 <li><a href="machine-controller/node_drain.html#drainoptionswaitfordelete">drain.Options.waitForDelete</a></li>
 </ul>
 </li>
@@ -3961,7 +4091,7 @@ style Init text-align:left
 <h3 id="volumeattachmenthandler"><a class="header" href="#volumeattachmenthandler">VolumeAttachmentHandler</a></h3>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler">pkg/util/provider/drain.VolumeAttachmentHandler</a> is an handler used to distribute
 incoming <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> requests to a number of workers where each worker is a channel of type <code>*VolumeAttachment</code>. </p>
-<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node. See <a href="machine-controller/../src/k8s_facilities.html#volumeattachment">VolumeAttachment</a></p>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node. See <a href="https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume-attachment-v1/">VolumeAttachment</a></p>
 <pre><code class="language-go">type VolumeAttachmentHandler struct {
 	sync.Mutex
 	workers []chan *storagev1.VolumeAttachment
@@ -3974,7 +4104,31 @@ func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
 		workers: []chan *storagev1.VolumeAttachment{},
 	}
 }
+
 </code></pre>
+<h4 id="volumeattachmenthandleraddworker"><a class="header" href="#volumeattachmenthandleraddworker">VolumeAttachmentHandler.AddWorker</a></h4>
+<p><code>AddWorker</code> appends a buffered channel of size <code>20</code> of type <code>VolumeAttachment</code> to the <code>workers</code> slice  in <code>VolumeAttachmentHandler</code>
+. There is an assumption that not more than 20 unprocessed objects would exist at a given time. On bufferring requests beyond this the channel will start dropping writes. See <code>dispatch</code> method.</p>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) AddWorker() chan *storagev1.VolumeAttachment {
+	// chanSize is the channel buffer size to hold requests.
+	// This assumes 
+	// On bufferring requests beyond this the channel will start dropping writes
+	const chanSize = 20
+
+	klog.V(4).Infof(&quot;Adding new worker. Current active workers %d - %v&quot;, len(v.workers), v.workers)
+
+	v.Lock()
+	defer v.Unlock()
+
+	newWorker := make(chan *storagev1.VolumeAttachment, chanSize)
+	v.workers = append(v.workers, newWorker)
+
+	klog.V(4).Infof(&quot;Successfully added new worker %v. Current active workers %d - %v&quot;, newWorker, len(v.workers), v.workers)
+	return newWorker
+}
+
+</code></pre>
+<h4 id="volumeattachmenthandlerdispatch"><a class="header" href="#volumeattachmenthandlerdispatch">VolumeAttachmentHandler.dispatch</a></h4>
 <p>The <code>dispatch</code> method is responsible for distributing incomding <code>VolumeAttachent</code>s to available channels.</p>
 <pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
 	if len(v.workers) == 0 {
@@ -3987,6 +4141,7 @@ func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
 
 	for i, worker := range v.workers {
 		select {
+		// submit volume attachment to the worker channel if channel is not full
 		case worker &lt;- volumeAttachment:
 		default:
 			klog.Warningf(&quot;Worker %d/%v is full. Discarding value.&quot;, i, worker)
@@ -4004,9 +4159,12 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 	v.dispatch(newObj)
 }
 </code></pre>
-<h4 id="volumeattachmenthandler-usage"><a class="header" href="#volumeattachmenthandler-usage">VolumeAttachmentHandler Usage</a></h4>
-<p>During construction of the MC:</p>
-<pre><code class="language-go">volumeAttachmentInformer.Informer().AddEventHandler(
+<h4 id="volumeattachmenthandler-initialization-in-mc"><a class="header" href="#volumeattachmenthandler-initialization-in-mc">VolumeAttachmentHandler Initialization in MC</a></h4>
+<p>During construction of the MC controller struct, we initialize the callback methods on volume attachment handler using the volume attachment informer</p>
+<pre><code class="language-go">func NewController(...) {
+	//...
+controller.volumeAttachmentHandler = drain.NewVolumeAttachmentHandler()
+volumeAttachmentInformer.Informer().AddEventHandler(
 	cache.ResourceEventHandlerFuncs{
 			AddFunc:    controller.volumeAttachmentHandler.AddVolumeAttachment,
 			UpdateFunc: controller.volumeAttachmentHandler.UpdateVolumeAttachment,
@@ -4069,8 +4227,7 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L363">drain.Options.evictPod</a> is a simple helper method to evict a Pod using <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionExpansion">Eviction API</a></p>
 <ul>
 <li>TODO: <code>GracePeriodSeconds</code> in the code is useless here and should be removed as it is always -1.</li>
-<li>TODO: Currently this method uses old <code>k8s.io/api/policy/v1beta1</code>. It must be changed to  <code>k8s.io/api/policy/v1</code>
-TODO NOTE: </li>
+<li>TODO: Currently this method uses old <code>k8s.io/api/policy/v1beta1</code>. It must be changed to  <code>k8s.io/api/policy/v1</code></li>
 </ul>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
@@ -4186,6 +4343,7 @@ EvictPodsWithoutPV--&gt;CreateAggregateError[&quot;
 </ol>
 </li>
 <li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict boolean</a> usage is confusing.</li>
+<li>TODO: GAP? For cordoning a Node we currently just set <code>Node.Spec.Unschedulable</code>. But we are also supposed to set the taint. <code>node.kubernetes.io/unschedulable</code>. The spec way is supposed to be deprecated.</li>
 </ol>
 <h4 id="drainfilterpodswithpv"><a class="header" href="#drainfilterpodswithpv">drain.filterPodsWithPv</a></h4>
 <p>NOTE: should have been named <code>partitionPodsWithPVC</code></p>
@@ -4805,7 +4963,7 @@ func isMachineStatusSimilar(s1, s2 v1alpha1.MachineStatus) bool {
 <h2 id="gaps"><a class="header" href="#gaps">Gaps</a></h2>
 <p>TODO: Not comprehensive. Lots more to be added here</p>
 <h3 id="deaddeprecated-code"><a class="header" href="#deaddeprecated-code">Dead/Deprecated Code</a></h3>
-<h4 id="controllertriggerupdationflow"><a class="header" href="#controllertriggerupdationflow">controller.triggerUpdationFlow</a></h4>
+<h4 id="controllertriggerupdationflow-1"><a class="header" href="#controllertriggerupdationflow-1">controller.triggerUpdationFlow</a></h4>
 <p>This is unused and appears to be dead code.</p>
 <h5 id="safetyoptionsmachinedraintimeout"><a class="header" href="#safetyoptionsmachinedraintimeout">SafetyOptions.MachineDrainTimeout</a></h5>
 <p>This field is commented as deprecated but is still in <code>MCServer.AddFlags</code> and in the launch script of individual providers.

@@ -5,6 +5,10 @@
 	- [controller.machineStatusUpdate](#controllermachinestatusupdate)
 	- [controller.UpdateNodeTerminationCondition](#controllerupdatenodeterminationcondition)
 	- [controller.isHealthy](#controllerishealthy)
+	- [controller.getVMStatus](#controllergetvmstatus)
+	- [controller.drainNode](#controllerdrainnode)
+	- [controller.deleteVM](#controllerdeletevm)
+	- [controller.deleteNodeObject](#controllerdeletenodeobject)
 # Machine Controller Helper Methods
 
 ## controller.addBootstrapTokenToUserData
@@ -114,7 +118,7 @@ func (c *controller) addMachineFinalizers(ctx context.Context, machine *v1alpha1
 
 ##  controller.setMachineTerminationStatus
 
-`setMachineTerminationStatus` set's the machine status to terminating. This is illustrated below. Please note that `Machine.Status.LastOperation` is set an instance of the `LastOperation` struct. (This appears a bit misleading as this can be interpreted as sometimes the Next Operation carried in the next pickup by the reconciler func?: Discuss this)
+`setMachineTerminationStatus` set's the machine status to terminating. This is illustrated below. Please note that `Machine.Status.LastOperation` is set an instance of the `LastOperation` struct. (which at times appears to be a command for the next action? Discuss this.) 
 
 ```go
 func (c *controller) setMachineTerminationStatus(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)  
@@ -267,3 +271,304 @@ NOTE
 2. Iterate over `machine.Status.Conditions`
    1. If `Ready` condition inis not `True`, node is determined as un-healty.
    2. If any of the bad condition types are detected, then node is determine as un-healthy
+
+
+## controller.getVMStatus
+(BAD NAME FOR METHOD: should be called `checkMachineExistenceAndEnqueNextOperation`)
+
+```go
+func (c *controller) getVMStatus(ctx context.Context, 
+    statusReq *driver.GetMachineStatusRequest) (machineutils.RetryPeriod, error)
+```
+
+This method is only called for the delete flow. 
+1. It attempts to get the machine status
+1. If the machine exists, it updates the machine status operation to `InitiateDrain` and returns a `ShortRetry` for the machine work queue. 
+1. If attempt to get machine status failed, it will obtain the error code from the error.
+   1.  For `Unimplemented`(ie `GetMachineStatus` op was is not implemented), it does the same as `2`. ie: it updates the machine status operation to `InitiateDrain` and returns a `ShortRetry` for the machine work queue. 
+   1. If decoding the error code failed, it will update the  machine status operation to `machineutils.GetVMStatus` and returns a `LongRetry` for the machine key into the machine work queue. 
+      1. Unsure how we get out of this Loop. TODO: Discuss this.
+   2. For `Unknown|DeadlineExceeded|Aborted|Unavailable` it updates the machine status operation to `machineutils.GetVMStatus` status and returns a `ShortRetry` for the machine work queue.  (So that reconcile will run this method again in future)
+   3. For `NotFound` code (ie machine is not found), it will enqueue node deletion by updating the machine stauts operation to `machineutils.InitiateNodeDeletion` and returning a `ShortRetry` for the machine work queue.
+
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+GetMachineStatus["_,err=driver.GetMachineStatus(statusReq)"]
+ChkMachineExists{"err==nil ?\n (ie machine exists)"}
+DecodeErrorStatus["errStatus,decodeOk= status.FromError(err)"]
+CheckDecodeOk{"decodeOk ?"}
+
+CheckErrStatusCode{"Check errStatus.Code"}
+
+CreateDrainOp["op:=LastOperation{Description: machineutils.InitiateDrain
+State: v1alpha1.MachineStateProcessing,
+Type: v1alpha1.MachineOperationDelete,
+Time: time.Now()}"]
+
+CreateNodeDelOp["op:=LastOperation{Description: machineutils.InitiateNodeDeletion
+State: v1alpha1.MachineStateProcessing,
+Type: v1alpha1.MachineOperationDelete,
+Time: time.Now()}"]
+
+CreateDecodeFailedOp["op:=LastOperation{Description: machineutils.GetVMStatus,
+State: v1alpha1.MachineStateFailed,
+Type: v1alpha1.MachineOperationDelete,
+Time: time.Now()}"]
+
+CreaterRetryVMStatusOp["op:=LastOperation{Description: ma1chineutils.GetVMStatus,
+State: v1alpha1.MachineStateFailed,
+Type:  v1alpha1.MachineOperationDelete,
+Time: time.Now()}"]
+
+ShortR["retryPeriod=machineUtils.ShortRetry"]
+LongR["retryPeriod=machineUtils.LongRetry"]
+UpdateMachineStatus["c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)"]
+
+Z(("End"))
+
+GetMachineStatus-->ChkMachineExists
+
+ChkMachineExists--Yes-->CreateDrainOp
+ChkMachineExists--No-->DecodeErrorStatus
+DecodeErrorStatus-->CheckDecodeOk
+CheckDecodeOk--Yes-->CheckErrStatusCode
+CheckDecodeOk--No-->CreateDecodeFailedOp
+CreateDecodeFailedOp-->LongR
+CheckErrStatusCode--"Unimplemented"-->CreateDrainOp
+CheckErrStatusCode--"Unknown|DeadlineExceeded|Aborted|Unavailable"-->CreaterRetryVMStatusOp
+CheckErrStatusCode--"NotFound"-->CreateNodeDelOp
+CreaterRetryVMStatusOp-->ShortR
+
+CreateDrainOp-->ShortR
+CreateNodeDelOp-->ShortR
+ShortR-->UpdateMachineStatus
+LongR-->UpdateMachineStatus
+UpdateMachineStatus-->Z
+```
+
+## controller.drainNode
+
+Inside `pkg/util/provider/machinecontroller/machine_util.go`
+```go
+func (c *controller) drainNode(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
+```
+
+
+```mermaid
+
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+
+Initialize["err = nil
+machine = dmr.Machine
+nodeName= machine.Labels['node']
+drainTimeout=machine.Spec.MachineConfiguration.MachineDrainTimeout || c.safetyOptions.MachineDrainTimeout
+maxEvictRetries=machine.Spec.MachineConfiguration.MaxEvictRetries || c.safetyOptions.MaxEvictRetries
+skipDrain = false"]
+-->GetNodeReadyCond["nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
+readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
+"]
+-->ChkNodeNotReady["skipDrain = (nodeReadyCond.Status == ConditionFalse) && nodeReadyCondition.LastTransitionTime.Time > 5m
+or (readOnlyFSCond.Status == ConditionTrue) && readOnlyFSCond.LastTransitionTime.Time > 5m
+// discuss this
+"]
+-->ChkSkipDrain{"skipDrain true?"}
+ChkSkipDrain--Yes-->SetOpStateProcessing
+ChkSkipDrain--No-->SetHasDrainTimedOut["hasDrainTimedOut = time.Now() > machine.DeletionTimestamp + drainTimeout"]
+SetHasDrainTimedOut-->ChkForceDelOrTimedOut{"machine.Labels['force-deletion']
+  || hasDrainTimedOut"}
+
+ChkForceDelOrTimedOut--Yes-->SetForceDelParams["
+  forceDeletePods=true
+  drainTimeout=1m
+  maxEvictRetries=1
+  "]
+SetForceDelParams-->UpdateNodeTermCond["err=c.UpdateNodeTerminationCondition(ctx, machine)"]
+ChkForceDelOrTimedOut--No-->UpdateNodeTermCond
+
+UpdateNodeTermCond-->ChkUpdateErr{"err != nil ?"}
+ChkUpdateErr--No-->InitDrainOpts["
+  // params reduced for brevity
+  drainOptions := drain.NewDrainOptions(
+    c.targetCoreClient,
+    drainTimeout,
+    maxEvictRetries,
+    c.safetyOptions.PvDetachTimeout.Duration,
+    c.safetyOptions.PvReattachTimeout.Duration,
+    nodeName,
+    forceDeletePods,
+    c.driver,
+		c.pvcLister,
+		c.pvLister,
+    c.pdbV1Lister,
+		c.nodeLister,
+		c.volumeAttachmentHandler)
+"]
+ChkUpdateErr--"Yes&&forceDelPods"-->InitDrainOpts
+ChkUpdateErr--Yes-->SetOpStateFailed["opstate = v1alpha1.MachineStateFailed
+  description=machineutils.InitiateDrain
+  //drain failed. retry next sync
+  "]
+
+InitDrainOpts-->RunDrain["err = drainOptions.RunDrain(ctx)"]
+RunDrain-->ChkDrainErr{"err!=nil?"}
+ChkDrainErr--No-->SetOpStateProcessing["
+  opstate= v1alpha1.MachineStateProcessing
+  description=machineutils.InitiateVMDeletion
+// proceed with vm deletion"]
+ChkDrainErr--"Yes && forceDeletePods"-->SetOpStateProcessing
+ChkDrainErr--Yes-->SetOpStateFailed
+SetOpStateProcessing-->
+InitLastOp["lastOp:=v1alpha1.LastOperation{
+			Description:    description,
+			State:          state,
+			Type:           v1alpha1.MachineOperationDelete,
+			LastUpdateTime: metav1.Now(),
+		}
+  //lastOp is actually the *next* op semantically"]
+SetOpStateFailed-->InitLastOp
+InitLastOp-->UpdateMachineStatus["c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)"]
+-->Return(("machineutils.ShortRetry, err"))
+```
+
+Note on above
+1. We skip the drain if node is set to ReadonlyFilesystem for over 5 minutes
+   1. Check TODO:  `ReadonlyFilesystem` is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.
+2. Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?/
+3. See [Run Drain](./node_drain.md#run-drain)
+
+## controller.deleteVM
+
+Called by `controller.triggerDeletionFlow`
+
+```go
+func (c *controller) deleteVM(ctx context.Context, dmReq *driver.DeleteMachineRequest) 
+	(machineutils.RetryPeriod, error)
+
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+Begin((" "))
+-->Init["
+machine = dmr.Machine
+"]
+-->CallDeleteMachine["
+dmResp, err := c.driver.DeleteMachine(ctx, dmReq)
+"]
+-->ChkDelErr{"err!=nil?"}
+
+ChkDelErr--No-->SetSuccShortRetry["
+retryPeriod = machineutils.ShortRetry
+description = 'VM deletion was successful.'+ machineutils.InitiateNodeDeletion)
+state = MachineStateProcessing
+"]
+-->InitLastOp["
+lastOp := LastOperation{
+Description:    description,
+State:          state,
+Type:           MachineOperationDelete,
+LastUpdateTime: Now(),
+},
+"]
+-->SetLastKnownState["
+// useless since drivers impls dont set this?. 
+// Use machine.Status.LastKnownState instead ?
+lastKnownState = dmResp.LastKnownState
+"]
+-->UpdateMachineStatus["
+//Discuss: Introduce finer grained phase for status ?
+c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,lastKnownState)"]-->Return(("retryPeriod, err"))
+
+ChkDelErr--Yes-->DecodeErrorStatus["
+  errStatus,decodeOk= status.FromError(err)
+"]
+DecodeErrorStatus-->CheckDecodeOk{"decodeOk ?"}
+CheckDecodeOk--No-->SetFailed["
+	state = MachineStateFailed
+	description = 'machine decode error' + machineutils.InitiateVMDeletion
+"]-->SetLongRetry["
+retryPeriod= machineutils.LongRetry
+"]-->InitLastOp
+
+CheckDecodeOk--Yes-->AnalyzeCode{status.Code?}
+AnalyzeCode--Unknown, DeadlineExceeded,Aborted,Unavailable-->SetDelFailed["
+state = MachineStateFailed
+description = VM deletion failed due to
++ err + machineutils.InitiateVMDeletion"]
+-->SetShortRetry["
+retryPeriod= machineutils.ShortRetry
+"]-->InitLastOp
+
+AnalyzeCode--NotFound-->DelSuccess["
+// we can proceed with deleting node.
+description = 'VM not found. Continuing deletion flow'+ machineutils.InitiateNodeDeletion
+state = MachineStateProcessing
+"]-->SetShortRetry
+
+AnalyzeCode--default-->DelUnknown["
+state = MachineStateFailed
+description='VM deletion failed due to' + err 
++ 'Aborting..' + machineutils.InitiateVMDeletion
+"]-->SetLongRetry
+
+```
+
+## controller.deleteNodeObject
+NOTE: Should have just called this `controller.deleteNode` for naming consistency with other methods.
+
+Called by `triggerDeletionFlow` after successfully deleting the VM.
+```go
+func (c *controller) deleteNodeObject(ctx context.Context, 
+machine *v1alpha1.Machine) 
+	(machineutils.RetryPeriod, error) 
+```
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+
+Begin((" "))
+-->Init["
+nodeName := machine.Labels['node']
+"]
+-->ChkNodeName{"nodeName != ''" ?}
+ChkNodeName--Yes-->DelNode["
+err = c.targetCoreClient.CoreV1().Nodes().Delete(ctx, nodeName, metav1.DeleteOptions{})
+"]-->ChkDelErr{"err!=nil?"}
+
+ChkNodeName--No-->NodeObjNotFound["
+	state = MachineStateProcessing
+	description = 'No node object found for' + nodeName + 'Continue'
+	+ machineutils.InitiateFinalizerRemoval
+"]-->InitLastOp
+
+ChkDelErr--No-->DelSuccess["
+	state = MachineStateProcessing
+	description = 'Deletion of Node' + nodeName + 'successful'
+	 + machineutils.InitiateFinalizerRemoval 
+"]-->InitLastOp
+
+ChkDelErr--Yes&&!apierrorsIsNotFound-->FailedNodeDel["
+	state = MachineStateFailed
+	description = 'Deletion of Node' + 
+		nodeName + 'failed due to' + err + machineutils.InitiateNodeDeletion
+"]
+-->InitLastOp["
+lastOp := LastOperation{
+Description:    description,
+State:          state,
+Type:           MachineOperationDelete,
+LastUpdateTime: Now(),
+},
+"]
+-->UpdateMachineStatus["
+c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)"]
+-->Return(("machineutils.ShortRetry, err"))
+```

@@ -366,7 +366,7 @@ type NodeTemplateSpec struct { // BADLY NAMED!
 </ul>
 <p>NodeTerminationCondition</p>
 <h4 id="lastoperation"><a class="header" href="#lastoperation">LastOperation</a></h4>
-<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#LastOperation">github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.LastOperation</a> represents the last operation performed on the object</p>
+<p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#LastOperation">github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.LastOperation</a> represents the last operation performed on the object. Can sometimes mean the <em>next</em> operation to be performed on the machine if the machine operation state is <code>Processing</code>! </p>
 <pre><code class="language-go">type LastOperation struct {
 	// Description of the operation
 	Description string 

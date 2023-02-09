@@ -145,12 +145,7 @@
 <li><a href="#cluster-machine-reconciliation">Cluster Machine Reconciliation</a>
 <ul>
 <li><a href="#controllertriggercreationflow">controller.triggerCreationFlow</a></li>
-<li><a href="#controllertriggerdeletionflow">controller.triggerDeletionFlow</a>
-<ul>
-<li><a href="#controllergetvmstatus">controller.getVMStatus</a></li>
-<li><a href="#controllerdrainnode">controller.drainNode</a></li>
-</ul>
-</li>
+<li><a href="#controllertriggerdeletionflow">controller.triggerDeletionFlow</a></li>
 <li><a href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a>
 <ul>
 <li><a href="#health-check-flow-diagram">Health Check FLow Diagram</a></li>
@@ -158,6 +153,7 @@
 <li><a href="#health-check-doubts">Health Check Doubts</a></li>
 </ul>
 </li>
+<li><a href="#controllertriggerupdationflow">controller.triggerUpdationFlow</a></li>
 </ul>
 </li>
 </ul>
@@ -405,7 +401,7 @@ CheckMachineOperation{&quot;Check\nmachine.Status.LastOperation.Description&quot
 DrainNode[&quot;retryPeriod=c.drainNode(dmr)&quot;]
 DeleteVM[&quot;retryPeriod=c.deleteVM(dmr)&quot;]
 DeleteNode[&quot;retryPeriod=c.deleteNodeObject(dmr)&quot;]
-DeleteMachineFin[&quot;retryPeriod=c.deleteMachineFinalizers(machine)\n(dead code?)&quot;]
+DeleteMachineFin[&quot;retryPeriod=c.deleteMachineFinalizers(machine)&quot;]
 SetMachineTermStatus[&quot;c.setMachineTerminationStatus(dmr)&quot;]
 
 CreateMachineStatusRequest[&quot;statusReq=&amp;driver.GetMachineStatusRequest{machine, machineClass,secret}&quot;]
@@ -439,172 +435,6 @@ DeleteMachineFin--&gt;Z
 ShortR--&gt;Z
 
 </pre>
-<h3 id="controllergetvmstatus"><a class="header" href="#controllergetvmstatus">controller.getVMStatus</a></h3>
-<p>(BAD NAME FOR METHOD: should be called <code>checkMachineExistenceAndEnqueNextOperation</code>)</p>
-<pre><code class="language-go">func (c *controller) getVMStatus(ctx context.Context, 
-    statusReq *driver.GetMachineStatusRequest) (machineutils.RetryPeriod, error)
-</code></pre>
-<p>This method is only called for the delete flow. </p>
-<ol>
-<li>It attempts to get the machine status</li>
-<li>If the machine exists, it updates the machine status operation to <code>InitiateDrain</code> and returns a <code>ShortRetry</code> for the machine work queue. </li>
-<li>If attempt to get machine status failed, it will obtain the error code from the error.
-<ol>
-<li>If decoding the error code failed, it will update the  machine status operation to <code>machineutils.GetVMStatus</code>returns a <code>LongRetry</code> for the machine work queue. 
-<ol>
-<li>Unsure how we get out of this Loop. TODO: Discuss this. Is this dead code?</li>
-</ol>
-</li>
-<li>For <code>Unknown|DeadlineExceeded|Aborted|Unavailable</code> it updates the machine status operation to <code>machineutils.GetVMStatus</code> status and returns a <code>ShortRetry</code> for the machine work queue.  (So that reconcile will run this method again in future)</li>
-<li>For <code>NotFound</code> code (ie machine is not found), it will enqueue node deletion by updating the machine stauts operation to <code>machineutils.InitiateNodeDeletion</code> and returning a <code>ShortRetry</code> for the machine work queue.</li>
-</ol>
-</li>
-</ol>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
-flowchart TD
-
-GetMachineStatus[&quot;_,err=driver.GetMachineStatus(statusReq)&quot;]
-ChkMachineExists{&quot;err==nil ?\n (ie machine exists)&quot;}
-DecodeErrorStatus[&quot;errStatus,decodeOk= status.FromError(err)&quot;]
-CheckDecodeOk{&quot;decodeOk ?&quot;}
-
-CheckErrStatusCode{&quot;Check errStatus.Code&quot;}
-
-CreateDrainOp[&quot;op:=LastOperation{Description: machineutils.InitiateDrain
-State: v1alpha1.MachineStateProcessing,
-Type: v1alpha1.MachineOperationDelete,
-Time: time.Now()}&quot;]
-
-CreateNodeDelOp[&quot;op:=LastOperation{Description: machineutils.InitiateNodeDeletion
-State: v1alpha1.MachineStateProcessing,
-Type: v1alpha1.MachineOperationDelete,
-Time: time.Now()}&quot;]
-
-CreateDecodeFailedOp[&quot;op:=LastOperation{Description: machineutils.GetVMStatus,
-State: v1alpha1.MachineStateFailed,
-Type: v1alpha1.MachineOperationDelete,
-Time: time.Now()}&quot;]
-
-CreaterRetryVMStatusOp[&quot;op:=LastOperation{Description: ma1chineutils.GetVMStatus,
-State: v1alpha1.MachineStateFailed,
-Type:  v1alpha1.MachineOperationDelete,
-Time: time.Now()}&quot;]
-
-ShortR[&quot;retryPeriod=machineUtils.ShortRetry&quot;]
-LongR[&quot;retryPeriod=machineUtils.LongRetry&quot;]
-UpdateMachineStatus[&quot;c.machineStatusUpdate(machine,op,machine.Status.CurrentStatus, machine.Status.LastKnownState)&quot;]
-
-Z((&quot;End&quot;))
-
-GetMachineStatus--&gt;ChkMachineExists
-
-ChkMachineExists--Yes--&gt;CreateDrainOp
-ChkMachineExists--No--&gt;DecodeErrorStatus
-DecodeErrorStatus--&gt;CheckDecodeOk
-CheckDecodeOk--Yes--&gt;CheckErrStatusCode
-CheckDecodeOk--No--&gt;CreateDecodeFailedOp
-CreateDecodeFailedOp--&gt;LongR
-CheckErrStatusCode--&quot;Unimplemented&quot;--&gt;CreateDrainOp
-CheckErrStatusCode--&quot;Unknown|DeadlineExceeded|Aborted|Unavailable&quot;--&gt;CreaterRetryVMStatusOp
-CheckErrStatusCode--&quot;NotFound&quot;--&gt;CreateNodeDelOp
-CreaterRetryVMStatusOp--&gt;ShortR
-
-CreateDrainOp--&gt;ShortR
-CreateNodeDelOp--&gt;ShortR
-ShortR--&gt;UpdateMachineStatus
-LongR--&gt;UpdateMachineStatus
-UpdateMachineStatus--&gt;Z
-</pre>
-<h3 id="controllerdrainnode"><a class="header" href="#controllerdrainnode">controller.drainNode</a></h3>
-<p>Inside <code>pkg/util/provider/machinecontroller/machine_util.go</code></p>
-<pre><code class="language-go">func (c *controller) drainNode(ctx context.Context, dmr *driver.DeleteMachineRequest) (machineutils.RetryPeriod, error)
-</code></pre>
-<pre class="mermaid">
-%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
-flowchart TD
-
-
-Initialize[&quot;err = nil
-machine = dmr.Machine
-nodeName= machine.Labels['node']
-drainTimeout=machine.Spec.MachineConfiguration.MachineDrainTimeout || c.safetyOptions.MachineDrainTimeout
-maxEvictRetries=machine.Spec.MachineConfiguration.MaxEvictRetries || c.safetyOptions.MaxEvictRetries
-skipDrain = false&quot;]
---&gt;GetNodeReadyCond[&quot;nodeReadyCond = machine.Status.Conditions contains k8s.io/api/core/v1/NodeReady
-readOnlyFSCond=machine.Status.Conditions contains 'ReadonlyFilesystem' 
-&quot;]
---&gt;ChkNodeNotReady[&quot;skipDrain = (nodeReadyCond.Status == ConditionFalse) &amp;&amp; nodeReadyCondition.LastTransitionTime.Time &gt; 5m
-or (readOnlyFSCond.Status == ConditionTrue) &amp;&amp; readOnlyFSCond.LastTransitionTime.Time &gt; 5m
-// discuss this
-&quot;]
---&gt;ChkSkipDrain{&quot;skipDrain true?&quot;}
-ChkSkipDrain--Yes--&gt;SetOpStateProcessing
-ChkSkipDrain--No--&gt;SetHasDrainTimedOut[&quot;hasDrainTimedOut = time.Now() &gt; machine.DeletionTimestamp + drainTimeout&quot;]
-SetHasDrainTimedOut--&gt;ChkForceDelOrTimedOut{&quot;machine.Labels['force-deletion']
-  || hasDrainTimedOut&quot;}
-
-ChkForceDelOrTimedOut--Yes--&gt;SetForceDelParams[&quot;
-  forceDeletePods=true
-  drainTimeout=1m
-  maxEvictRetries=1
-  &quot;]
-SetForceDelParams--No--&gt;UpdateNodeTermCond[&quot;err=c.UpdateNodeTerminationCondition(ctx, machine)&quot;]
-ChkForceDelOrTimedOut--No--&gt;UpdateNodeTermCond
-
-UpdateNodeTermCond--&gt;ChkUpdateErr{&quot;err != nil ?&quot;}
-ChkUpdateErr--No--&gt;InitDrainOpts[&quot;
-  // params reduced for brevity
-  drainOptions := drain.NewDrainOptions(
-    c.targetCoreClient,
-    drainTimeout,
-    maxEvictRetries,
-    c.safetyOptions.PvDetachTimeout.Duration,
-    c.safetyOptions.PvReattachTimeout.Duration,
-    nodeName,
-    forceDeletePods,
-    c.driver,
-		c.pvcLister,
-		c.pvLister,
-    c.pdbV1Lister,
-		c.nodeLister,
-		c.volumeAttachmentHandler)
-&quot;]
-ChkUpdateErr--&quot;Yes&amp;&amp;forceDelPods&quot;--&gt;InitDrainOpts
-ChkUpdateErr--Yes--&gt;SetOpStateFailed[&quot;opstate = v1alpha1.MachineStateFailed
-  description=machineutils.InitiateDrain
-  //drain failed. retry next sync
-  &quot;]
-
-InitDrainOpts--&gt;RunDrain[&quot;err = drainOptions.RunDrain(ctx)&quot;]
-RunDrain--&gt;ChkDrainErr{&quot;err!=nil?&quot;}
-ChkDrainErr--No--&gt;SetOpStateProcessing[&quot;
-  opstate= v1alpha1.MachineStateProcessing
-  description=machineutils.InitiateVMDeletion
-// proceed with vm deletion&quot;]
-ChkDrainErr--&quot;Yes &amp;&amp; forceDeletePods&quot;--&gt;SetOpStateProcessing
-ChkDrainErr--Yes--&gt;SetOpStateFailed
-SetOpStateProcessing--&gt;
-InitLastOp[&quot;lastOp:=v1alpha1.LastOperation{
-			Description:    description,
-			State:          state,
-			Type:           v1alpha1.MachineOperationDelete,
-			LastUpdateTime: metav1.Now(),
-		}
-  //lastOp is actually the *next* op semantically&quot;]
-SetOpStateFailed--&gt;InitLastOp
-InitLastOp--&gt;UpdateMachineStatus[&quot;c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)&quot;]
---&gt;Return((&quot;machineutils.ShortRetry, err&quot;))
-</pre>
-<p>Note on above</p>
-<ol>
-<li>We skip the drain if node is set to ReadonlyFilesystem for over 5 minutes
-<ol>
-<li>Check TODO:  <code>ReadonlyFilesystem</code> is a MCM condition and not a k8s core node condition. Not sure if we are mis-using this field. TODO: Check this.</li>
-</ol>
-</li>
-<li>Check TODO: Why do we check that node is not ready for 5m in order to skip the drain ? Shouldn't we skip the drain if node is simply not ready ? Why wait for 5m here ?/</li>
-<li>See <a href="./node_drain.html#run-drain">Run Drain</a></li>
-</ol>
 <h2 id="controllerreconcilemachinehealth"><a class="header" href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a></h2>
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/machinecontroller/machine_util.go#L584">controller.reconcileMachineHealth</a> reconciles the machine object with any change in node conditions or VM health.</p>
 <pre><code class="language-go">func (c *controller) reconcileMachineHealth(ctx context.Context, machine *Machine) 
@@ -750,6 +580,8 @@ style SetUnknown text-align:left
 <li>TODO: code makes too much use of <code>cloneDirty</code> to check whether machine clone obj has changed, when it could easily return early in several branches.</li>
 <li>TODO: Code directly makes calls to enqueue machine keys on the machine queue and still returns retry periods to caller leanding to un-necessary enqueue of machine keys. (spurious design)</li>
 </ol>
+<h2 id="controllertriggerupdationflow"><a class="header" href="#controllertriggerupdationflow">controller.triggerUpdationFlow</a></h2>
+<p>Doesn't seem to be used ? Possibly dead code ?</p>
 
                     </main>
 

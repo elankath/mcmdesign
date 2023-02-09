@@ -146,7 +146,13 @@
 <ul>
 <li><a href="#drain-utilities">Drain Utilities</a>
 <ul>
-<li><a href="#volumeattachmenthandler">VolumeAttachmentHandler</a></li>
+<li><a href="#volumeattachmenthandler">VolumeAttachmentHandler</a>
+<ul>
+<li><a href="#volumeattachmenthandleraddworker">VolumeAttachmentHandler.AddWorker</a></li>
+<li><a href="#volumeattachmenthandlerdispatch">VolumeAttachmentHandler.dispatch</a></li>
+<li><a href="#volumeattachmenthandler-initialization-in-mc">VolumeAttachmentHandler Initialization in MC</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li><a href="#drain">Drain</a>
@@ -176,9 +182,9 @@
 <li><a href="#drainoptionsdoaccountingofpvs">drain.Options.doAccountingOfPvs</a></li>
 <li><a href="#drainoptionsgetpvlist">drain.Options.getPVList</a></li>
 <li><a href="#drainoptionsgetvolidsfromdriver">drain.Options.getVolIDsFromDriver</a></li>
-<li><a href="#drainoptionsevictpodswithpvinternal">drain.Options.evictPodsWithPVInternal</a></li>
 </ul>
 </li>
+<li><a href="#-drainoptionsevictpodswithpvinternal"># drain.Options.evictPodsWithPVInternal</a></li>
 <li><a href="#drainoptionswaitfordelete">drain.Options.waitForDelete</a></li>
 </ul>
 </li>
@@ -191,7 +197,7 @@
 <h3 id="volumeattachmenthandler"><a class="header" href="#volumeattachmenthandler">VolumeAttachmentHandler</a></h3>
 <p><a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/drain#VolumeAttachmentHandler">pkg/util/provider/drain.VolumeAttachmentHandler</a> is an handler used to distribute
 incoming <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> requests to a number of workers where each worker is a channel of type <code>*VolumeAttachment</code>. </p>
-<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node. See <a href="../src/k8s_facilities.html#volumeattachment">VolumeAttachment</a></p>
+<p>A <a href="https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment">k8s.io/api/storage/v1.VolumeAttachment</a> is a non-namespaced k8s object that captures the intent to attach or detach the specified volume to/from the specified node. See <a href="https://kubernetes.io/docs/reference/kubernetes-api/config-and-storage-resources/volume-attachment-v1/">VolumeAttachment</a></p>
 <pre><code class="language-go">type VolumeAttachmentHandler struct {
 	sync.Mutex
 	workers []chan *storagev1.VolumeAttachment
@@ -204,7 +210,31 @@ func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
 		workers: []chan *storagev1.VolumeAttachment{},
 	}
 }
+
 </code></pre>
+<h4 id="volumeattachmenthandleraddworker"><a class="header" href="#volumeattachmenthandleraddworker">VolumeAttachmentHandler.AddWorker</a></h4>
+<p><code>AddWorker</code> appends a buffered channel of size <code>20</code> of type <code>VolumeAttachment</code> to the <code>workers</code> slice  in <code>VolumeAttachmentHandler</code>
+. There is an assumption that not more than 20 unprocessed objects would exist at a given time. On bufferring requests beyond this the channel will start dropping writes. See <code>dispatch</code> method.</p>
+<pre><code class="language-go">func (v *VolumeAttachmentHandler) AddWorker() chan *storagev1.VolumeAttachment {
+	// chanSize is the channel buffer size to hold requests.
+	// This assumes 
+	// On bufferring requests beyond this the channel will start dropping writes
+	const chanSize = 20
+
+	klog.V(4).Infof(&quot;Adding new worker. Current active workers %d - %v&quot;, len(v.workers), v.workers)
+
+	v.Lock()
+	defer v.Unlock()
+
+	newWorker := make(chan *storagev1.VolumeAttachment, chanSize)
+	v.workers = append(v.workers, newWorker)
+
+	klog.V(4).Infof(&quot;Successfully added new worker %v. Current active workers %d - %v&quot;, newWorker, len(v.workers), v.workers)
+	return newWorker
+}
+
+</code></pre>
+<h4 id="volumeattachmenthandlerdispatch"><a class="header" href="#volumeattachmenthandlerdispatch">VolumeAttachmentHandler.dispatch</a></h4>
 <p>The <code>dispatch</code> method is responsible for distributing incomding <code>VolumeAttachent</code>s to available channels.</p>
 <pre><code class="language-go">func (v *VolumeAttachmentHandler) dispatch(obj interface{}) {
 	if len(v.workers) == 0 {
@@ -217,6 +247,7 @@ func NewVolumeAttachmentHandler() *VolumeAttachmentHandler {
 
 	for i, worker := range v.workers {
 		select {
+		// submit volume attachment to the worker channel if channel is not full
 		case worker &lt;- volumeAttachment:
 		default:
 			klog.Warningf(&quot;Worker %d/%v is full. Discarding value.&quot;, i, worker)
@@ -234,9 +265,12 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 	v.dispatch(newObj)
 }
 </code></pre>
-<h4 id="volumeattachmenthandler-usage"><a class="header" href="#volumeattachmenthandler-usage">VolumeAttachmentHandler Usage</a></h4>
-<p>During construction of the MC:</p>
-<pre><code class="language-go">volumeAttachmentInformer.Informer().AddEventHandler(
+<h4 id="volumeattachmenthandler-initialization-in-mc"><a class="header" href="#volumeattachmenthandler-initialization-in-mc">VolumeAttachmentHandler Initialization in MC</a></h4>
+<p>During construction of the MC controller struct, we initialize the callback methods on volume attachment handler using the volume attachment informer</p>
+<pre><code class="language-go">func NewController(...) {
+	//...
+controller.volumeAttachmentHandler = drain.NewVolumeAttachmentHandler()
+volumeAttachmentInformer.Informer().AddEventHandler(
 	cache.ResourceEventHandlerFuncs{
 			AddFunc:    controller.volumeAttachmentHandler.AddVolumeAttachment,
 			UpdateFunc: controller.volumeAttachmentHandler.UpdateVolumeAttachment,
@@ -299,8 +333,7 @@ func (v *VolumeAttachmentHandler) UpdateVolumeAttachment(oldObj, newObj interfac
 <p><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L363">drain.Options.evictPod</a> is a simple helper method to evict a Pod using <a href="https://pkg.go.dev/k8s.io/client-go@v0.25.2/kubernetes/typed/policy/v1#EvictionExpansion">Eviction API</a></p>
 <ul>
 <li>TODO: <code>GracePeriodSeconds</code> in the code is useless here and should be removed as it is always -1.</li>
-<li>TODO: Currently this method uses old <code>k8s.io/api/policy/v1beta1</code>. It must be changed to  <code>k8s.io/api/policy/v1</code>
-TODO NOTE: </li>
+<li>TODO: Currently this method uses old <code>k8s.io/api/policy/v1beta1</code>. It must be changed to  <code>k8s.io/api/policy/v1</code></li>
 </ul>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
@@ -416,6 +449,7 @@ EvictPodsWithoutPV--&gt;CreateAggregateError[&quot;
 </ol>
 </li>
 <li><a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400">attemptEvict boolean</a> usage is confusing.</li>
+<li>TODO: GAP? For cordoning a Node we currently just set <code>Node.Spec.Unschedulable</code>. But we are also supposed to set the taint. <code>node.kubernetes.io/unschedulable</code>. The spec way is supposed to be deprecated.</li>
 </ol>
 <h4 id="drainfilterpodswithpv"><a class="header" href="#drainfilterpodswithpv">drain.filterPodsWithPv</a></h4>
 <p>NOTE: should have been named <code>partitionPodsWithPVC</code></p>

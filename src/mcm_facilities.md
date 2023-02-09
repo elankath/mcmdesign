@@ -194,7 +194,7 @@ NodeTerminationCondition
 
 #### LastOperation
 
-[github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.LastOperation](https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#LastOperation) represents the last operation performed on the object
+[github.com/machine-controller-manager/pkg/apis/machine/v1alpha1.LastOperation](https://pkg.go.dev/github.com/gardener/machine-controller-manager/pkg/apis/machine/v1alpha1#LastOperation) represents the last operation performed on the object. Can sometimes mean the *next* operation to be performed on the machine if the machine operation state is `Processing`! 
 ```go
 type LastOperation struct {
 	// Description of the operation
