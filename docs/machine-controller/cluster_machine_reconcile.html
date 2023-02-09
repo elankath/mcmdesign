@@ -558,7 +558,7 @@ style SetUnknown text-align:left
 </li>
 <li>If the current machine phase is <code>Unknown</code>, get the effective machine health timeout and check. 
 <ol>
-<li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
+<li>If the timeout HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
 <li>If the timeout HAS expired 
 <ol>
 <li>Get the machine deployment name <code>machineDeployName := machine.Labels['name']</code> corresponding to this machine</li>
@@ -584,7 +584,6 @@ style SetUnknown text-align:left
 <h3 id="health-check-doubts"><a class="header" href="#health-check-doubts">Health Check Doubts</a></h3>
 <ol>
 <li>TODO: Why don't we check the machine health using the <code>Driver.GetMachineStatus</code> in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)</li>
-<li>TODO: Why do we do <code>len(machine.Status.Condtions)==0</code> in the below when ?</li>
 <li>TODO: why doesn't this code make use of the helper method: <code>c.machineStatusUpdate</code> ?</li>
 <li>TODO: Unclear why <code>LastOperation.Description</code> does not use/concatenate one of the predefined constants in <code>machineutils</code></li>
 <li>TODO: code makes too much use of <code>cloneDirty</code> to check whether machine clone obj has changed, when it could easily return early in several branches.</li>

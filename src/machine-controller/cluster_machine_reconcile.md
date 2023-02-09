@@ -429,7 +429,7 @@ style SetUnknown text-align:left
    1. If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. 
    2. If the timeout HAS expired, then change the last operation state to `Failed` and the machine phase to `Failed`. Update the machine status and return with a short retry.
 6. If the current machine phase is `Unknown`, get the effective machine health timeout and check. 
-   1. If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. 
+   1. If the timeout HAS NOT expired, enqueue the machine key on the machine work queue after 1m. 
    2. If the timeout HAS expired 
       1. Get the machine deployment name `machineDeployName := machine.Labels['name']` corresponding to this machine
       2. Register ONE permit with this with `machineDeployName`. See [Permit Giver](../mcm_facilities.md#permitspermitgiver). Q: Background of this change ? Couldn't we find a better way to throttle via work-queues instead of complicated `PermitGiver` and go-routines? Even simple lock would be OK here right ? 
@@ -444,7 +444,6 @@ style SetUnknown text-align:left
 ### Health Check Doubts
 
 1. TODO: Why don't we check the machine health using the `Driver.GetMachineStatus` in the reconcile Machine health ? (seems like something obvious to do and would have helped in those meltdown issues where machine was incorrectly marked as failed)
-1. TODO: Why do we do `len(machine.Status.Condtions)==0` in the below when ?
 1. TODO: why doesn't this code make use of the helper method: `c.machineStatusUpdate` ?
 1. TODO: Unclear why `LastOperation.Description` does not use/concatenate one of the predefined constants in `machineutils`
 2. TODO: code makes too much use of `cloneDirty` to check whether machine clone obj has changed, when it could easily return early in several branches.
