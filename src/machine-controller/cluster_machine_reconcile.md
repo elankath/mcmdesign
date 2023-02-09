@@ -2,7 +2,7 @@
   - [controller.triggerCreationFlow](#controllertriggercreationflow)
   - [controller.triggerDeletionFlow](#controllertriggerdeletionflow)
   - [controller.reconcileMachineHealth](#controllerreconcilemachinehealth)
-    - [Health Check FLow Diagram](#health-check-flow-diagram)
+    - [Health Check Flow Diagram](#health-check-flow-diagram)
     - [Health Check Summary](#health-check-summary)
     - [Health Check Doubts](#health-check-doubts)
   - [controller.triggerUpdationFlow](#controllertriggerupdationflow)
@@ -318,7 +318,10 @@ func (c *controller) reconcileMachineHealth(ctx context.Context, machine *Machin
 NOTES:
 1. Reference [controller.isHealth](./mc_helper_methods.md#controllerishealthy) which checks the machine status conditions.
 
-### Health Check FLow Diagram
+### Health Check Flow Diagram
+
+NOTE: IGNORE flow diagram. Due to too many condition checks and big method, it becomes too huge. Look at description. Should be decomposed into smaller routines. Go to [Health Check Summary](#health-check-summary)
+
 ```mermaid
 
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
@@ -330,7 +333,7 @@ cloneDirty = false
 machineClone = machine.DeepCopy()
 "]-->GetNode["
   node, err := c.nodeLister.Get(machine.Status.Node)
-"]-->CheckErr{err!-nil}
+"]-->CheckErr{err!=nil}
 
 CheckErr--Yes-->
   ChkIsNotFound{"IsNotFound(err)"}
@@ -418,19 +421,25 @@ style SetUnknown text-align:left
 2. If the `Node` object IS found, then it checks whether the `Machine.Status.Conditions` are different from `Node.Status.Conditions`. If so it sets the machine conditions to the node conditions.
 3.  If the machine IS NOT healthy (See [isHealthy](./mc_helper_methods.md#controllerishealthy)) but the current machine phase is `Running`, change the machine phase to `Unknown`, the last operation state to `Processing`, the last operation type to `HealthCheck`, update the machine status and return with a short retry.  
 4. If the machine IS healthy but the current machine phase is NOT `Running`,  check whether the last operation type was a `Create`.
-   1.  If the last operation type was a `Create` and last operation state is not marked as `Successful`, then delete the bootstrap token associated with the machine. Change the last operation state to `Successful`.
+   1.  If the last operation type was a `Create` and last operation state is NOT marked as `Successful`, then delete the bootstrap token associated with the machine. Change the last operation state to `Successful`. Let the last operation type continue to remain as `Create`.
    1. If the last operation type was NOT a `Create`, change the last operation type to `HealthCheck`
    1. Change the machine phase to `Running` and update the machine status and return with a short retry.
-5. If the current machine phase is `Pending` (ie machine being created) get the configured machine creation timeout and check.  
+   2. (The above 2 cases take care of a newly created machine and a machine that became OK after ome temporary issue)
+5. If the current machine phase is `Pending` (ie machine being created: see `triggerCreationFlow`) get the configured machine creation timeout and check.  
    1. If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. 
-   1. If the timeout HAS expired, then change the last operation state to `Failed` and the machine phase to `Failed`. Update the machine status and return with a short retry.
+   2. If the timeout HAS expired, then change the last operation state to `Failed` and the machine phase to `Failed`. Update the machine status and return with a short retry.
 6. If the current machine phase is `Unknown`, get the effective machine health timeout and check. 
    1. If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. 
-   2. If the timoeut HAS expired 
+   2. If the timeout HAS expired 
       1. Get the machine deployment name `machineDeployName := machine.Labels['name']` corresponding to this machine
-      2. Register ONE permit with this with `machineDeployName`. See [Permit Giver](../mcm_facilities.md#permitspermitgiver). Q: Why do we do this ?
+      2. Register ONE permit with this with `machineDeployName`. See [Permit Giver](../mcm_facilities.md#permitspermitgiver). Q: Background of this change ? Couldn't we find a better way to throttle via work-queues instead of complicated `PermitGiver` and go-routines? Even simple lock would be OK here right ? 
       3. Attempt to get ONE permit for `machineDeployName` using a `lockAcquireTimeout` of 1s
-         1. Change the last operation state to `Failed` (seems WRONG to me), presere the last operation type, change machine phase to `Failed`. Update the machine status. See `c.updateMachineToFailedState`
+         1. Throttle to check whether machine CAN be marked as `Failed` using `markable, err := controller.canMarkMachineFailed`. 
+         2. If machine can be marked, change the last operation state (ie the health check) to `Failed`, preserve the last operation type, change machine phase to `Failed`. Update the machine status. See `c.updateMachineToFailedState`
+         3. Then use `wait.Poll` using 100ms as `pollInterval` and 1s as `cacheUpdateTimeout` using the following poll condition function:
+            1. Get the `machine` from the `machineLister` (which uses the cache of the shared informer)
+            2. Return true if `machine.Status.CurrentStatus.Phase` is `Failed` or `Terminating` or the `machine` is not found
+            3. Return false otherwise.
 
 ### Health Check Doubts
 

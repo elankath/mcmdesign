@@ -3070,7 +3070,7 @@ d--No--&gt;e
 <li><a href="machine-controller/cluster_machine_reconcile.html#controllertriggerdeletionflow">controller.triggerDeletionFlow</a></li>
 <li><a href="machine-controller/cluster_machine_reconcile.html#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a>
 <ul>
-<li><a href="machine-controller/cluster_machine_reconcile.html#health-check-flow-diagram">Health Check FLow Diagram</a></li>
+<li><a href="machine-controller/cluster_machine_reconcile.html#health-check-flow-diagram">Health Check Flow Diagram</a></li>
 <li><a href="machine-controller/cluster_machine_reconcile.html#health-check-summary">Health Check Summary</a></li>
 <li><a href="machine-controller/cluster_machine_reconcile.html#health-check-doubts">Health Check Doubts</a></li>
 </ul>
@@ -3366,7 +3366,8 @@ ShortR--&gt;Z
 <ol>
 <li>Reference <a href="machine-controller/./mc_helper_methods.html#controllerishealthy">controller.isHealth</a> which checks the machine status conditions.</li>
 </ol>
-<h3 id="health-check-flow-diagram"><a class="header" href="#health-check-flow-diagram">Health Check FLow Diagram</a></h3>
+<h3 id="health-check-flow-diagram"><a class="header" href="#health-check-flow-diagram">Health Check Flow Diagram</a></h3>
+<p>NOTE: IGNORE flow diagram. Due to too many condition checks and big method, it becomes too huge. Look at description. Should be decomposed into smaller routines. Go to <a href="machine-controller/cluster_machine_reconcile.html#health-check-summary">Health Check Summary</a></p>
 <pre class="mermaid">
 %%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
@@ -3377,7 +3378,7 @@ cloneDirty = false
 machineClone = machine.DeepCopy()
 &quot;]--&gt;GetNode[&quot;
   node, err := c.nodeLister.Get(machine.Status.Node)
-&quot;]--&gt;CheckErr{err!-nil}
+&quot;]--&gt;CheckErr{err!=nil}
 
 CheckErr--Yes--&gt;
   ChkIsNotFound{&quot;IsNotFound(err)&quot;}
@@ -3465,12 +3466,13 @@ style SetUnknown text-align:left
 <li>If the machine IS NOT healthy (See <a href="machine-controller/./mc_helper_methods.html#controllerishealthy">isHealthy</a>) but the current machine phase is <code>Running</code>, change the machine phase to <code>Unknown</code>, the last operation state to <code>Processing</code>, the last operation type to <code>HealthCheck</code>, update the machine status and return with a short retry.</li>
 <li>If the machine IS healthy but the current machine phase is NOT <code>Running</code>,  check whether the last operation type was a <code>Create</code>.
 <ol>
-<li>If the last operation type was a <code>Create</code> and last operation state is not marked as <code>Successful</code>, then delete the bootstrap token associated with the machine. Change the last operation state to <code>Successful</code>.</li>
+<li>If the last operation type was a <code>Create</code> and last operation state is NOT marked as <code>Successful</code>, then delete the bootstrap token associated with the machine. Change the last operation state to <code>Successful</code>. Let the last operation type continue to remain as <code>Create</code>.</li>
 <li>If the last operation type was NOT a <code>Create</code>, change the last operation type to <code>HealthCheck</code></li>
 <li>Change the machine phase to <code>Running</code> and update the machine status and return with a short retry.</li>
+<li>(The above 2 cases take care of a newly created machine and a machine that became OK after ome temporary issue)</li>
 </ol>
 </li>
-<li>If the current machine phase is <code>Pending</code> (ie machine being created) get the configured machine creation timeout and check.
+<li>If the current machine phase is <code>Pending</code> (ie machine being created: see <code>triggerCreationFlow</code>) get the configured machine creation timeout and check.
 <ol>
 <li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
 <li>If the timeout HAS expired, then change the last operation state to <code>Failed</code> and the machine phase to <code>Failed</code>. Update the machine status and return with a short retry.</li>
@@ -3479,13 +3481,21 @@ style SetUnknown text-align:left
 <li>If the current machine phase is <code>Unknown</code>, get the effective machine health timeout and check. 
 <ol>
 <li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
-<li>If the timoeut HAS expired 
+<li>If the timeout HAS expired 
 <ol>
 <li>Get the machine deployment name <code>machineDeployName := machine.Labels['name']</code> corresponding to this machine</li>
-<li>Register ONE permit with this with <code>machineDeployName</code>. See <a href="machine-controller/../mcm_facilities.html#permitspermitgiver">Permit Giver</a>. Q: Why do we do this ?</li>
+<li>Register ONE permit with this with <code>machineDeployName</code>. See <a href="machine-controller/../mcm_facilities.html#permitspermitgiver">Permit Giver</a>. Q: Background of this change ? Couldn't we find a better way to throttle via work-queues instead of complicated <code>PermitGiver</code> and go-routines? Even simple lock would be OK here right ? </li>
 <li>Attempt to get ONE permit for <code>machineDeployName</code> using a <code>lockAcquireTimeout</code> of 1s
 <ol>
-<li>Change the last operation state to <code>Failed</code> (seems WRONG to me), presere the last operation type, change machine phase to <code>Failed</code>. Update the machine status. See <code>c.updateMachineToFailedState</code></li>
+<li>Throttle to check whether machine CAN be marked as <code>Failed</code> using <code>markable, err := controller.canMarkMachineFailed</code>. </li>
+<li>If machine can be marked, change the last operation state (ie the health check) to <code>Failed</code>, preserve the last operation type, change machine phase to <code>Failed</code>. Update the machine status. See <code>c.updateMachineToFailedState</code></li>
+<li>Then use <code>wait.Poll</code> using 100ms as <code>pollInterval</code> and 1s as <code>cacheUpdateTimeout</code> using the following poll condition function:
+<ol>
+<li>Get the <code>machine</code> from the <code>machineLister</code> (which uses the cache of the shared informer)</li>
+<li>Return true if <code>machine.Status.CurrentStatus.Phase</code> is <code>Failed</code> or <code>Terminating</code> or the <code>machine</code> is not found</li>
+<li>Return false otherwise.</li>
+</ol>
+</li>
 </ol>
 </li>
 </ol>
@@ -3517,6 +3527,7 @@ style SetUnknown text-align:left
 <li><a href="machine-controller/mc_helper_methods.html#controllerdrainnode">controller.drainNode</a></li>
 <li><a href="machine-controller/mc_helper_methods.html#controllerdeletevm">controller.deleteVM</a></li>
 <li><a href="machine-controller/mc_helper_methods.html#controllerdeletenodeobject">controller.deleteNodeObject</a></li>
+<li><a href="machine-controller/mc_helper_methods.html#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></li>
 </ul>
 </li>
 </ul>
@@ -4035,6 +4046,31 @@ LastUpdateTime: Now(),
 c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)&quot;]
 --&gt;Return((&quot;machineutils.ShortRetry, err&quot;))
 </pre>
+<h2 id="controllersyncmachinenodetemplates"><a class="header" href="#controllersyncmachinenodetemplates">controller.syncMachineNodeTemplates</a></h2>
+<pre><code class="language-go">func (c *controller) syncMachineNodeTemplates(ctx context.Context, 
+	machine *v1alpha1.Machine) 
+		(machineutils.RetryPeriod, error) 
+</code></pre>
+<p>See <a href="machine-controller/../mcm_facilities.html#machinespec">MachineSpec</a></p>
+<p><code>syncMachineNodeTemplates</code> syncs <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/apis/machine/v1alpha1#NodeTemplateSpec">machine.Spec.NodeTemplateSpec</a> between machine and corresponding node-object.  A <code>NodeTemplateSpec</code> just wraps a core <a href="machine-controller/../k8s_facilities.html#nodespec">NodeSpec</a> and <a href="machine-controller/../k8s_facilities.html#objectmeta">ObjectMetadata</a></p>
+<p>Get the <code>node</code> for the given <code>machine</code> and then:</p>
+<ol>
+<li>Synchronize <code>node.Annotations</code> to <code>machine.Spec.NodeTemplateSpec.Annotations</code>. </li>
+<li>Synchronize <code>node.Labels</code> to  <code>machine.Spec.NodeTemplateSpec.Labels</code></li>
+<li>Synchronize <code>node.Spec.Taints</code> to <code>machine.Spec.NodeTemplateSpec.Spec.Taints</code></li>
+<li>Update the <code>node</code> object if there were changes.</li>
+</ol>
+<p>Since, we should not delete third-party annotations on the node object, synchronizing deleted ALT from the machine object is a bit tricky and so we maintain yet another custom annotation <code>node.machine.sapcloud.io/last-applied-anno-labels-taints</code> (code constant <code>LastAppliedALTAnnotation</code>) on the <code>Node</code> object which is a JSON string of the <a href="https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/apis/machine/v1alpha1#NodeTemplateSpec">NodeTemplateSpec</a>. </p>
+<ol>
+<li>Before synchronizing, we un-marshall this <code>LastAppliedALTAnnotation</code> value into a <code>lastAppliedALT</code> of type <code>NodeTemplateSpec</code>. </li>
+<li>While synchronizing annotations, labels and taints, we check respectively whether <code>lastAppliedALT.Annotations</code>, <code>lastAppliedALT.Labels</code> and <code>lastAppliedALT.Spec.Taints</code> hold keys that are NOT in the corresponding <code>machine.Spec.NodeTemplateSpec.Annotations</code>, <code>machine.Spec.NodeTemplateSpec.Labels</code> and <code> machine.Spec.NodeTemplateSpec.Spec.Taints</code>. 
+<ol>
+<li>If so, we delete keys from the corresponding <code> node.Annotations</code>, <code>node.Labels</code> and <code>node.Spec.Taints</code> respectively.</li>
+<li>We maintain a boolean saying the <code>LastAppliedALTAnnotation</code> needs to be updated</li>
+</ol>
+</li>
+<li>Just before updating the Node object, we check if <code>LastAppliedALTAnnotation</code> needs updation and if so we Jsonify <code>machine.Spec.NodeTemplateSpec</code> and override the new <code>LastAppliedALTAnnotation</code> to this value</li>
+</ol>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="machine-controller/node_drain.html#node-drain">Node Drain</a>
 <ul>

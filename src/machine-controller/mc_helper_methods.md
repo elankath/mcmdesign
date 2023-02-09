@@ -9,6 +9,7 @@
 	- [controller.drainNode](#controllerdrainnode)
 	- [controller.deleteVM](#controllerdeletevm)
 	- [controller.deleteNodeObject](#controllerdeletenodeobject)
+	- [controller.syncMachineNodeTemplates](#controllersyncmachinenodetemplates)
 # Machine Controller Helper Methods
 
 ## controller.addBootstrapTokenToUserData
@@ -572,3 +573,29 @@ LastUpdateTime: Now(),
 c.machineStatusUpdate(ctx,machine,lastOp,machine.Status.CurrentStatus,machine.Status.LastKnownState)"]
 -->Return(("machineutils.ShortRetry, err"))
 ```
+
+## controller.syncMachineNodeTemplates
+
+```go
+func (c *controller) syncMachineNodeTemplates(ctx context.Context, 
+	machine *v1alpha1.Machine) 
+		(machineutils.RetryPeriod, error) 
+```
+See [MachineSpec](../mcm_facilities.md#machinespec)
+
+`syncMachineNodeTemplates` syncs [machine.Spec.NodeTemplateSpec](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/apis/machine/v1alpha1#NodeTemplateSpec) between machine and corresponding node-object.  A `NodeTemplateSpec` just wraps a core [NodeSpec](../k8s_facilities.md#nodespec) and [ObjectMetadata](../k8s_facilities.md#objectmeta)
+
+Get the `node` for the given `machine` and then:
+1. Synchronize `node.Annotations` to `machine.Spec.NodeTemplateSpec.Annotations`. 
+1. Synchronize `node.Labels` to  `machine.Spec.NodeTemplateSpec.Labels`
+2. Synchronize `node.Spec.Taints` to `machine.Spec.NodeTemplateSpec.Spec.Taints`
+3. Update the `node` object if there were changes.
+
+Since, we should not delete third-party annotations on the node object, synchronizing deleted ALT from the machine object is a bit tricky and so we maintain yet another custom annotation `node.machine.sapcloud.io/last-applied-anno-labels-taints` (code constant `LastAppliedALTAnnotation`) on the `Node` object which is a JSON string of the [NodeTemplateSpec](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.48.0/pkg/apis/machine/v1alpha1#NodeTemplateSpec). 
+
+1. Before synchronizing, we un-marshall this `LastAppliedALTAnnotation` value into a `lastAppliedALT` of type `NodeTemplateSpec`. 
+2. While synchronizing annotations, labels and taints, we check respectively whether `lastAppliedALT.Annotations`, `lastAppliedALT.Labels` and `lastAppliedALT.Spec.Taints` hold keys that are NOT in the corresponding `machine.Spec.NodeTemplateSpec.Annotations`, `machine.Spec.NodeTemplateSpec.Labels` and ` machine.Spec.NodeTemplateSpec.Spec.Taints`. 
+   1. If so, we delete keys from the corresponding ` node.Annotations`, `node.Labels` and `node.Spec.Taints` respectively.
+   2. We maintain a boolean saying the `LastAppliedALTAnnotation` needs to be updated
+3. Just before updating the Node object, we check if `LastAppliedALTAnnotation` needs updation and if so we Jsonify `machine.Spec.NodeTemplateSpec` and override the new `LastAppliedALTAnnotation` to this value
+

@@ -148,7 +148,7 @@
 <li><a href="#controllertriggerdeletionflow">controller.triggerDeletionFlow</a></li>
 <li><a href="#controllerreconcilemachinehealth">controller.reconcileMachineHealth</a>
 <ul>
-<li><a href="#health-check-flow-diagram">Health Check FLow Diagram</a></li>
+<li><a href="#health-check-flow-diagram">Health Check Flow Diagram</a></li>
 <li><a href="#health-check-summary">Health Check Summary</a></li>
 <li><a href="#health-check-doubts">Health Check Doubts</a></li>
 </ul>
@@ -444,7 +444,8 @@ ShortR--&gt;Z
 <ol>
 <li>Reference <a href="./mc_helper_methods.html#controllerishealthy">controller.isHealth</a> which checks the machine status conditions.</li>
 </ol>
-<h3 id="health-check-flow-diagram"><a class="header" href="#health-check-flow-diagram">Health Check FLow Diagram</a></h3>
+<h3 id="health-check-flow-diagram"><a class="header" href="#health-check-flow-diagram">Health Check Flow Diagram</a></h3>
+<p>NOTE: IGNORE flow diagram. Due to too many condition checks and big method, it becomes too huge. Look at description. Should be decomposed into smaller routines. Go to <a href="#health-check-summary">Health Check Summary</a></p>
 <pre class="mermaid">
 %%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
@@ -455,7 +456,7 @@ cloneDirty = false
 machineClone = machine.DeepCopy()
 &quot;]--&gt;GetNode[&quot;
   node, err := c.nodeLister.Get(machine.Status.Node)
-&quot;]--&gt;CheckErr{err!-nil}
+&quot;]--&gt;CheckErr{err!=nil}
 
 CheckErr--Yes--&gt;
   ChkIsNotFound{&quot;IsNotFound(err)&quot;}
@@ -543,12 +544,13 @@ style SetUnknown text-align:left
 <li>If the machine IS NOT healthy (See <a href="./mc_helper_methods.html#controllerishealthy">isHealthy</a>) but the current machine phase is <code>Running</code>, change the machine phase to <code>Unknown</code>, the last operation state to <code>Processing</code>, the last operation type to <code>HealthCheck</code>, update the machine status and return with a short retry.</li>
 <li>If the machine IS healthy but the current machine phase is NOT <code>Running</code>,  check whether the last operation type was a <code>Create</code>.
 <ol>
-<li>If the last operation type was a <code>Create</code> and last operation state is not marked as <code>Successful</code>, then delete the bootstrap token associated with the machine. Change the last operation state to <code>Successful</code>.</li>
+<li>If the last operation type was a <code>Create</code> and last operation state is NOT marked as <code>Successful</code>, then delete the bootstrap token associated with the machine. Change the last operation state to <code>Successful</code>. Let the last operation type continue to remain as <code>Create</code>.</li>
 <li>If the last operation type was NOT a <code>Create</code>, change the last operation type to <code>HealthCheck</code></li>
 <li>Change the machine phase to <code>Running</code> and update the machine status and return with a short retry.</li>
+<li>(The above 2 cases take care of a newly created machine and a machine that became OK after ome temporary issue)</li>
 </ol>
 </li>
-<li>If the current machine phase is <code>Pending</code> (ie machine being created) get the configured machine creation timeout and check.
+<li>If the current machine phase is <code>Pending</code> (ie machine being created: see <code>triggerCreationFlow</code>) get the configured machine creation timeout and check.
 <ol>
 <li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
 <li>If the timeout HAS expired, then change the last operation state to <code>Failed</code> and the machine phase to <code>Failed</code>. Update the machine status and return with a short retry.</li>
@@ -557,13 +559,21 @@ style SetUnknown text-align:left
 <li>If the current machine phase is <code>Unknown</code>, get the effective machine health timeout and check. 
 <ol>
 <li>If the timoeut HAS NOT expired, enqueue the machine key on the machine work queue after 1m. </li>
-<li>If the timoeut HAS expired 
+<li>If the timeout HAS expired 
 <ol>
 <li>Get the machine deployment name <code>machineDeployName := machine.Labels['name']</code> corresponding to this machine</li>
-<li>Register ONE permit with this with <code>machineDeployName</code>. See <a href="../mcm_facilities.html#permitspermitgiver">Permit Giver</a>. Q: Why do we do this ?</li>
+<li>Register ONE permit with this with <code>machineDeployName</code>. See <a href="../mcm_facilities.html#permitspermitgiver">Permit Giver</a>. Q: Background of this change ? Couldn't we find a better way to throttle via work-queues instead of complicated <code>PermitGiver</code> and go-routines? Even simple lock would be OK here right ? </li>
 <li>Attempt to get ONE permit for <code>machineDeployName</code> using a <code>lockAcquireTimeout</code> of 1s
 <ol>
-<li>Change the last operation state to <code>Failed</code> (seems WRONG to me), presere the last operation type, change machine phase to <code>Failed</code>. Update the machine status. See <code>c.updateMachineToFailedState</code></li>
+<li>Throttle to check whether machine CAN be marked as <code>Failed</code> using <code>markable, err := controller.canMarkMachineFailed</code>. </li>
+<li>If machine can be marked, change the last operation state (ie the health check) to <code>Failed</code>, preserve the last operation type, change machine phase to <code>Failed</code>. Update the machine status. See <code>c.updateMachineToFailedState</code></li>
+<li>Then use <code>wait.Poll</code> using 100ms as <code>pollInterval</code> and 1s as <code>cacheUpdateTimeout</code> using the following poll condition function:
+<ol>
+<li>Get the <code>machine</code> from the <code>machineLister</code> (which uses the cache of the shared informer)</li>
+<li>Return true if <code>machine.Status.CurrentStatus.Phase</code> is <code>Failed</code> or <code>Terminating</code> or the <code>machine</code> is not found</li>
+<li>Return false otherwise.</li>
+</ol>
+</li>
 </ol>
 </li>
 </ol>
