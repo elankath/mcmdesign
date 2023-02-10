@@ -11,17 +11,20 @@
 		- [drain.PodVolumeInfo](#drainpodvolumeinfo)
 		- [drain.Options.evictPod](#drainoptionsevictpod)
 		- [drain.Options.deletePod](#drainoptionsdeletepod)
+		- [drain.Options.getPodsForDeletion](#drainoptionsgetpodsfordeletion)
+		- [drain.Options.getPVList](#drainoptionsgetpvlist)
+		- [drain.Options.getVolIDsFromDriver](#drainoptionsgetvolidsfromdriver)
+		- [drain.Options.doAccountingOfPvs](#drainoptionsdoaccountingofpvs)
+		- [drain.filterPodsWithPv](#drainfilterpodswithpv)
+		- [drain.Options.waitForDetach](#drainoptionswaitfordetach)
+		- [drain.Options.waitForReattach](#drainoptionswaitforreattach)
+		- [drain.Options.waitForDelete](#drainoptionswaitfordelete)
 		- [drain.Options.RunDrain](#drainoptionsrundrain)
-			- [drain.filterPodsWithPv](#drainfilterpodswithpv)
 		- [drain.Options.evictPodsWithoutPv](#drainoptionsevictpodswithoutpv)
 			- [drain.Options.evictPodWithoutPVInternal](#drainoptionsevictpodwithoutpvinternal)
 			- [isMisconfiguredPdb](#ismisconfiguredpdb)
 		- [drain.Options.evictPodsWithPv](#drainoptionsevictpodswithpv)
-			- [drain.Options.doAccountingOfPvs](#drainoptionsdoaccountingofpvs)
-			- [drain.Options.getPVList](#drainoptionsgetpvlist)
-			- [drain.Options.getVolIDsFromDriver](#drainoptionsgetvolidsfromdriver)
-		- [# drain.Options.evictPodsWithPVInternal](#-drainoptionsevictpodswithpvinternal)
-		- [drain.Options.waitForDelete](#drainoptionswaitfordelete)
+		- [drain.Options.evictPodsWithPVInternal](#drainoptionsevictpodswithpvinternal)
 
 # Node Drain
 
@@ -184,7 +187,7 @@ PodVolumeInfo struct {
 ```
 NOTE: The struct fields are badly named.
 - `PodVolumeInfo.persistentVolumeList` is a slice of persistent volume names. This is from [PersistentVolumeSpec.VolumeName](https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeSpec)
-- `PodVolumeInfo.volumeList` is a slice of persistent volume IDs. This is obtained using [driver.GetVolumeIDs](../src/mcm_facilities.md#driver) given the PV Spec.
+- `PodVolumeInfo.volumeList` is a slice of persistent volume IDs. This is obtained using [driver.GetVolumeIDs](../src/mcm_facilities.md#driver) given the PV Spec. This is generally the CSI volume id.
 
 
 ### drain.Options.evictPod
@@ -235,9 +238,183 @@ Just delegates to [PodInterface.Delete](https://pkg.go.dev/k8s.io/client-go@v0.2
 o.client.CoreV1().Pods(pod.Namespace).Delete(ctx, pod.Name, metav1.DeleteOptions{} )
 ```
 
+### drain.Options.getPodsForDeletion
+
+`drain.getPodsForDeletion` returns all the pods we're going to delete.  If there are  any pods preventing us from deleting, we return that list in an error.
+
+```go
+func (o *Options) getPodsForDeletion(ctx context.Context) 
+	(pods []corev1.Pod, err error)
+```
+1. Get all pods associated with the node.
+   ```go
+   podList, err := o.client.CoreV1().Pods(metav1.NamespaceAll).List(ctx, metav1.ListOptions{
+		FieldSelector: fields.SelectorFromSet(fields.Set{"spec.nodeName": o.nodeName}).String()})
+   ```
+2. Iterate through `podList`.
+3. Apply a bunch of pod filters. 
+   1. Remove mirror pods from consideration for deletion. See [Static Pods](https://github.com/kubernetes/enhancements/blob/master/keps/sig-auth/1314-node-restriction-pods/README.md#background)
+   2. Local Storage Filter. Discuss: seems useless. If Pod has local storge, remove it from consideration. This filter iterates through `Pod.Spec.Volumes` slice and checks whether `Volume.EmptyDir` is non nil in order to determine
+   3. A Pod whose `Pod.Status.Phase` is [PodSucceeded](https://pkg.go.dev/k8s.io/api/core/v1#PodSucceeded) or [PodFailed](https://pkg.go.dev/k8s.io/api/core/v1#PodFailed) is eligible for deletion
+      1. If a Pod has a controller owner reference, it is eligible for deletion. (TODO: Unsure why this makes a difference anyways)
+   4. The final pod filter `daemonsetFilter` seems useless. Discuss.
+
+
+### drain.Options.getPVList
+
+NOTE: Should be called `getPVNames`.  Gets a slice of the persistent volume names bound to the Pod through its claims.  Contains time.sleep and retry handling to a limit. Unsure if this is the best way. Discuss.
+
+```go
+func (o *Options) getPVList(pod *corev1.Pod) (pvNames []string, err error) 
+```
+1. Iterate over `pod.Spec.Volumes`.
+2. If `volume.PersistentVolumeClaim` reference is not nil, gets the `PersistentVolumeClaim` using `o.pvcLister` using `vol.PersistentVolumeClaim.ClaimName`.
+   1. Implements error handling and retry till `GetPvDetailsMaxRetries` is reached with interval `GetPvDetailsRetryInterval` for the above.
+3. Adds `pvc.Spec.VolumeName` to `pvNames`
+4. Return `pvNames`
+
+
+
+### drain.Options.getVolIDsFromDriver
+
+Given a slice of PV Names, this method gets the corresponding volume ids from the driver. 
+- It does this by first getting the [PersistentVolumeSpec](https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeSpec) using `o.pvLister.Get(pvName)` for each PV name and adding to the `pvSpecs` slice of type `PersistentVolumeSpec`. See [k8s.io/client-go/listers/core/v1.PersistentVolumeLister](https://pkg.go.dev/k8s.io/client-go/listers/core/v1#PersistentVolumeLister)
+-  Retry handling is implemented here while looking up pvName till `GetPvDetailsMaxRetries` is reached with sleep interval of `GetPvDetailsRetryInterval` between each retry attempt.
+- Once `pvSpecs` slice is populated it constructs a [driver.GetVolumeIDsRequest](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/driver#GetVolumeIDsRequest) from the same and then invokes `driver.GetVolumeIDs(driver.GetVolumeIDsRequest))` to obtain the [driver.GetVolumeIDsResponse](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/driver#GetVolumeIDsResponse) and retruns `driver.GetVolumeIDsResponse.VolumeIDs`
+
+TODO: BUG ? In case the PV is not found or retry limit is reached the slice of volume ids will not have a 1:1 correspondence with slice of PV names passed in.
+
+```go
+func (o *Options) getVolIDsFromDriver(ctx context.Context, pvNames []string) ([]string, error)
+```
+
+### drain.Options.doAccountingOfPvs
+
+[drain.Options.doAccountingOfPvs](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L509) returns a map of the pod key `pod.Namespace + '/' + pod.Name` to a [PodVolumeInfo](#drainpodvolumeinfo) struct which holds a slice of PV names and PV IDs.
+
+NOTES:
+- See [filterSharedPVs](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L544)
+
+```mermaid
+%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
+flowchart TD
+Begin((" "))
+-->Init["
+	podKey2VolNamesMap = make(map[string][]string)
+	podKey2VolInfoMap = make(map[string]PodVolumeInfo)
+"]
+-->RangePods["
+	for pod := range pods
+"]
+-->PopPod2VolNames["
+	podKey2VolNamesMap[pod.Namespace + '/' pod.Name] = o.getPVList(pod)
+"]
+--loop-->RangePods
+PopPod2VolNames--done-->FilterSharedPVs["
+	filterSharedPVs(podKey2VolNamesMap)
+// filters out the PVs that are shared among pods.
+"]
+-->RangePodKey2VolNamesMap["
+	for podKey, volNames := range podKey2VolNamesMap
+"]
+-->GetVolumeIds["
+	volumeIds, err := o.getVolIDsFromDriver(ctx, volNames)
+	if err != nil continue; //skip set of volumes
+"]
+-->InitPodVolInfo["
+	podVolumeInfo := PodVolumeInfo{
+			persistentVolumeList: volNames,
+			volumeList:           volumeIds
+	}
+	//struct field names are bad.
+"]
+-->PopPodVolInfoMap["
+	podVolumeInfoMap[podKey] = podVolumeInfo
+"]
+--loop-->RangePodKey2VolNamesMap
+PopPodVolInfoMap--done-->Return(("return podVolumeInfoMap"))
+```
+
+### drain.filterPodsWithPv
+
+NOTE: should have been named `partitionPodsWithPVC`
+
+Utility function that iterates through given `pods` and for each `pod`, iterates through its `pod.Spec.Volumes`. For each such pod `volume` checks `volume.PersistentVolumeClaim`. If not nil, adds `pod` to slice `podsWithPV` else adds `pod` to slice `podsWithoutPV`
+
+```go
+func filterPodsWithPv(pods []corev1.Pod) 
+    (podsWithPV []*corev1.Pod, podsWithoutPV []*corev1.Pod) 
+```
+
+### drain.Options.waitForDetach
+
+```go
+func (o *Options) waitForDetach(ctx context.Context, 
+	podVolumeInfo PodVolumeInfo, 
+	nodeName string) error
+```
+Summary: 
+1. Initiaze boolean `found` to true. (Representing that a volume is still attached to a node).
+2. Begins a loop while `found` is true
+3. Uses a `select ` and checks to see if a signal is received from `context.Done()` (ie context cancelled). If so, return an error with the message that a timeout occurred while waiting for PV's to be detached.
+4. Sets `found` to false.
+5. Gets the `Node` associated with `nodeName` using the `nodeLister` and assign to `node`. If there is an error return from the function.
+6. Gets the `node.Status.VolumesAttached` which returns a [[]AttachedVolume](https://pkg.go.dev/k8s.io/api/core/v1#AttachedVolume) and assign to `attachedVols`.
+   1. Return `nil` if this slice is empty.
+7. Begin iteration `range podVolumeInfo.volumeList` assigning `volumeID` in parent iteration. Label this iteration as `LookUpVolume`.
+   1. Begin inner iteration over `attachedVols` assigning `attachedVol` in nested iteration
+   2. If `attachedVol.Name` is contained in `volumeID` then this volume is still attached to the node.  
+      1. Set `found` to true
+      2. Sleep for `VolumeDetachPollInterval` seconds (5 seconds)
+      3. Break out of `LookUpVolume`
+
+### drain.Options.waitForReattach
+
+Purpose: Waits for persistent volume names in `podVolumeInfo.persistentVolumeList` to be re-attached (to another node).
+
+But I am still confused on why we need to call this during the drain flow. Why should we wait for PVs to be attached to another node. After all, there is no guarantee they will be attached, right ?
+
+```go
+func (o *Options) waitForReattach(ctx context.Context, 
+	podVolumeInfo PodVolumeInfo, 
+	previousNodeName string, 
+	volumeAttachmentEventCh chan *VolumeAttachment) error 
+```
+1. Construct a map: `var pvsWaitingForReattachments map[string]bool`
+2. Initiamize the above map by ranging through `podVolumeInfo.persistentVolumeList` taking the `persistentVolumeName` and set `pvsWaitingForReattachments[persistentVolumeName] = true`
+3. Start a `for` loop.
+   1. Commence a `select` with following cases:
+      1. Case: Check to see if context is closed/cancelled by  reading: `<-ctx.Done()`. If so, return an error with the message that timeout occurred while waiting for PV's to reattach to another node.
+      2. Case: Obtain a [*VolumeAttachment](https://pkg.go.dev/k8s.io/api/storage/v1#VolumeAttachment) by reading from channel:  `incomingEvent := <-volumeAttachmentEventCh`
+         1. Get the `persistentVolumeName` associated with this attachment event. 
+         2. `persistentVolumeName := *incomingEvent.Spec.Source.PersistentVolumeName`
+         3.  Check if this persistent volume was being tracked: `pvsWaitingForReattachments[persistentVolumeName]` is present 
+         4. Check if the volume was attached to another node
+         5.  `incomingEvent.Status.Attached && incomingEvent.Spec.NodeName != previousNodeName`
+         6. If above is true, then delete entry corresponding to `persistentVolumeName` from the `pvsWaitingForReattachments` map.
+     1. if `pvsWaitingForReattachments` is empty break from the loop.
+  1. Log that the volumes in ` podVolumeInfo.persistentVolumeList` have been successfully re-attached and return nil.
+
+### drain.Options.waitForDelete
+
+NOTE: Ideally should have been named `waitForPodDisappearance`
+
+[pkg/util/provider/drain.Options.waitForDelete](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L1068) is a helper method defined on `drain.Options` that leverages [wait.PollImmediate](./k8s_facilities.md#waitpollimmediate) and the `getPodFn` (get pod by name and namespace) and checks that all pods have disappeared within `timeout`. The set of pods that did not disappear within timeout is returned as `pendingPods`
+
+```go
+func (o *Options) waitForDelete(
+        pods []*corev1.Pod, interval, 
+        timeout time.Duration,  
+        getPodFn func(string, string) (*corev1.Pod, error)
+    ) (pendingPods []*corev1.Pod, err error) 
+```
 
 
 ### drain.Options.RunDrain
+
+Context: `drain.Options.RunDrain` is called from the MC helper method `controller.drainNode` which in turn is called from `controller.triggerDeletionFlow` when the `machine.Status.LastOperation.Description` contains operation `machineutils.InitiateDrain`.
+
+If `RunDrain` returns an error, then the drain is retried at a later time by putting back the machine key into the queue. Unless the `force-deletion` label on the machine object is true - in which case we proceed to VM deletion.
 
 ```go
 func (o *Options) RunDrain(ctx context.Context) error
@@ -276,6 +453,7 @@ GetPodsForDeletion-->GetEvictionPGV["
 -->
 DefineAttemptEvict["
 attemptEvict := !o.ForceDeletePods && len(policyGroupVersion) > 0
+// useless boolean which confuses matters considerably.
 "]
 -->
 DefineGetPodFn["
@@ -298,7 +476,9 @@ podsWithPv, podsWithoutPv := filterPodsWithPv(pods)
 FilterPodsWithPv-->EvictPodsWithPv["
 go o.evictPodsWithPv(ctx, attemptEvict, podsWithPv, policyGroupVersion, getPodFn, returnCh)
 "]
--->EvictPodsWithoutPV
+-->EvictPodsWithoutPV1["
+	go o.evictPodsWithoutPv(ctx, attemptEvict, podsWithoutPv, policyGroupVersion, getPodFn, returnCh)	
+"]-->CreateAggregateError
 
 EvictPodsWithoutPV-->CreateAggregateError["
 	var errors []error
@@ -318,19 +498,9 @@ EvictPodsWithoutPV-->CreateAggregateError["
 Notes:
 1. [machine-controller-manager/pkg/util/provider/drain.SupportEviction](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L1106) uses Discovery API to find out if the server support eviction subresource and if so return its groupVersion or "" if it doesn't.
    1. [k8s.io/kubectl/pkg/drain.CheckEvictionSupport](https://pkg.go.dev/k8s.io/kubectl/pkg/drain#CheckEvictionSupport) already does this.
-2. [attemptEvict boolean](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400) usage is confusing.
+2. [attemptEvict boolean](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L400) usage is confusing. Stick to `drain.Options.ForceDeletePods`
 3. TODO: GAP? For cordoning a Node we currently just set `Node.Spec.Unschedulable`. But we are also supposed to set the taint. `node.kubernetes.io/unschedulable`. The spec way is supposed to be deprecated.
 
-#### drain.filterPodsWithPv
-
-NOTE: should have been named `partitionPodsWithPVC`
-
-Utility function that iterates through given `pods` and for each `pod`, iterates through its `pod.Spec.Volumes`. For each such pod `volume` checks `volume.PersistentVolumeClaim`. If not nil, adds `pod` to slice `podsWithPV` else adds `pod` to slice `podsWithoutPV`
-
-```go
-func filterPodsWithPv(pods []corev1.Pod) 
-    (podsWithPV []*corev1.Pod, podsWithoutPV []*corev1.Pod) 
-```
 
 ### drain.Options.evictPodsWithoutPv
 
@@ -348,8 +518,6 @@ func (o *Options) evictPodsWithoutPv(ctx context.Context,
 	return
 }
 ```
-NOTE:
-- `attemptEvict` parameter is very badly named. It is more meant to be a `retryEvict`
 
 
 
@@ -413,7 +581,7 @@ ChkForceDelPods{"o.ForceDeletePods"}
 ChkForceDelPods--"Yes\n(dont wait for\npod disappear)"-->SendNilChannel
 ChkForceDelPods--No-->GetPodTermGracePeriod["
     // TODO: discuss this, shouldn't pod grace period override drain ?
-    timeout=Max(pod.Spec.TerminationGracePeriodSeconds,o.timeout)
+    timeout=Min(pod.Spec.TerminationGracePeriodSeconds,o.Timeout)
 "]
 -->SetBufferPeriod["bufferPeriod := 30 * time.Second"]
 -->WaitForDelete["pendingPods=o.waitForDelete(pods, timeout,getPodFn)"]
@@ -462,8 +630,7 @@ func (o *Options) evictPodsWithPv(ctx context.Context,
 NOTE
 - See [drain.Options.evictPodsWithPv](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L580)
 - This method basically delegates to `o.evictPodsWithPVInternal` with retry handling
-- TODO: UNHAPPY with logic of this method. Needs refactoring!
-- Flow diagram is a MESS because code is confusing. sorry.
+- TODO: Logic of this method can do with some refactoring!
 
 ```mermaid
 %%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
@@ -497,7 +664,7 @@ ChkAbort--No-->Sleep["
 "]
 Sleep--loop-->RetryTillLimit
 
-RetryTillLimit--loopend-->ChkRemaining{"len(remainingPods) > 0?"}
+RetryTillLimit--loopend-->ChkRemaining{"len(remainingPods) > 0 && !aborted ?"}
 ChkRemaining--Yes-->InvokeHelper1["
 // force delete pods
 	remainingPods, _ = o.evictPodsWithPVInternal(ctx, false, pods, podVolumeInfoMap, policyGroupVersion, getPodFn, returnCh)
@@ -519,81 +686,11 @@ SendDelErr-->NilReturn
 NilReturn(("return"))
 ```
 
-#### drain.Options.doAccountingOfPvs
-
-[drain.Options.doAccountingOfPvs](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L509) returns a map of the pod key `pod.Namespace + '/' + pod.Name` to a [PodVolumeInfo](#drainpodvolumeinfo) struct which holds a slice of PV names and PV IDs.
-
-NOTES:
-- See [filterSharedPVs](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L544)
-
-```mermaid
-%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
-flowchart TD
-Begin((" "))
--->Init["
-	podKey2VolNamesMap = make(map[string][]string)
-	podKey2VolInfoMap = make(map[string]PodVolumeInfo)
-"]
--->RangePods["
-	for pod := range pods
-"]
--->PopPod2VolNames["
-	podKey2VolNamesMap[pod.Namespace + '/' pod.Name] = o.getPVList(pod)
-"]
---loop-->RangePods
-PopPod2VolNames--done-->FilterSharedPVs["
-	filterSharedPVs(podKey2VolNamesMap)
-// filters out the PVs that are shared among pods.
-"]
--->RangePodKey2VolNamesMap["
-	for podKey, volNames := range podKey2VolNamesMap
-"]
--->GetVolumeIds["
-	volumeIds, err := o.getVolIDsFromDriver(ctx, volNames)
-	if err != nil continue; //skip set of volumes
-"]
--->InitPodVolInfo["
-	podVolumeInfo := PodVolumeInfo{
-			persistentVolumeList: volNames,
-			volumeList:           volumeIds
-	}
-	//struct field names are bad.
-"]
--->PopPodVolInfoMap["
-	podVolumeInfoMap[podKey] = podVolumeInfo
-"]
---loop-->RangePodKey2VolNamesMap
-PopPodVolInfoMap--done-->Return(("return podVolumeInfoMap"))
-```
 
 
-#### drain.Options.getPVList
+###	drain.Options.evictPodsWithPVInternal
 
-NOTE: Should be called `getPVNames`.  Gets a slice of the persistent volume names bound to the given `pod`. 
-```go
-func (o *Options) getPVList(pod *corev1.Pod) (pvNames []string, err error) 
-```
-1. Iterate over `pod.Spec.Volumes`.
-2. If `volume.PersistentVolumeClaim` reference is not nil, gets the `PersistentVolumeClaim` using `o.pvcLister` using `vol.PersistentVolumeClaim.ClaimName`.
-   1. Implements error handling and retry till `GetPvDetailsMaxRetries` is reached with interval `GetPvDetailsRetryInterval` for the above.
-3. Adds `pvc.Spec.VolumeName` to `pvNames`
-4. Return `pvNames`
-
-
-#### drain.Options.getVolIDsFromDriver
-
-Given a slice of PV Names, this method gets the corresponding volume ids from the driver. 
-- It does this by first getting the [PersistentVolumeSpec](https://pkg.go.dev/k8s.io/api/core/v1#PersistentVolumeSpec) using `o.pvLister.Get(pvName)` for each PV name and adding to the `pvSpecs` slice of type `PersistentVolumeSpec`. See [k8s.io/client-go/listers/core/v1.PersistentVolumeLister](https://pkg.go.dev/k8s.io/client-go/listers/core/v1#PersistentVolumeLister)
--  Retry handling is implemented here while looking up pvName till `GetPvDetailsMaxRetries` is reached with sleep interval of `GetPvDetailsRetryInterval` between each retry attempt.
-- Once `pvSpecs` slice is populated it constructs a [driver.GetVolumeIDsRequest](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/driver#GetVolumeIDsRequest) from the same and then invokes `driver.GetVolumeIDs(driver.GetVolumeIDsRequest))` to obtain the [driver.GetVolumeIDsResponse](https://pkg.go.dev/github.com/gardener/machine-controller-manager@v0.47.0/pkg/util/provider/driver#GetVolumeIDsResponse) and retruns `driver.GetVolumeIDsResponse.VolumeIDs`
-
-TODO: BUG ? In case the PV is not found or retry limit is reached the slice of volume ids will not have a 1:1 correspondence with slice of PV names passed in.
-
-```go
-func (o *Options) getVolIDsFromDriver(ctx context.Context, pvNames []string) ([]string, error)
-```
-
-###	# drain.Options.evictPodsWithPVInternal
+FIXME: name case inconsistency with `evictPodsWithPv`
 
 [drain.Options.evictPodsWithPVInternal](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L646) is a drain helper method that actually evicts/deletes pods and waits for volume detachment. It returns a `remainingPods` slice and a `fastTrack` boolean is meant to abort the pod eviction and exit the calling go-routine. (TODO: should be called `abort` or even better should use custom error here)
 
@@ -604,20 +701,52 @@ func (o *DrainOptions) evictPodsWithPVInternal(ctx context.Context,
     volMap map[string][]string,
 	policyGroupVersion string,
 	returnCh chan error
-    ) (remainingPods []*api.Pod, fastTrack bool) 
+    ) (remainingPods []*api.Pod, fastTrack bool)
 ```
 
+1. Uses `context.Deadline`  passing in `ctx` and a deadline time after the drain timeout to get a sub-context assigned to `mainContext` and a `CancelFunc`. Defer the obtained `CancelFunc`. (So it always invoked when the method terminates)
+2. Maintain a pod slice `retryPods` which is initially empty.
+3. Iterate through `pods` slice with `i` as index variable 
+   1. Apply a select with the one check case:
+      1. Check to see if `mainContext` is closed/cancelled. Attempt to read from the Done channel: `<-mainContext.Done()`. If this case matches:
+         1. Send `nil` on the return error channel: `returnCh <- nil`
+         2. Compute `remainingPods` as `retryPods` slice appended with pods yet to be iterated: `pods[i+1:]...`
+         3. Return `remainingPods, true`. (aborted is true)
+   2. Initiate the pod eviction start time: `podEvictionStartTime=time.Now()`
+   3. Call `volumeAttachmentHandler.AddWorker()` to start tracking `VolumeAttachments`and obtain a `volumeAttachmentEventCh` receive channel that one can use to receive the attached or detached `*.VolumeAttachment`. 
+   4. If `attemptEvict` is true, then call [evictPod](#drainoptionsevictpod) else call [deletePod](#drainoptionsdeletepod) helper method. Grab the `err` for eviction/deletion.
+   5. eviction/deletion had an error: Analyze the `err`:
+      1. If both `attemptEvict` is true and ` apierrors.IsTooManyRequests(err)` is true, then this case is interpreted as an eviction failure due to PDB violation. 
+         1. We get the [PodDisruptionBudget](../k8s_facilities.md#pod-disruption-budget) for the pod being iterated.
+         2. We check whether it is misconfigured. IF So we send an error on `returnCh` and close the `volumeAttachmentEventCh` using `volumeAttachmentHandler.DeleteWorker` and continue with next loop iteration. ie go to next pod.
+      2. If just `apierrors.IsNotFound(err)` is true, this means that Pod is already gone from the node. We send `nil` on `returnCh` and call `volumeAttachmentHandler.DeleteWorker(volumeAttachmentEventCh)` and continue with next pod in iteration.
+      3. Otherwise we add the pod to the `retryPod` slice: `retryPods = append(retryPods, pod)`,  call `volumeAttachmentHandler.DeleteWorker(volumeAttachmentEventCh)` and continue with next pod in iteration.
+      4. (NOTE: Error handling can be optimized. too much repetition)
+   6. Log that the evict/delete was successful.
+   7. Get the [PodVolumeInfo](#drainpodvolumeinfo) from `volMap` using the pod key. 
+   8. Obtain a context and cancellation function for volume detachment using [context.Timeout](https://pkg.go.dev/context#WithTimeout) passing in the `mainContext` and detach timeout computed as the sum of the termination grace period of the pod (`pod.Spec.TerminationGracePeriodSeconds` if not nil) added to the `PvDetachTimeout` (from the drain options)
+   9. Invoke [waitForDetach(ctx, podVolumeInfo, o.nodeName)](#drainoptionswaitfordetach) and grab the `err`.
+   10. Invoke the cancel function for detach. NOTE: THIS IS NICHT GUT.  The sub context should be created INSIDE waitForDetach with a defer for the cancelllation.
+   11. Analyze the detachment error.
+       1.  If `apierrors.IsNotFound(err)` is true this indicates that the node is not found. 
+           1.  Send `nil` on `returnCh`
+           2.  Call `volumeAttachmentHandler.DeleteWorker(volumeAttachmentEventCh)`
+           3.  Compute `remainingPods` as `retryPods` slice appended with pods yet to be iterated: `pods[i+1:]...` 
+           4.  Return `remainingPods, true`. (aborted is true)
+       2.  For other errors:
+           1.  Send the `err` on the `returnCh`.
+           2.  Call `volumeAttachmentHandler.DeleteWorker(volumeAttachmentEventCh)`
+           3.  Continue with next pod in iteration. 
+   12. Obtain a context and cancellation function for volume re-attachment using [context.Timeout](https://pkg.go.dev/context#WithTimeout) passing in the `mainContext` and `drain.Options.PvReattachTimeout`.
+   13. Invoke [waitForReattach(ctx, podVolumeInfo, o.nodeName, volumeAttachmentEventCh)](#drainoptionswaitforreattach) and grab the returned `err`. 
+   14. Invoke the cancel function for reattach.  NOTE: THIS IS NICHT GUT. The sub context should be created INSIDE `waitForReattach`.
+   15. Analyze the re-attachment error.
+       1.  If err is a reattachment timeout error just log a warning. TODO: Confused on why we don't return an error on the return channel here.
+       2.  Otherwise we Send the `err` on the `returnCh`.
+       3.  Call `volumeAttachmentHandler.DeleteWorker(volumeAttachmentEventCh)` and continue with next pod in iteration
+   16. YAWN. Someone is very fond of calling this again and again. Call `volumeAttachmentHandler.DeleteWorker(volumeAttachmentEventCh)`
+   17. Log the time taken for pod eviction+vol detachment+vol attachment to another node using `time.Since(podEvictionStartTime)`.
+   18. Send `nil` on `returnCh`
+4. pod iteration loop is done: `return retryPods, false`
 
-### drain.Options.waitForDelete
 
-NOTE: Ideally should have been named `waitForPodDisappearance`
-
-[pkg/util/provider/drain.Options.waitForDelete](https://github.com/gardener/machine-controller-manager/blob/v0.47.0/pkg/util/provider/drain/drain.go#L1068) is a helper method defined on `drain.Options` that leverages [wait.PollImmediate](./k8s_facilities.md#waitpollimmediate) and the `getPodFn` (get pod by name and namespace) and checks that all pods have disappeared within `timeout`. The set of pods that did not disappear within timeout is returned as `pendingPods`
-
-```go
-func (o *Options) waitForDelete(
-        pods []*corev1.Pod, interval, 
-        timeout time.Duration,  
-        getPodFn func(string, string) (*corev1.Pod, error)
-    ) (pendingPods []*corev1.Pod, err error) 
-```
