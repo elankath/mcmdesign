@@ -5,7 +5,7 @@
 
  Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/). 
 
-(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on Dec 7th for v2.0 release!🏗)
+(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on 13th Feb for v3.0 release!🏗)
 
 # Introduction
 
@@ -109,4 +109,5 @@ Container command configured on AWS
 
 # Change Log
 
-- [ ] TODO - PLANNED 11th Feb: Reconcile Machine Safety Orphan VM's.
+- [ ] TODO - PLANNED walkthrough: 13th Feb: Reconcile Machine Safety Orphan VM's.
+- [ ] TODO - PLANNED walkthrough: 14th Feb: Reconcile Machine Set Controller.
