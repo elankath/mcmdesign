@@ -1,11 +1,13 @@
 - [Introduction](#introduction)
   - [Project Structure](#project-structure)
   - [Deployment Structure](#deployment-structure)
+- [Local Development Tips](#local-development-tips)
+  - [Running MCM Locally](#running-mcm-locally)
 - [Change Log](#change-log)
 
  Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/). 
 
-(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on 13th Feb for v3.0 release!🏗)
+(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on 25th Sep for v3.1 release!🏗)
 
 # Introduction
 
@@ -106,8 +108,32 @@ Container command configured on AWS
          --target-kubeconfig=/var/run/secrets/gardener.cloud/shoot/generic-kubeconfig/kubeconfig
 ```
 
+# Local Development Tips
+
+## Running MCM Locally
+
+After setting up a shoot cluster in the dev landscape, you can run your local copy of MCM and MC to manage machines in the shoot cluster.
+
+Example for AWS Shoot Cluster:
+1. Checkout `https://github.com/gardener/machine-controller-manager` and `https://github.com/gardener/machine-controller-manager-provider-aws/`
+2. `cd machine-controller-manager` and run
+`./hack/local_setup.sh --seed <seedManagingShoot> --shoot <shootName> --project <userId> --provider aws`
+   - Ex: `./hack/local_setup.sh --seed aws-ha --shoot aw2 --project i034796 --provider aws` 
+   - The above will set the replica count of the `machine-controller-manager`  deployment in the shoot control plane to 0 and also set an annotations `dependency-watchdog.gardener.cloud/ignore-scaling` to prevent DWD from scalig it back up. Now, you can run your local dev copy.
+3. Inside the MCM directlry run `make start`
+   1. MCM controller should start without errors. Last line should look like: 
+   ```I0920 14:11:28.615699   84778 deployment.go:433] Processing the machinedeployment "shoot--i034796--aw2-a-z1" (with replicas 1)```
+4. Change to the provider directory. Ex `cd <checkoutPath>/machine-controllr-manager-provider-aws` and run `make start`
+   1. MC controller should start without errors. Last line should look like
+```
+I0920 14:14:37.793684   86169 core.go:482] List machines request has been processed successfully
+I0920 14:14:37.896720   86169 machine_safety.go:59] reconcileClusterMachineSafetyOrphanVMs: End, reSync-Period: 5m0s
+```
+
+
 
 # Change Log
 
-- [ ] TODO - PLANNED walkthrough: 13th Feb: Reconcile Machine Safety Orphan VM's.
-- [ ] TODO - PLANNED walkthrough: 14th Feb: Reconcile Machine Set Controller.
+- [ ] TODO - PLANNED walkthrough: 25th Sep: Reconcile Machine Safety Orphan VM's.
+- [ ] TODO - PLANNED walkthrough: 27th Sep: Machine Set Controller.
+- [ ] TODO - PLANNED walkthrough: 28th Sep: Machine Deployment Controller

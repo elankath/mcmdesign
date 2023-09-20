@@ -118,7 +118,7 @@ type MachineSpec struct {
 	// Configuration for the machine-controller.  
 	*MachineConfiguration 
 }
-type NodeTemplateSpec struct { // BADLY NAMED!
+type NodeTemplateSpec struct {  // wraps a NodeSpec with ObjectMeta.
 	metav1.ObjectMeta
 
 	// NodeSpec describes the attributes that a node is created with.
@@ -922,7 +922,7 @@ const (
 
 #### permits.PermitGiver
 
-`permits.PermitGiver` provides the ability to register, obtain, release and delete permits for a given key. All operations are concurrent safe.
+`permits.PermitGiver` provides the ability to register, obtain, release and delete a number of permits for a given key. All operations are concurrent safe.
 
 ```go
 type PermitGiver interface {
@@ -937,7 +937,7 @@ The implementation of [github.com/gardener/machine-controller-manager/pkg/util/p
  -  a sync map of permit keys mapped to permits, where each permit is a structure comprising a buffered empty struct `struct{}` channel  with buffer size equalling the (max) number of permits. 
     -  `RegisterPermits(key, numPermits)` registers `numPermits` for the given `key`. A `permit` struct is initialized with `permit.c` buffer size as `numPermits`.
  -  entries are deleted if not accessed for a configured time represented by `stalePermitKeyTimeout`. This is done by 'janitor' go-routine associated with the permit giver instance.
- -  When attempting to get a permit, one writes an empty struct to the permit channel within a given timeout. If one can do so within the timeout one has acquired the permit, else not. 
+ -  When attempting to get a permit using `TryPermit`, one writes an empty struct to the permit channel within a given timeout. If one can do so within the timeout one has acquired the permit, else not. 
     - `TryPermit(key, timeout)` attempts to get a permit for the given key by sending a `struct{}{}` instance to the buffered `permit.c` channel. 
 
 ```go 
