@@ -1,5 +1,5 @@
 <!DOCTYPE HTML>
-<html lang="en" class="sidebar-visible no-js light">
+<html lang="en" class="light" dir="ltr">
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
@@ -10,7 +10,7 @@
         
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="theme-color" content="#ffffff" />
+        <meta name="theme-color" content="#ffffff">
 
         <link rel="icon" href="favicon.svg">
         <link rel="shortcut icon" href="favicon.png">
@@ -31,7 +31,8 @@
         <!-- Custom theme stylesheets -->
 
     </head>
-    <body>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
         <!-- Provide site root to javascript -->
         <script>
             var path_to_root = "";
@@ -60,22 +61,29 @@
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             var html = document.querySelector('html');
-            html.classList.remove('no-js')
             html.classList.remove('light')
             html.classList.add(theme);
-            html.classList.add('js');
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
         </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var html = document.querySelector('html');
-            var sidebar = 'hidden';
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
             }
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -85,15 +93,37 @@
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
 
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
         <div id="page-wrapper" class="page-wrapper">
 
             <div class="page">
                                 <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky bordered">
+                <div id="menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
                             <i class="fa fa-bars"></i>
-                        </button>
+                        </label>
                         <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
                             <i class="fa fa-paint-brush"></i>
                         </button>
@@ -148,10 +178,15 @@
 <li><a href="#deployment-structure">Deployment Structure</a></li>
 </ul>
 </li>
+<li><a href="#local-development-tips">Local Development Tips</a>
+<ul>
+<li><a href="#running-mcm-locally">Running MCM Locally</a></li>
+</ul>
+</li>
 <li><a href="#change-log">Change Log</a></li>
 </ul>
 <p>Current location: <a href="https://elankath.github.io/mcmdesign/">MCM Design Book</a>. </p>
-<p>(🚧 Please see <a href="#change-log">Change Log</a> for new additions/corrections.Please Check on 13th Feb for v3.0 release!🏗)</p>
+<p>(🚧 Please see <a href="#change-log">Change Log</a> for new additions/corrections.Please Check on 8th Oct for v3.1 release!🏗)</p>
 <h1 id="introduction"><a class="header" href="#introduction">Introduction</a></h1>
 <p>A Kubernetes Controller is a program that watches for lifecycle events on specific resources and triggers one or more <em>reconcile</em> functions in response. A <em>reconcile function</em> is called with the <em>Namespace</em> and <em>Name</em> of an object corresponding to the resource and its job is to make the object <em>Status</em> match the declared state in the object <em>Spec</em>. </p>
 <p>Machine Controller Manager aka MCM is a group of cooperative controllers that manage the lifecycle of the worker machines, machine-classes machine-sets and machine deployments. All these objects are custom resources.</p>
@@ -246,12 +281,41 @@ flowchart TB
          --safety-down=1
          --target-kubeconfig=/var/run/secrets/gardener.cloud/shoot/generic-kubeconfig/kubeconfig
 </code></pre>
+<h1 id="local-development-tips"><a class="header" href="#local-development-tips">Local Development Tips</a></h1>
+<p>First read <a href="https://github.com/elankath/machine-controller-manager/blob/master/docs/development/local_setup.md#local-development">Local Dev MCM</a></p>
+<h2 id="running-mcm-locally"><a class="header" href="#running-mcm-locally">Running MCM Locally</a></h2>
+<p>After setting up a shoot cluster in the dev landscape, you can run your local copy of MCM and MC to manage machines in the shoot cluster.</p>
+<p>Example for AWS Shoot Cluster:</p>
+<ol>
+<li>Checkout <code>https://github.com/gardener/machine-controller-manager</code> and <code>https://github.com/gardener/machine-controller-manager-provider-aws/</code></li>
+<li><code>cd machine-controller-manager</code> and run
+<code>./hack/gardener_local_setup.sh --seed &lt;seedManagingShoot&gt; --shoot &lt;shootName&gt; --project &lt;userId&gt; --provider aws</code>
+<ul>
+<li>Ex: <code>./hack/gardener_local_setup.sh --seed aws-ha --shoot aw2 --project i034796 --provider aws</code> </li>
+<li>The above will set the replica count of the <code>machine-controller-manager</code>  deployment in the shoot control plane to 0 and also set an annotations <code>dependency-watchdog.gardener.cloud/ignore-scaling</code> to prevent DWD from scalig it back up. Now, you can run your local dev copy.</li>
+</ul>
+</li>
+<li>Inside the MCM directlry run <code>make start</code>
+<ol>
+<li>MCM controller should start without errors. Last line should look like: 
+<code>I0920 14:11:28.615699   84778 deployment.go:433] Processing the machinedeployment &quot;shoot--i034796--aw2-a-z1&quot; (with replicas 1)</code></li>
+</ol>
+</li>
+<li>Change to the provider directory. Ex <code>cd &lt;checkoutPath&gt;/machine-controllr-manager-provider-aws</code> and run <code>make start</code>
+<ol>
+<li>MC controller should start without errors. Last line should look like</li>
+</ol>
+</li>
+</ol>
+<pre><code>I0920 14:14:37.793684   86169 core.go:482] List machines request has been processed successfully
+I0920 14:14:37.896720   86169 machine_safety.go:59] reconcileClusterMachineSafetyOrphanVMs: End, reSync-Period: 5m0s
+</code></pre>
 <h1 id="change-log"><a class="header" href="#change-log">Change Log</a></h1>
 <ul>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED walkthrough: 13th Feb: Reconcile Machine Safety Orphan VM's.</li>
+TODO - PLANNED walkthrough: 5th Oct: Reconcile Machine Safety Orphan VM's.</li>
 <li><input disabled="" type="checkbox"/>
-TODO - PLANNED walkthrough: 14th Feb: Reconcile Machine Set Controller.</li>
+TODO - PLANNED walkthrough: 6/7/8th Oct: Machine Set/Machine Deployment Controller.</li>
 </ul>
 
                     </main>
@@ -259,7 +323,7 @@ TODO - PLANNED walkthrough: 14th Feb: Reconcile Machine Set Controller.</li>
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
 
-                            <a rel="next" href="k8s_facilities.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="k8s_facilities.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -270,7 +334,7 @@ TODO - PLANNED walkthrough: 14th Feb: Reconcile Machine Set Controller.</li>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
 
-                    <a rel="next" href="k8s_facilities.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="k8s_facilities.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -298,5 +362,6 @@ TODO - PLANNED walkthrough: 14th Feb: Reconcile Machine Set Controller.</li>
         <script src="mermaid-init.js"></script>
 
 
+    </div>
     </body>
 </html>

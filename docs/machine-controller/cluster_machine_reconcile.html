@@ -1,5 +1,5 @@
 <!DOCTYPE HTML>
-<html lang="en" class="sidebar-visible no-js light">
+<html lang="en" class="light" dir="ltr">
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
@@ -10,7 +10,7 @@
         
         <meta name="description" content="">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="theme-color" content="#ffffff" />
+        <meta name="theme-color" content="#ffffff">
 
         <link rel="icon" href="../favicon.svg">
         <link rel="shortcut icon" href="../favicon.png">
@@ -31,7 +31,8 @@
         <!-- Custom theme stylesheets -->
 
     </head>
-    <body>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
         <!-- Provide site root to javascript -->
         <script>
             var path_to_root = "../";
@@ -60,22 +61,29 @@
             try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
             if (theme === null || theme === undefined) { theme = default_theme; }
             var html = document.querySelector('html');
-            html.classList.remove('no-js')
             html.classList.remove('light')
             html.classList.add(theme);
-            html.classList.add('js');
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
         </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
 
         <!-- Hide / unhide sidebar before it is displayed -->
         <script>
-            var html = document.querySelector('html');
-            var sidebar = 'hidden';
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
             if (document.body.clientWidth >= 1080) {
                 try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
                 sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
             }
-            html.classList.remove('sidebar-visible');
-            html.classList.add("sidebar-" + sidebar);
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
         </script>
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
@@ -85,15 +93,37 @@
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
 
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
         <div id="page-wrapper" class="page-wrapper">
 
             <div class="page">
                                 <div id="menu-bar-hover-placeholder"></div>
-                <div id="menu-bar" class="menu-bar sticky bordered">
+                <div id="menu-bar" class="menu-bar sticky">
                     <div class="left-buttons">
-                        <button id="sidebar-toggle" class="icon-button" type="button" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
                             <i class="fa fa-bars"></i>
-                        </button>
+                        </label>
                         <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
                             <i class="fa fa-paint-brush"></i>
                         </button>
@@ -445,104 +475,13 @@ ShortR--&gt;Z
 <li>Reference <a href="./mc_helper_methods.html#controllerishealthy">controller.isHealth</a> which checks the machine status conditions.</li>
 </ol>
 <h3 id="health-check-flow-diagram"><a class="header" href="#health-check-flow-diagram">Health Check Flow Diagram</a></h3>
-<p>NOTE: IGNORE flow diagram. Due to too many condition checks and big method, it becomes too huge. Look at description. Should be decomposed into smaller routines. Go to <a href="#health-check-summary">Health Check Summary</a></p>
-<pre class="mermaid">
-%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
-flowchart TD
-
-ShortR((&quot;return machineutils.ShortRetry, err&quot;))
-Begin((&quot; &quot;))--&gt;Init[&quot;
-cloneDirty = false
-machineClone = machine.DeepCopy()
-&quot;]--&gt;GetNode[&quot;
-  node, err := c.nodeLister.Get(machine.Status.Node)
-&quot;]--&gt;CheckErr{err!=nil}
-
-CheckErr--Yes--&gt;
-  ChkIsNotFound{&quot;IsNotFound(err)&quot;}
-    --Yes--&gt;ChkMachinePhase{&quot;
-    len(machine.Status.Conditions) &gt; 0
-    &amp;&amp;
-  machine.Status.CurrentStatus.Phase == MachineRunning
-&quot;} --&quot;Yes\n(node missing)&quot;
-  --&gt;SetUnhealthyNotFound[&quot;
-    lastOpDesc='machine unhealthy due to node obj missing'
-    lastOpState=MachineStateProcessing
-    machinePhase: MachineUnknown
-    cloneDirty=true
-    &quot;]
-  --&gt;TODO
-
-ChkIsNotFound--No--&gt;ShortR
-ChkMachinePhase--No--&gt;TODO
-
-
-CheckErr--No--&gt;CheckNodeConditions{&quot;nodeConditionsHaveChanged(
-  machine.Status.Conditions, 
-  node.Status.Conditions) ? &quot;}
-
-CheckNodeConditions--Yes--&gt;SetChangedConditions[&quot;
-   machineClone.Status.Conditions = node.Status.Conditions
-   cloneDirty = true
-&quot;]--&gt;ChkNotHealthyButRunning
-CheckNodeConditions--No--&gt;ChkNotHealthyButRunning
-
-
-ChkNotHealthyButRunning{&quot;!c.isHealth(machine)
-&amp;&amp;
-machine.Status.CurrentStatus.Phase == MachineRunning
-// machine not healthy, and current state running,&quot;}
---Yes--&gt;SetUnhealtyDesc[&quot;
-  lastOpDesc ='Machine Unealthy due to conditions:' + machine.Status.Condtions
-  lastOpState=MachineStateProcessing
-  machinePhase: MachineUnknown
-  cloneDirty=true&quot;]
---&gt;ChkHealthyButNotRunning{&quot;!c.isHealthy(clone)
-  &amp;&amp; 
-  clone.Status.CurrentStatus.Phase == MachineRunning
-  //machine healthy, but curr phase not running
-  &quot;}
-  --&gt;ChkMachineCreateOk{&quot;
-    machine.Status.LastOperation.Type == MachineOperationCreate 
-    &amp;&amp;
-		machine.Status.LastOperation.State != MachineStateSuccessful 
-  &quot;}
-  --&gt;ChkLastOpCreateAndOpStateNotMarkedSuccess{&quot;
-   machine.Status.LastOperation.Type == MachineOperationCreate 
-   &amp;&amp;
-	 machine.Status.LastOperation.State != MachineStateSuccessful 
-   //create ok but not marked yet as success
-  &quot;}
-  --Yes--&gt;SetSuccessDesc[&quot;
-    lastOpDes = 'Machine successfully joined the cluster'
-		lastOpType = MachineOperationCreate
-  &quot;]--&gt;DeleteBootstrapToken[&quot;
-    c.deleteBootstrapToken(ctx, Machine.Name)
-    // delete bootstrap token created at machine launch
-  &quot;]--&gt;SetLastOpStateSuccessAndPhaseRuning[&quot;
-    lastOpState = MachineStateSuccessful,
-    machinePhase: MachineRunning
-    cloneDirty=true
-  &quot;]
-
-  ChkLastOpCreateAndOpStateNotMarkedSuccess--No--&gt;SetMachineRejoinCluster[&quot;
-    lastOpDes = 'Machine successfully re-joined the cluster'
-		lastOpType = MachineOperationHealthCheck
-  &quot;]--&gt;SetLastOpStateSuccessAndPhaseRuning
-
-
-  SetLastOpStateSuccessAndPhaseRuning--&gt;TODO
-
-
-style SetUnknown text-align:left
-
-</pre>
+<p>See <a href="https://github.com/gardener/machine-controller-manager/blob/master/docs/FAQ.md#what-are-the-different-phases-of-a-machine">What are the different phases of a Machine</a></p>
 <h3 id="health-check-summary"><a class="header" href="#health-check-summary">Health Check Summary</a></h3>
 <ol>
 <li>Gets the <code>Node</code> obj associated with the machine. If it IS NOT found, yet the current machine phase is <code>Running</code>, change the machine phase to <code>Unknown</code>, the last operation state to <code>Processing</code>, the last operation type to <code>HealthCheck</code>, update the machine status and return with a short retry.</li>
 <li>If the <code>Node</code> object IS found, then it checks whether the <code>Machine.Status.Conditions</code> are different from <code>Node.Status.Conditions</code>. If so it sets the machine conditions to the node conditions.</li>
 <li>If the machine IS NOT healthy (See <a href="./mc_helper_methods.html#controllerishealthy">isHealthy</a>) but the current machine phase is <code>Running</code>, change the machine phase to <code>Unknown</code>, the last operation state to <code>Processing</code>, the last operation type to <code>HealthCheck</code>, update the machine status and return with a short retry.</li>
-<li>If the machine IS healthy but the current machine phase is NOT <code>Running</code>,  check whether the last operation type was a <code>Create</code>.
+<li>If the machine IS healthy but the current machine phase is NOT <code>Running</code> and the machine's node does not have the <code>node.gardener.cloud/critical-components-not-ready</code> taint,  check whether the last operation type was a <code>Create</code>.
 <ol>
 <li>If the last operation type was a <code>Create</code> and last operation state is NOT marked as <code>Successful</code>, then delete the bootstrap token associated with the machine. Change the last operation state to <code>Successful</code>. Let the last operation type continue to remain as <code>Create</code>.</li>
 <li>If the last operation type was NOT a <code>Create</code>, change the last operation type to <code>HealthCheck</code></li>
@@ -600,7 +539,7 @@ style SetUnknown text-align:left
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next" href="../machine-controller/mc_helper_methods.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../machine-controller/mc_helper_methods.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -614,7 +553,7 @@ style SetUnknown text-align:left
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next" href="../machine-controller/mc_helper_methods.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../machine-controller/mc_helper_methods.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
@@ -642,5 +581,6 @@ style SetUnknown text-align:left
         <script src="../mermaid-init.js"></script>
 
 
+    </div>
     </body>
 </html>

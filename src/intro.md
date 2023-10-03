@@ -7,7 +7,7 @@
 
  Current location: [MCM Design Book](https://elankath.github.io/mcmdesign/). 
 
-(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on 25th Sep for v3.1 release!🏗)
+(🚧 Please see [Change Log](#change-log) for new additions/corrections.Please Check on 8th Oct for v3.1 release!🏗)
 
 # Introduction
 
@@ -110,6 +110,8 @@ Container command configured on AWS
 
 # Local Development Tips
 
+First read [Local Dev MCM](https://github.com/elankath/machine-controller-manager/blob/master/docs/development/local_setup.md#local-development)
+
 ## Running MCM Locally
 
 After setting up a shoot cluster in the dev landscape, you can run your local copy of MCM and MC to manage machines in the shoot cluster.
@@ -117,8 +119,8 @@ After setting up a shoot cluster in the dev landscape, you can run your local co
 Example for AWS Shoot Cluster:
 1. Checkout `https://github.com/gardener/machine-controller-manager` and `https://github.com/gardener/machine-controller-manager-provider-aws/`
 2. `cd machine-controller-manager` and run
-`./hack/local_setup.sh --seed <seedManagingShoot> --shoot <shootName> --project <userId> --provider aws`
-   - Ex: `./hack/local_setup.sh --seed aws-ha --shoot aw2 --project i034796 --provider aws` 
+`./hack/gardener_local_setup.sh --seed <seedManagingShoot> --shoot <shootName> --project <userId> --provider aws`
+   - Ex: `./hack/gardener_local_setup.sh --seed aws-ha --shoot aw2 --project i034796 --provider aws` 
    - The above will set the replica count of the `machine-controller-manager`  deployment in the shoot control plane to 0 and also set an annotations `dependency-watchdog.gardener.cloud/ignore-scaling` to prevent DWD from scalig it back up. Now, you can run your local dev copy.
 3. Inside the MCM directlry run `make start`
    1. MCM controller should start without errors. Last line should look like: 
@@ -134,6 +136,5 @@ I0920 14:14:37.896720   86169 machine_safety.go:59] reconcileClusterMachineSafet
 
 # Change Log
 
-- [ ] TODO - PLANNED walkthrough: 25th Sep: Reconcile Machine Safety Orphan VM's.
-- [ ] TODO - PLANNED walkthrough: 27th Sep: Machine Set Controller.
-- [ ] TODO - PLANNED walkthrough: 28th Sep: Machine Deployment Controller
+- [ ] TODO - PLANNED walkthrough: 5th Oct: Reconcile Machine Safety Orphan VM's.
+- [ ] TODO - PLANNED walkthrough: 6/7/8th Oct: Machine Set/Machine Deployment Controller.

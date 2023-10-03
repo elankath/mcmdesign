@@ -320,107 +320,14 @@ NOTES:
 
 ### Health Check Flow Diagram
 
-NOTE: IGNORE flow diagram. Due to too many condition checks and big method, it becomes too huge. Look at description. Should be decomposed into smaller routines. Go to [Health Check Summary](#health-check-summary)
-
-```mermaid
-
-%%{init: {'themeVariables': { 'fontSize': '10px'}, "flowchart": {"useMaxWidth": false }}}%%
-flowchart TD
-
-ShortR(("return machineutils.ShortRetry, err"))
-Begin((" "))-->Init["
-cloneDirty = false
-machineClone = machine.DeepCopy()
-"]-->GetNode["
-  node, err := c.nodeLister.Get(machine.Status.Node)
-"]-->CheckErr{err!=nil}
-
-CheckErr--Yes-->
-  ChkIsNotFound{"IsNotFound(err)"}
-    --Yes-->ChkMachinePhase{"
-    len(machine.Status.Conditions) > 0
-    &&
-  machine.Status.CurrentStatus.Phase == MachineRunning
-"} --"Yes\n(node missing)"
-  -->SetUnhealthyNotFound["
-    lastOpDesc='machine unhealthy due to node obj missing'
-    lastOpState=MachineStateProcessing
-    machinePhase: MachineUnknown
-    cloneDirty=true
-    "]
-  -->TODO
-
-ChkIsNotFound--No-->ShortR
-ChkMachinePhase--No-->TODO
-
-
-CheckErr--No-->CheckNodeConditions{"nodeConditionsHaveChanged(
-  machine.Status.Conditions, 
-  node.Status.Conditions) ? "}
-
-CheckNodeConditions--Yes-->SetChangedConditions["
-   machineClone.Status.Conditions = node.Status.Conditions
-   cloneDirty = true
-"]-->ChkNotHealthyButRunning
-CheckNodeConditions--No-->ChkNotHealthyButRunning
-
-
-ChkNotHealthyButRunning{"!c.isHealth(machine)
-&&
-machine.Status.CurrentStatus.Phase == MachineRunning
-// machine not healthy, and current state running,"}
---Yes-->SetUnhealtyDesc["
-  lastOpDesc ='Machine Unealthy due to conditions:' + machine.Status.Condtions
-  lastOpState=MachineStateProcessing
-  machinePhase: MachineUnknown
-  cloneDirty=true"]
--->ChkHealthyButNotRunning{"!c.isHealthy(clone)
-  && 
-  clone.Status.CurrentStatus.Phase == MachineRunning
-  //machine healthy, but curr phase not running
-  "}
-  -->ChkMachineCreateOk{"
-    machine.Status.LastOperation.Type == MachineOperationCreate 
-    &&
-		machine.Status.LastOperation.State != MachineStateSuccessful 
-  "}
-  -->ChkLastOpCreateAndOpStateNotMarkedSuccess{"
-   machine.Status.LastOperation.Type == MachineOperationCreate 
-   &&
-	 machine.Status.LastOperation.State != MachineStateSuccessful 
-   //create ok but not marked yet as success
-  "}
-  --Yes-->SetSuccessDesc["
-    lastOpDes = 'Machine successfully joined the cluster'
-		lastOpType = MachineOperationCreate
-  "]-->DeleteBootstrapToken["
-    c.deleteBootstrapToken(ctx, Machine.Name)
-    // delete bootstrap token created at machine launch
-  "]-->SetLastOpStateSuccessAndPhaseRuning["
-    lastOpState = MachineStateSuccessful,
-    machinePhase: MachineRunning
-    cloneDirty=true
-  "]
-
-  ChkLastOpCreateAndOpStateNotMarkedSuccess--No-->SetMachineRejoinCluster["
-    lastOpDes = 'Machine successfully re-joined the cluster'
-		lastOpType = MachineOperationHealthCheck
-  "]-->SetLastOpStateSuccessAndPhaseRuning
-
-
-  SetLastOpStateSuccessAndPhaseRuning-->TODO
-
-
-style SetUnknown text-align:left
-
-```
+See [What are the different phases of a Machine](https://github.com/gardener/machine-controller-manager/blob/master/docs/FAQ.md#what-are-the-different-phases-of-a-machine)
 
 ### Health Check Summary
 
 1. Gets the `Node` obj associated with the machine. If it IS NOT found, yet the current machine phase is `Running`, change the machine phase to `Unknown`, the last operation state to `Processing`, the last operation type to `HealthCheck`, update the machine status and return with a short retry.  
 2. If the `Node` object IS found, then it checks whether the `Machine.Status.Conditions` are different from `Node.Status.Conditions`. If so it sets the machine conditions to the node conditions.
 3.  If the machine IS NOT healthy (See [isHealthy](./mc_helper_methods.md#controllerishealthy)) but the current machine phase is `Running`, change the machine phase to `Unknown`, the last operation state to `Processing`, the last operation type to `HealthCheck`, update the machine status and return with a short retry.  
-4. If the machine IS healthy but the current machine phase is NOT `Running`,  check whether the last operation type was a `Create`.
+4. If the machine IS healthy but the current machine phase is NOT `Running` and the machine's node does not have the `node.gardener.cloud/critical-components-not-ready` taint,  check whether the last operation type was a `Create`.
    1.  If the last operation type was a `Create` and last operation state is NOT marked as `Successful`, then delete the bootstrap token associated with the machine. Change the last operation state to `Successful`. Let the last operation type continue to remain as `Create`.
    1. If the last operation type was NOT a `Create`, change the last operation type to `HealthCheck`
    1. Change the machine phase to `Running` and update the machine status and return with a short retry.
