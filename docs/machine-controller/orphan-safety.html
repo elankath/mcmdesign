@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Reconcile Cluster Machine Class - Machine Controller Manager Design</title>
+        <title>Orphan / Safety Jobs - Machine Controller Manager Design</title>
 
 
         <!-- Custom HTML head -->
@@ -88,7 +88,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-machine-class.html" class="active"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Reconcile Cluster Machine</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="../machine-controller/orphan-safety.html"><strong aria-hidden="true">3.6.</strong> Orphan / Safety Jobs</a></li></ol></li><li class="chapter-item expanded "><a href="../machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller-manager/reconcile-cluster-machine-set.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Set</a></li><li class="chapter-item expanded "><a href="../machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.2.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="../intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="../k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="../mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="../machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="../machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="../machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Reconcile Cluster Machine</a></li><li class="chapter-item expanded "><a href="../machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="../machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="../machine-controller/orphan-safety.html" class="active"><strong aria-hidden="true">3.6.</strong> Orphan / Safety Jobs</a></li></ol></li><li class="chapter-item expanded "><a href="../machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="../machine-controller-manager/reconcile-cluster-machine-set.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Set</a></li><li class="chapter-item expanded "><a href="../machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.2.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="../issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -171,126 +171,75 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="reconcile-cluster-machine-class"><a class="header" href="#reconcile-cluster-machine-class">Reconcile Cluster Machine Class</a></h1>
-<h2 id="reconcile-cluster-machine-class-key"><a class="header" href="#reconcile-cluster-machine-class-key">Reconcile Cluster Machine Class Key</a></h2>
-<p><code>reconcileClusterMachineClassKey</code> just picks up the machine class key from the machine class queue  and then delegates further. </p>
-<pre><code class="language-go">func (c *controller) reconcileClusterMachineClassKey(key string) error
+                        <h1 id="orphan--safety-jobs"><a class="header" href="#orphan--safety-jobs">Orphan / Safety Jobs</a></h1>
+<p>Read MCM FAQ: <a href="https://github.com/gardener/machine-controller-manager/blob/master/docs/FAQ.md#what-is-safety-controller-in-mcm">What is Safety Controller in MCM</a></p>
+<p>These are jobs that periodically run by pushing dummy keys onto their respective work-queues. The worker then picks up and dispatches to the reconcile functions.</p>
+<pre><code class="language-go">    worker.Run(c.machineSafetyOrphanVMsQueue, &quot;ClusterMachineSafetyOrphanVMs&quot;, 
+    worker.DefaultMaxRetries, 
+    true, c.reconcileClusterMachineSafetyOrphanVMs, stopCh, &amp;waitGroup)
+
+    worker.Run(c.machineSafetyAPIServerQueue, &quot;ClusterMachineAPIServer&quot;, 
+    worker.DefaultMaxRetries, true, c.reconcileClusterMachineSafetyAPIServer, 
+    stopCh, &amp;waitGroup)
+
 </code></pre>
+<h2 id="reconcileclustermachinesafetyorphanvms"><a class="header" href="#reconcileclustermachinesafetyorphanvms">reconcileClusterMachineSafetyOrphanVMs</a></h2>
+<p>This techinically isn't a reconcilation loop. It is effectively just a job.</p>
 <pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
 flowchart TD
 
-GetMCName[&quot;ns,name=cache.SplitMetanamespacekey(mkey)&quot;]
---&gt;GetMC[&quot;
-class, err := c.machineClassLister.MachineClasses(c.namespace).Get(name)
-if err != nil return err  // basically adds back to the queue after rate limiting
+Begin((&quot; &quot;))
+--&gt;RescheduleJob[&quot;
+// Schedule Rerun
+defer c.machineSafetyOrphanVMsQueue.AddAfter('', c.safetyOptions.MachineSafetyOrphanVMsPeriod.Duration)
+&quot;]--&gt;
+GetMC[&quot;Get Machine Classes and iterate&quot;]
+--&gt;forEach[&quot;
+asdf
 &quot;]
---&gt;RMC[&quot;
-ctx := context.Background()
-reconcileClusterMachineClass(ctx, class)&quot;]
---&gt;CheckErr{&quot;err !=nil&quot;}
---Yes--&gt;ShortR[&quot;machineClassQueue.AddAfter(key, machineutils.ShortRetry)&quot;]
-CheckErr--No--&gt;LongR[&quot;machineClassQueue.AddAfter(key, machineutils.LongRetry)&quot;]
-
-</pre>
-<h2 id="reconcile-cluster-machine-class-1"><a class="header" href="#reconcile-cluster-machine-class-1">Reconcile Cluster Machine Class</a></h2>
-<pre><code class="language-go">func (c *controller) reconcileClusterMachineClass(ctx context.Context,
- class *v1alpha1.MachineClass) error 
-</code></pre>
-<p>Bad design: should ideally return the retry period like other reconcile functions.</p>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
-flowchart TD
-
-FindMachineForClass[&quot;
-machines := Use machineLister and 
-match on Machine.Spec.Class.Name == class to 
-find machines with matching class&quot;]
---&gt;CheckDelTimeStamp{&quot;
-// machines are ref
-class.DeletionTimestamp == nil
-&amp;&amp; len(machines) &gt; 0
-&quot;}
-
-CheckDelTimeStamp--Yes--&gt;AddMCFinalizers[&quot;
-Add/Update MCM Finalizers to MC 
-and use controlMachineClient to update
-(why mcm finalizer not mc finalizer?)
-'machine.sapcloud.io/machine-controller-manager'
-retryPeriod=LongRetry
+--&gt;ListDriverMachines[&quot;
+listMachineResp := driver.ListMachines(...)
 &quot;]
---&gt;ChkMachineCount{{&quot;len(machines)&gt;0?&quot;}}
---Yes--&gt;EnQMachines[&quot;
-iterate machines and invoke:
-c.machineQueue.Add(machine)
+
+ListDriverMachines--&gt;MachinesExist{
+    #listMachineResp.MachineList &gt; 0 ?
+}
+MachinesExist--&gt;|yes| SyncCache[&quot;cache.WaitForCacheSync(stopCh, machineInformer.Informer().HasSynced)&quot;]
+
+SyncCache--&gt;IterMachine[&quot;Iterate machineID,machineName in listMachineResp.MachineList&quot;]
+--&gt;GetMachine[&quot;machine, err := Get Machine from Lister&quot;]
+--&gt;ChkErr{Check err}
+
+ChkErr--&gt;|err NotFound|DelMachine
+ChkErr--&gt;|err nil|ChkMachineId
+
+ChkMachineId{
+    machine.Spec.ProviderID == machineID 
+    OR
+    machinePhase is empty or CrashLoopBackoff ?}
+ChkMachineId--&gt;|yes|IterMachine
+ChkMachineId--&gt;|no|DelMachine[&quot;
+driver.DeleteMachine(ctx, &amp;driver.DeleteMachineRequest{
+Machine:      machine, secretData...})
 &quot;]
---&gt;End((&quot;End&quot;))
 
-CheckDelTimeStamp--No--&gt;Shortr[&quot;
-// Seems like over-work here.
-retryPeriod=ShortRetry
-&quot;]--&gt;ChkMachineCount
+DelMachine--iterDone--&gt;ScheduleRerun
+MachinesExist--&gt;|no| ReturnLongRetry[&quot;retryPeriod := machineutils.LongRetry&quot;]
 
-ChkMachineCount--No--&gt;DelMCFinalizers[&quot;
-controller.deleteMachineClassFinalizers(ctx, class)
-&quot;]--&gt;End
-</pre>
-<p>NOTE: Scratch work below. IGNORE.</p>
-<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
-flowchart TD
-
-a[&quot;ns,name=cache.SplitMetanamespacekey(mkey)&quot;]
-getm[&quot;machine=machinelister.machines(ns).get(name)&quot;]
-valm[&quot;validation.validatemachine(machine)&quot;]
-valmc[&quot;machineclz,secretdata,err=validation.validatemachineclass(machine)&quot;]
-longr[&quot;retryperiod=machineutils.longretry&quot;]
-shortr[&quot;retryperiod=machineutils.shortretry&quot;]
-enqm[&quot;machinequeue.addafter(mkey, retryperiod)&quot;]
-checkmdel{&quot;is\nmachine.deletiontimestamp\nset?&quot;}
-newdelreq[&quot;req=&amp;driver.deletemachinerequest{machine,machineclz,secretdata}&quot;]
-delflow[&quot;retryperiod=controller.triggerdeletionflow(req)&quot;]
-createflow[&quot;retryperiod=controller.triggercreationflow(req)&quot;]
-hasfin{&quot;hasfinalizer(machine)&quot;}
-addfin[&quot;addmachinefinalizers(machine)&quot;]
-checkmachinenodeexists{&quot;machine.status.node\nexists?&quot;}
-reconcilemachinehealth[&quot;controller.reconcilemachinehealth(machine)&quot;]
-syncnodetemplates[&quot;controller.syncnodetemplates(machine)&quot;]
-newcreatereq[&quot;req=&amp;driver.createmachinerequest{machine,machineclz,secretdata}&quot;]
-z((&quot;end&quot;))
-
-a--&gt;getm
-enqm--&gt;z
-longr--&gt;enqm
-shortr--&gt;enqm
-getm--&gt;valm
-valm--&gt;ok--&gt;valmc
-valm--err--&gt;longr
-valmc--err--&gt;longr
-valmc--ok--&gt;checkmdel
-checkmdel--yes--&gt;newdelreq
-checkmdel--no--&gt;hasfin
-newdelreq--&gt;delflow
-hasfin--no--&gt;addfin
-hasfin--yes--&gt;shortr
-addfin--&gt;checkmachinenodeexists
-checkmachinenodeexists--yes--&gt;reconcilemachinehealth
-checkmachinenodeexists--no--&gt;newcreatereq
-reconcilemachinehealth--ok--&gt;syncnodetemplates
-syncnodetemplates--ok--&gt;longr
-syncnodetemplates--err--&gt;shortr
-delflow--&gt;enqm
-newcreatereq--&gt;createflow
-createflow--&gt;enqm
-
+--&gt;ScheduleRerun[&quot;
+c.machineSafetyOrphanVMsQueue.AddAfter('', time.Duration(retryPeriod))
+&quot;]
 </pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="../machine-controller/index.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="../machine-controller/node_drain.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="../machine-controller/reconcile-cluster-secret.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../machine-controller-manager/index.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -300,11 +249,11 @@ createflow--&gt;enqm
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="../machine-controller/index.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="../machine-controller/node_drain.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="../machine-controller/reconcile-cluster-secret.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../machine-controller-manager/index.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>

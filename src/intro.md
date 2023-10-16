@@ -136,5 +136,5 @@ I0920 14:14:37.896720   86169 machine_safety.go:59] reconcileClusterMachineSafet
 
 # Change Log
 
-- [ ] TODO - PLANNED walkthrough: 5th Oct: Reconcile Machine Safety Orphan VM's.
-- [ ] TODO - PLANNED walkthrough: 6/7/8th Oct: Machine Set/Machine Deployment Controller.
+- WIP Draft of Orphan/Safety
+- WIP for machine set controller.

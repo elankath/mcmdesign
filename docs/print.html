@@ -89,7 +89,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Reconcile Cluster Machine</a></li><li class="chapter-item expanded "><a href="machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li></ol></li><li class="chapter-item expanded "><a href="machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="intro.html">Introduction</a></li><li class="chapter-item expanded "><a href="k8s_facilities.html"><strong aria-hidden="true">1.</strong> Kubernetes Facilities</a></li><li class="chapter-item expanded "><a href="mcm_facilities.html"><strong aria-hidden="true">2.</strong> MCM Facilities</a></li><li class="chapter-item expanded "><a href="machine-controller/index.html"><strong aria-hidden="true">3.</strong> Machine Controller</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-machine-class.html"><strong aria-hidden="true">3.1.</strong> Reconcile Cluster Machine Class</a></li><li class="chapter-item expanded "><a href="machine-controller/reconcile-cluster-secret.html"><strong aria-hidden="true">3.2.</strong> Reconcile Cluster Secret</a></li><li class="chapter-item expanded "><a href="machine-controller/cluster_machine_reconcile.html"><strong aria-hidden="true">3.3.</strong> Reconcile Cluster Machine</a></li><li class="chapter-item expanded "><a href="machine-controller/mc_helper_methods.html"><strong aria-hidden="true">3.4.</strong> Machine Controller Helper Methods</a></li><li class="chapter-item expanded "><a href="machine-controller/node_drain.html"><strong aria-hidden="true">3.5.</strong> Node Drain</a></li><li class="chapter-item expanded "><a href="machine-controller/orphan-safety.html"><strong aria-hidden="true">3.6.</strong> Orphan / Safety Jobs</a></li></ol></li><li class="chapter-item expanded "><a href="machine-controller-manager/index.html"><strong aria-hidden="true">4.</strong> Machine Controller Manager</a></li><li><ol class="section"><li class="chapter-item expanded "><a href="machine-controller-manager/reconcile-cluster-machine-set.html"><strong aria-hidden="true">4.1.</strong> Reconcile Cluster Machine Set</a></li><li class="chapter-item expanded "><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html"><strong aria-hidden="true">4.2.</strong> Reconcile Cluster Machine Deployment</a></li></ol></li><li class="chapter-item expanded "><a href="issues.html"><strong aria-hidden="true">5.</strong> Issues</a></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle"></div>
         </nav>
@@ -313,10 +313,8 @@ I0920 14:14:37.896720   86169 machine_safety.go:59] reconcileClusterMachineSafet
 </code></pre>
 <h1 id="change-log"><a class="header" href="#change-log">Change Log</a></h1>
 <ul>
-<li><input disabled="" type="checkbox"/>
-TODO - PLANNED walkthrough: 5th Oct: Reconcile Machine Safety Orphan VM's.</li>
-<li><input disabled="" type="checkbox"/>
-TODO - PLANNED walkthrough: 6/7/8th Oct: Machine Set/Machine Deployment Controller.</li>
+<li>WIP Draft of Orphan/Safety</li>
+<li>WIP for machine set controller.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="k8s_facilities.html#kubernetes-client-facilities">Kubernetes Client Facilities</a>
@@ -4773,6 +4771,65 @@ NilReturn((&quot;return&quot;))
 </li>
 <li>pod iteration loop is done: <code>return retryPods, false</code></li>
 </ol>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="orphan--safety-jobs"><a class="header" href="#orphan--safety-jobs">Orphan / Safety Jobs</a></h1>
+<p>Read MCM FAQ: <a href="https://github.com/gardener/machine-controller-manager/blob/master/docs/FAQ.md#what-is-safety-controller-in-mcm">What is Safety Controller in MCM</a></p>
+<p>These are jobs that periodically run by pushing dummy keys onto their respective work-queues. The worker then picks up and dispatches to the reconcile functions.</p>
+<pre><code class="language-go">    worker.Run(c.machineSafetyOrphanVMsQueue, &quot;ClusterMachineSafetyOrphanVMs&quot;, 
+    worker.DefaultMaxRetries, 
+    true, c.reconcileClusterMachineSafetyOrphanVMs, stopCh, &amp;waitGroup)
+
+    worker.Run(c.machineSafetyAPIServerQueue, &quot;ClusterMachineAPIServer&quot;, 
+    worker.DefaultMaxRetries, true, c.reconcileClusterMachineSafetyAPIServer, 
+    stopCh, &amp;waitGroup)
+
+</code></pre>
+<h2 id="reconcileclustermachinesafetyorphanvms"><a class="header" href="#reconcileclustermachinesafetyorphanvms">reconcileClusterMachineSafetyOrphanVMs</a></h2>
+<p>This techinically isn't a reconcilation loop. It is effectively just a job.</p>
+<pre class="mermaid">%%{init: {'themeVariables': { 'fontSize': '10px'}, &quot;flowchart&quot;: {&quot;useMaxWidth&quot;: false }}}%%
+flowchart TD
+
+Begin((&quot; &quot;))
+--&gt;RescheduleJob[&quot;
+// Schedule Rerun
+defer c.machineSafetyOrphanVMsQueue.AddAfter('', c.safetyOptions.MachineSafetyOrphanVMsPeriod.Duration)
+&quot;]--&gt;
+GetMC[&quot;Get Machine Classes and iterate&quot;]
+--&gt;forEach[&quot;
+asdf
+&quot;]
+--&gt;ListDriverMachines[&quot;
+listMachineResp := driver.ListMachines(...)
+&quot;]
+
+ListDriverMachines--&gt;MachinesExist{
+    #listMachineResp.MachineList &gt; 0 ?
+}
+MachinesExist--&gt;|yes| SyncCache[&quot;cache.WaitForCacheSync(stopCh, machineInformer.Informer().HasSynced)&quot;]
+
+SyncCache--&gt;IterMachine[&quot;Iterate machineID,machineName in listMachineResp.MachineList&quot;]
+--&gt;GetMachine[&quot;machine, err := Get Machine from Lister&quot;]
+--&gt;ChkErr{Check err}
+
+ChkErr--&gt;|err NotFound|DelMachine
+ChkErr--&gt;|err nil|ChkMachineId
+
+ChkMachineId{
+    machine.Spec.ProviderID == machineID 
+    OR
+    machinePhase is empty or CrashLoopBackoff ?}
+ChkMachineId--&gt;|yes|IterMachine
+ChkMachineId--&gt;|no|DelMachine[&quot;
+driver.DeleteMachine(ctx, &amp;driver.DeleteMachineRequest{
+Machine:      machine, secretData...})
+&quot;]
+
+DelMachine--iterDone--&gt;ScheduleRerun
+MachinesExist--&gt;|no| ReturnLongRetry[&quot;retryPeriod := machineutils.LongRetry&quot;]
+
+--&gt;ScheduleRerun[&quot;
+c.machineSafetyOrphanVMsQueue.AddAfter('', time.Duration(retryPeriod))
+&quot;]
+</pre>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="machine-controller-manager/index.html#machine-controller-manager">Machine Controller Manager</a>
 <ul>
@@ -4785,6 +4842,159 @@ NilReturn((&quot;return&quot;))
 <p>Ideally this should be the called <code>machine-deployment-controller</code> but the current name is a legacy holdover when all controllers were in one project module.</p>
 <p>The Machine Controller Manager Entry Point is at <a href="https://github.com/gardener/machine-controller-manager/blob/v0.47.0/cmd/machine-controller-manager/controller_manager.go#L40">github.com/gardener/machine-controller-manager/cmd/machine-controller-manager/controller_manager.go</a></p>
 <h2 id="mcm-launch"><a class="header" href="#mcm-launch">MCM Launch</a></h2>
+<div style="break-before: page; page-break-before: always;"></div><h1 id="reconcile-cluster-machine-set"><a class="header" href="#reconcile-cluster-machine-set">Reconcile Cluster Machine Set</a></h1>
+<p>A <code>MachineSet</code> is to a <code>Machine</code> in an analogue of what a <code>ReplicaSet</code> is to a <code>Pod</code>. A <code>MachineSet</code> ensures that the specified number of Machines are running at any given time. </p>
+<p>A <code>MachineSet</code> is rarely rarely created directly. It is generally owned by its parent MachineDeployment and its ObjectMetadata.OwnerReferenes slice has a reference to the parent deployment.</p>
+<p>The MCM controller <code>reconcileClusterMachineSet</code> is called from objects retrieved from the <code>machineSetQueue</code> as shown below.</p>
+<pre><code class="language-go">worker.Run(c.machineSetQueue, 
+&quot;ClusterMachineSet&quot;, 
+worker.DefaultMaxRetries, true, c.reconcileClusterMachineSet, stopCh, &amp;waitGroup)
+</code></pre>
+<p>The following is the flow diagram for <code>func (c *controller) reconcileClusterMachineSet(key string) error</code> . As can be observed, it could be optimized better. For any error in the below,  the ms key is added back to the <code>machineSetQueue</code> according to the default rate limiting. </p>
+<pre class="mermaid">%%{init: { 'themeVariables': { 'fontSize': '11px'},&quot;flowchart&quot;: {&quot;defaultRenderer&quot;: &quot;elk&quot;}} }%%
+flowchart TD
+
+Begin((&quot; &quot;))
+--&gt;GetMachineSet[&quot;machineSet=Get MS From Lister&quot;]
+--&gt;ValidateMS[&quot;validation.ValidateMachineSet(machineSet)&quot;]
+--&gt;ChkDeltimestamp1{&quot;machineSet.DeletionTimestamp?&quot;}
+
+ChkDeltimestamp1--&gt;|no| AddFinalizersIMissing[&quot;addFinalizersIfMissing(machineSet)&quot;]
+ChkDeltimestamp1--&gt;|yes| GetAllMS[&quot;allMachineSets = list all machine sets&quot;]--&gt;
+GetMSSelector[&quot;selector = LabelSelectorAsSelector(machineSet.Spec.Selector)&quot;]
+--&gt;ClaimMachines[&quot;claimedMachines=claimMachines(machineSet, selector, allMachines)&quot;]
+--&gt;SyncNT[&quot;synchronizeMachineNodeTemplates(claimedMachines, machineSet)&quot;]
+--&gt;SyncMC[&quot;syncMachinesConfig(claimedMachines, machineSet)&quot;]
+--&gt;SyncMCK[&quot;syncMachinesClassKind(claimedMachines, machineSet)&quot;]
+--&gt;ChkDeltimestamp2{&quot;machineSet.DeletionTimestamp?&quot;}--&gt;|no| ScaleUpDown
+
+ChkDeltimestamp2--&gt;|yes| ChkClaimedMachinesLen{&quot;len(claimedMachines) == 0?&quot;}
+ChkClaimedMachinesLen--&gt;|yes| DelMSFinalizers[&quot;delFinalizers(machineSet)&quot;]
+ChkClaimedMachinesLen--&gt;|no| TermMachines[&quot;terminateMachines(claimedMachines,machineSet)&quot;]--&gt;CalcMSStatus
+
+DelMSFinalizers--&gt;CalcMSStatus
+ScaleUpDown[&quot;manageReplicas(claimedMachines) // scale out/in machines&quot;]
+--&gt;CalcMSStatus[&quot;calculateMachineSetStatus(claimedMachines, machineSet, errors)&quot;]
+--&gt;UpdateMSStatus[&quot;updateMachineSetStatus(...)&quot;]
+--&gt;enqueueMachineSetAfter[&quot;machineSetQueue.AddAfter(msKey, 10m)&quot;]
+
+AddFinalizersIMissing--&gt;GetAllMS
+
+</pre>
+<h2 id="claimmachines"><a class="header" href="#claimmachines">claimMachines</a></h2>
+<p><code>claimMachines</code> tries to take ownership of a machine - it associates a <code>Machine</code> with a <code>MachineSet</code> by setting <code>machine.metadata.OwnerReferences</code> and releasets the <code>Machine</code> if the MS's deletion timestamp has been set.</p>
+<ol>
+<li>Initialize an empty <code>claimedMachines []Machine</code> slice</li>
+<li>Initialize an empty <code>errlist []erro</code></li>
+<li>Iterate through <code>allMachines</code> and Get the <code>ownerRef</code>(the first element in <code>OwnerReferences</code> slice)</li>
+<li>If the <code>ownerRef</code> is not <code>nil</code>
+<ol>
+<li>if the <code>ownerRef.UID</code> is diff from the <code>machineSet</code>s <code>UUID</code> skip the claim and continue. (Since the machine belongs to another machine set)</li>
+<li>If the machine <code>selector</code> matches the labels of the <code>machineSet</code>, add to <code>claimedMachines</code> and continue</li>
+<li>If the <code>machineSet.DeletionTimestamp</code> is set, skip and continue</li>
+<li>Release the <code>Machine</code> by removing its <code>ownerReference</code></li>
+</ol>
+</li>
+<li>If the <code>ownerRef</code> is <code>nil</code>
+<ol>
+<li>If the <code>machineSet.DeletionTimestamp</code> is set or if the machine <code>selector</code> does not mach the <code>machineSet</code>, skip and continue.</li>
+<li>If the <code>machine.DeletionTimestamp</code> is set, skip and continue.</li>
+<li>Adopt the machine, ie. set the <code>ownerReference</code> to the <code>machineSet</code> and add to <code>claimedMachines</code></li>
+</ol>
+<pre><code>ownerReferences:
+ - apiVersion: machine.sapcloud.io/v1alpha1
+   blockOwnerDeletion: true
+   controller: true
+   kind: MachineSet
+   name: shoot--i034796--aw2-a-z1-8c99f
+   uid: 20bc03c5-e95b-4df5-9faf-68be38cb8e1b
+</code></pre>
+</li>
+<li>Returned <code>claimedMachines</code>.</li>
+</ol>
+<h2 id="synchronizemachinenodetemplates"><a class="header" href="#synchronizemachinenodetemplates">synchronizeMachineNodeTemplates</a></h2>
+<pre><code class="language-go">func (c *controller) syncMachinesNodeTemplates(ctx context.Context, 
+ claimedMachines []*Machine, machineSet *MachineSet) error 
+</code></pre>
+<ol>
+<li>This iterates through the <code>claimeMachines</code> and copies the <code>machineset.Spec.Template.Spec.NodeTemplateSpec</code> to the <code>machine.Spec.NodeTemplateSpec</code></li>
+<li>NOTE: Seems useless IO busy-work to me. When MC launches the <code>Machine</code>, it might as well access the owning <code>MachineSet</code> and get the <code>NodeSpec</code>.</li>
+<li>The only reason to do this is to support independent <code>Machines</code> without owning <code>MachineSets</code>. We will need to see whether such a use-case is truly needed.</li>
+</ol>
+<p>NOTE: <code>NodeTemplate</code> describes common resource capabilities like <code>cpu</code>, <code>gpu</code>, <code>memory</code>, etc in terms of <a href="https://pkg.go.dev/k8s.io/api/core/v1#ResourceList">k8s.io/api/core/v1.ResourceList</a>. This is used by the <code>cluster-autoscaler</code> for scaling decisions. </p>
+<h2 id="syncmachinesconfig"><a class="header" href="#syncmachinesconfig">syncMachinesConfig</a></h2>
+<p>Copies  <code>machineset.Spec.Template.Spec.MachineConfiguration</code> to  <code>machine.Spec.MachineConfiguration</code> for all <code>claimedMachines</code>.</p>
+<p>See <code>MachineConfiguration</code> inside <a href="http://localhost:3000/mcm_facilities.html#machinespec">MachineSpec</a></p>
+<h2 id="syncmachinesclasskind"><a class="header" href="#syncmachinesclasskind">syncMachinesClassKind</a></h2>
+<p>NOTE: This is useless and should be removed since we only have ONE kind of <code>MachineClass</code>. TODO: Discuss with Himanshu/Rishabh.</p>
+<pre><code class="language-go">func (c *controller) syncMachinesClassKind(ctx context.Context, 
+    claimedMachines []*Machine, machineSet *MachineSet) error 
+</code></pre>
+<p>Iterates through <code>claimedMachines</code> and sets <code>machine.Spec.Class.Kind = machineset.Spec.Template.Spec.Class.Kind</code> if not already set.</p>
+<h2 id="managereplicas-scale-out--scale-in"><a class="header" href="#managereplicas-scale-out--scale-in">manageReplicas (scale-out / scale-in)</a></h2>
+<pre><code class="language-go">func (c *controller) manageReplicas(ctx context.Context, 
+    claimedMachines []Machine, machineSet *MachineSet) error
+</code></pre>
+<pre class="mermaid">%%{init: { 'themeVariables': { 'fontSize': '11px'},&quot;flowchart&quot;: {&quot;defaultRenderer&quot;: &quot;elk&quot;}} }%%
+flowchart TD
+
+Begin((&quot; &quot;))
+--&gt;Init[&quot;activeMachines :=[], staleMachines:=[]&quot;]
+--&gt;IterCLaimed[&quot;machine := range claimedMachines&quot;]
+--loop--&gt;IsActiveOrFailed{&quot;IsMachineActiveOrFailed(machine)&quot;}
+
+IsActiveOrFailed--&gt;|active| AppendActive[&quot;append(activeMachines,machine)&quot;]
+IsActiveOrFailed--&gt;|failed| AppendFailed[&quot;append(staleMachines,machine)&quot;]
+
+IterCLaimed--done--&gt;TermStaleMachines[&quot;terminateMachines(staleMachines,machineSet)&quot;]
+
+TermStaleMachines--&gt;Delta[&quot;diff := len(activeMachines) - machineSet.Spec.Replicas&quot;]
+Delta--&gt;ChkDelta{&quot;diff &lt; 0?&quot;}
+
+ChkDelta--&gt;|yes| ScaleOut[&quot;numCreated:=slowStartBatch(-diff,..) // scale out&quot;]
+ScaleOut--&gt;Log[&quot;Log numCreated/skipped/deleted&quot;]
+ChkDelta--&gt;|no| GetMachinesToDelete[&quot;machinesToDel := getMachinesToDelete(activeMachines, diff)&quot;]
+GetMachinesToDelete--&gt;TermMachines[&quot;terminateMachines(machinesToDel, machineSet)&quot;]
+--&gt;Log--&gt;ReturnErr[&quot;return err&quot;]
+</pre>
+<h3 id="terminatemachines"><a class="header" href="#terminatemachines">terminateMachines</a></h3>
+<pre><code class="language-go">func (c *controller) terminateMachines(ctx context.Context, 
+    inactiveMachines []*Machine, machineSet *MachineSet) error {
+</code></pre>
+<ol>
+<li>Invokes <code>controlMachineClient.Machines(namespace).Delete(ctx, machineID,..)</code> for each <code>Machine</code> in <code>inactiveMachines</code> and records an event.</li>
+<li>The <code>machine.Status.Phase</code> is also set to <code>Terminating</code>.</li>
+<li>This is done in parallel using <code>go-routines</code> a <code>WaitGroup</code> on length of <code>inactiveMachines</code> </li>
+</ol>
+<h3 id="slowstartbatch"><a class="header" href="#slowstartbatch">slowStartBatch</a></h3>
+<pre><code class="language-go">func slowStartBatch(count int, initialBatchSize int, createFn func() error) (int, error)
+</code></pre>
+<ol>
+<li>Initializes <code>remaining</code> to <code>count</code> and <code>successes</code> as <code>0</code>.</li>
+<li>Method executes <code>fn</code> (which creates a <code>Machine</code> object) in parallel with number of go-routines starting with <code>batchSize := initialBatchSize</code> and then doubling <code>batchSize</code> size after the call to <code>fn</code>. 
+<ol>
+<li>For each batch iteration, a <code>wg sync.WaitGroup</code> is constructed with <code>batchSize</code>. Each batch execution waits for batch to be complete using <code>wg.Wait()</code></li>
+<li>For each batch iteration, an <code>errCh</code> is constructed with size as  <code>batchSize</code> </li>
+<li><code>batchSize</code> go-routines execute <code>fn</code> concurrently, sending errors on <code>errCh</code> and invoking <code>wg.Done()</code> when complete.</li>
+<li><code>numErrorsInBatch = len(errCh)</code></li>
+<li><code>successes</code> is <code>batchSize</code> minus <code>numErrorsInBatch</code></li>
+<li>if <code>numErrorsInBatch &gt; 0</code>, abort, returning <code>successes</code> and first error from <code>errCh</code></li>
+<li><code>remaining</code> is decremented by the <code>batchSize</code></li>
+<li>Compute <code>batchSize</code> as <code>Min(remaining, 2*batchSize)</code></li>
+<li>Continue iteration while <code>batchSize</code> is greater than <code>0</code>.</li>
+<li>Return <code>successes, nil</code> when done.</li>
+</ol>
+</li>
+<li><code>fn</code> is a lambda that creates a new <code>Machine</code> in which we do the below:
+<ol>
+<li>Create an <code>ownerRef</code> with the <code>machineSet.Name</code> and <code>machineSet.UID</code></li>
+<li>Get the machine spec template using <a href="http://localhost:3000/mcm_facilities.html#machineset">machineSet.Spec.Template</a></li>
+<li>Then create a <code>Machine</code> obj setting the machine spec and <code>ownerRef</code>. Use the <code>machineSet</code> name as the prefix for <code>GenerateName</code> in the <code>ObjectMeta</code>.</li>
+<li>If any <code>err</code> return the same or <code>nil</code> if no error.</li>
+<li>New <code>Machine</code> objects are persisted using <code>controlMachineClient.Machines(namespace).Create(ctx, machine, createOpts)</code></li>
+</ol>
+</li>
+</ol>
 <div style="break-before: page; page-break-before: always;"></div><ul>
 <li><a href="machine-controller-manager/reconcile-cluster-machine-deployment.html#reconcile-cluster-machine-deployment">Reconcile Cluster Machine Deployment</a>
 <ul>

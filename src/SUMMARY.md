@@ -10,6 +10,8 @@
   - [Reconcile Cluster Machine](./machine-controller/cluster_machine_reconcile.md)
   - [Machine Controller Helper Methods](./machine-controller/mc_helper_methods.md)
   - [Node Drain](./machine-controller/node_drain.md)
+  - [Orphan / Safety Jobs](./machine-controller/orphan-safety.md)
 - [Machine Controller Manager](./machine-controller-manager/README.md)
+  - [Reconcile Cluster Machine Set](./machine-controller-manager/reconcile-cluster-machine-set.md)
   - [Reconcile Cluster Machine Deployment](./machine-controller-manager/reconcile-cluster-machine-deployment.md)
 - [Issues](./issues.md)
